@@ -288,14 +288,15 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
     return 0;
   }
 
-  /* Read rest of filename */
+  /* Read rest of filename — terminated by CR, LF, or null (g$ in C*BASE) */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
     if (c < 0) {
+      gfx_vbl();
       continue;
     }
 
-    if (c == '\r' || c == '\n') {
+    if (c == '\r' || c == '\n' || c == 0x00) {
       namebuf[pos] = 0;
 
       while ((c = xfer_recv_byte(10)) >= 0) {
@@ -325,6 +326,10 @@ static int multipunter_recv(void) {
 
   xfer_filename[0] = 0;
 
+  /* Signal the BBS we're ready. C*BASE bbs.bas line 3690 waits for any
+   * byte from the terminal before starting the multi download. */
+  net_send(0x0d);
+
   while (!xfer_cancel) {
     if (!multipunter_read_announcement(remote_name, sizeof(remote_name), &batch_end)) {
       xfer_cleanup_temp_download();
@@ -352,8 +357,10 @@ static int multipunter_recv(void) {
       return 0;
     }
 
-    snprintf(msg, sizeof(msg), "Multi Punter: %s", remote_name);
-    xfer_progress_status(msg, 0, 0);
+    snprintf(msg, sizeof(msg), "Multi Punter: %s (%d)", remote_name, filecount + 1);
+    menu_draw_xfer_progress(remote_name, xfer_direction, xfer_protocol);
+    menu_show();
+    gfx_vbl();
 
     xfer_saved_bytes = 0;
     xfer_starttime = timer_get_ticks();
