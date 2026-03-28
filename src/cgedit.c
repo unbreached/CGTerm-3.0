@@ -63,8 +63,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #else
-  strncpy(fname, cfg_homedir, 1000);
-  strcat(fname, "/.cgeditrc");
+  snprintf(fname, sizeof(fname), "%s/.cgeditrc", cfg_homedir);
   if (cfg_file_exists(fname)) {
     if (cfg_readconfig(fname) < 0) {
       return(1);
@@ -76,8 +75,7 @@ int main(int argc, char *argv[]) {
     }
   }
   if (cfg_read == 0) {
-    strncpy(fname, cfg_homedir, 1000);
-    strcat(fname, "/.cgeditrc");
+    snprintf(fname, sizeof(fname), "%s/.cgeditrc", cfg_homedir);
     cfg_writeconfig(default_cgedit_cfg, fname);
   }
 #endif
@@ -146,10 +144,7 @@ int main(int argc, char *argv[]) {
   argc -= optind;
   argv += optind;
 
-  if (argc != 0) {
-    usage();
-    return(1);
-  }
+  /* Allow optional SEQ filename argument */
 
   if (gfx_init(cfg_fullscreen, "CGedit")) {
     return(1);
@@ -189,6 +184,11 @@ int main(int argc, char *argv[]) {
   print("           \x96pRESS\x9e eSC\x96 FOR MENU\x05\x0d\x0d");
   gfx_vbl();
 
+  /* Load SEQ file from command line if given */
+  if (argc > 0) {
+    kbd_loadseq(argv[0]);
+    gfx_vbl();
+  }
 
   for (;;) {
 
