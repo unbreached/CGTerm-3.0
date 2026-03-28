@@ -265,26 +265,13 @@ void menu_print_menu(struct menu *menu) {
   /* Vertical divider */
   menu_draw_line(cx, ty, cx, menu_height - 30, linecol);
 
-  /* Left column */
+  /* Top half — CONNECTION (left) and TRANSFERS & FiLES (right) */
   ty += 8;
   menu_draw_section(lx, ty, "CONNECTION");
   menu_draw_item(lx, ty + 16, "B", "Bookmarks");
   menu_draw_item(lx, ty + 30, "D", "Connect/Disconnect");
   menu_draw_item(lx, ty + 44, "R", "Reconnect");
 
-  /* Left divider */
-  ty += 64;
-  menu_draw_line(lx, ty, cx - 5, ty, linecol);
-  ty += 8;
-  menu_draw_section(lx, ty, "SCREEN & MACROS");
-  menu_draw_item(lx, ty + 16, "L", "Load seq file");
-  menu_draw_item(lx, ty + 30, "S", "Save screen");
-  menu_draw_item(lx, ty + 44, "C", "Record macro");
-  menu_draw_item(lx, ty + 58, "V", "Play macro");
-  menu_draw_item(lx, ty + 72, "A", "Abort");
-
-  /* Right column */
-  ty = 10 + 72 + 8;
   menu_draw_section(rx, ty, "TRANSFERS & FiLES");
   menu_draw_item(rx, ty + 16, "T", "Transfer file");
   menu_draw_item(rx, ty + 30, "I", "Upload path");
@@ -292,15 +279,26 @@ void menu_print_menu(struct menu *menu) {
   menu_draw_item(rx, ty + 58, "U", "Unjoin image");
   menu_draw_item(rx, ty + 72, "N", "New disk image");
 
-  /* Right divider — aligned with left */
-  ty = 10 + 72 + 64 + 8;
-  menu_draw_line(cx + 5, ty, menu_width - lx, ty, linecol);
-  ty += 8;
-  menu_draw_section(rx, ty, "SETTINGS");
-  menu_draw_item(rx, ty + 16, "E", "Local echo");
-  menu_draw_item(rx, ty + 30, "F", "Fullscreen");
+  /* Horizontal divider — middle of screen */
+  {
+    int mid_y = menu_height / 2;
+    menu_draw_line(lx, mid_y, menu_width - lx, mid_y, linecol);
 
-  menu_draw_item(rx, ty + 58, "Q", "Quit CGTerm");
+    /* Bottom half — SCREEN & MACROS (left) and SETTINGS (right) */
+    ty = mid_y + 8;
+    menu_draw_section(lx, ty, "SCREEN & MACROS");
+    menu_draw_item(lx, ty + 16, "L", "Load seq file");
+    menu_draw_item(lx, ty + 30, "S", "Save screen");
+    menu_draw_item(lx, ty + 44, "C", "Record macro");
+    menu_draw_item(lx, ty + 58, "V", "Play macro");
+    menu_draw_item(lx, ty + 72, "A", "Abort");
+
+    menu_draw_section(rx, ty, "SETTINGS");
+    menu_draw_item(rx, ty + 16, "E", "Local echo");
+    menu_draw_item(rx, ty + 30, "F", "Fullscreen");
+
+    menu_draw_item(rx, ty + 58, "Q", "Quit CGTerm");
+  }
 
   /* Border */
   menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
