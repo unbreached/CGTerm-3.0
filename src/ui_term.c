@@ -232,8 +232,10 @@ void select_set_dldir(FileSelector *fs) {
 }
 
 
-/* New disk image creation — two-step input chain */
+/* New disk image creation */
 static char new_d64_path[256];
+static int new_d64_size = 174848;  /* default D64 */
+static const char *new_d64_ext = ".d64";
 
 void ui_create_d64_label(char *label) {
   DiskImage *di;
@@ -241,7 +243,7 @@ void ui_create_d64_label(char *label) {
   unsigned char rawid[2] = { '0', '0' };
   char msg[256];
 
-  di = di_create_image(new_d64_path, 174848);
+  di = di_create_image(new_d64_path, new_d64_size);
   if (di == NULL) {
     menu_draw_message("Couldn't create disk image!");
     menu_show();
@@ -265,15 +267,15 @@ void ui_create_d64_label(char *label) {
 static char new_d64_dir[256];
 
 void ui_create_d64_name(char *filename) {
-  /* Build full path using the selected directory */
+  /* Build full path using the selected directory and format extension */
   if (strchr(filename, '.') == NULL) {
-    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s.d64", new_d64_dir,
+    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s%s", new_d64_dir,
 #ifdef WINDOWS
       '\\',
 #else
       '/',
 #endif
-      filename);
+      filename, new_d64_ext);
   } else {
     snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s", new_d64_dir,
 #ifdef WINDOWS
@@ -287,9 +289,30 @@ void ui_create_d64_name(char *filename) {
   ui_inputcall(16, "Disk label:", "cgterm", &ui_create_d64_label, FOCUS_REQUESTER);
 }
 
+void ui_select_disk_format(void) {
+  /* Blocking format selector using menu system */
+  int selection = menu_select_disk_format();
+  const int sizes[] = {174848, 349696, 819200};
+  const char *exts[] = {".d64", ".d71", ".d81"};
+  char defname[32];
+
+  if (selection < 0) {
+    /* Cancelled */
+    menu_hide();
+    kbd_focus = FOCUS_TERM;
+    return;
+  }
+
+  new_d64_size = sizes[selection];
+  new_d64_ext = exts[selection];
+
+  snprintf(defname, sizeof(defname), "download%s", new_d64_ext);
+  ui_inputcall(20, "Image filename:", defname, &ui_create_d64_name, FOCUS_REQUESTER);
+}
+
 void select_d64_dir_done(FileSelector *fs) {
   snprintf(new_d64_dir, sizeof(new_d64_dir), "%s", fs->path);
-  ui_inputcall(20, "Image filename:", "download.d64", &ui_create_d64_name, FOCUS_REQUESTER);
+  ui_select_disk_format();
 }
 
 

@@ -4,6 +4,7 @@
 #include "font.h"
 #include "config.h"
 #include "paths.h"
+#include "gfx.h"
 #include "menu.h"
 
 
@@ -698,6 +699,59 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
   font_draw_string(w / 2 + 24, h - 16, "skip forever");
 
   menu_dirty = SDL_TRUE;
+}
+
+
+/* Blocking disk format selector. Returns 0=D64, 1=D71, 2=D81, -1=cancelled */
+int menu_select_disk_format(void) {
+  SDL_Event ev;
+  int selection = 0;
+  const char *formats[] = {"D64 (170K - 35 tracks)", "D71 (340K - 70 tracks)", "D81 (800K - 80 tracks)"};
+
+  for (;;) {
+    int i;
+    menu_cls();
+    menu_draw_borderbox(7, 57, menu_width - 8, menu_height - 58);
+
+    font_set_font(menu_font[1]);
+    font_draw_string(30, 62, "Select disk format:");
+
+    for (i = 0; i < 3; i++) {
+      if (i == selection) {
+        SDL_Rect r;
+        Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x80, 0x80, 0x00, 0xc0);
+        r.x = 20; r.y = 82 + i * 16; r.w = menu_width - 40; r.h = 14;
+        SDL_FillRect(menu_surface, &r, sel);
+      }
+      font_set_font(i == selection ? menu_font[1] : menu_font[0]);
+      font_draw_string(24, 84 + i * 16, formats[i]);
+    }
+
+    font_set_font(menu_font[0]);
+    font_draw_string(24, 140, "Up/Down  Enter=OK  Esc=cancel");
+
+    menu_dirty = SDL_TRUE;
+    menu_show();
+    gfx_vbl();
+
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN) {
+        switch (ev.key.keysym.sym) {
+        case SDLK_UP: if (selection > 0) selection--; break;
+        case SDLK_DOWN: if (selection < 2) selection++; break;
+        case SDLK_SPACE:
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+          return selection;
+        case SDLK_ESCAPE:
+          return -1;
+        default: break;
+        }
+      }
+    }
+    SDL_Delay(20);
+  }
 }
 
 

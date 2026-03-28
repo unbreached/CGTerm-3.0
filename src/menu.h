@@ -29,3 +29,4 @@ void menu_draw_message(const char *message);
 void menu_draw_bookmarks(void);
 void menu_fs_draw(const char *title);
 void menu_fs_draw_line(int line, const char *text, int selected, int font);
+int menu_select_disk_format(void);
