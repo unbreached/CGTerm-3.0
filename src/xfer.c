@@ -87,6 +87,7 @@ void xfer_progress(const char *message) {
 
 
 void xfer_save_file(char *filename);
+void xfer_check_kbd(void);
 
 static void xfer_log_errno(const char *prefix, const char *path) {
   if (path && *path) {
@@ -244,10 +245,14 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
   }
 
   xfer_progress("Multi Punter: waiting for filename...");
+  gfx_vbl();
 
+  /* Wait for first 0x09 (tab) — BBS sends multiple (typically 10) */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
     if (c < 0) {
+      gfx_vbl();
+      xfer_check_kbd();
       continue;
     }
     if (c == 0x09) {
@@ -259,14 +264,35 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
     return 0;
   }
 
+  /* Consume any additional 0x09 bytes and 0x04 (EOT) markers */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
     if (c < 0) {
       continue;
     }
-    if (c == 0x04 && pos == 0) {
+    if (c == 0x04) {
+      /* Batch end signal — consume any remaining 0x04 bytes */
+      while (xfer_recv_byte(100) == 0x04) { /* drain */ }
       *is_batch_end = 1;
       return 1;
+    }
+    if (c != 0x09) {
+      /* First non-tab byte is start of filename */
+      namebuf[pos++] = (char) c;
+      namebuf[pos] = 0;
+      break;
+    }
+  }
+
+  if (xfer_cancel) {
+    return 0;
+  }
+
+  /* Read rest of filename */
+  while (!xfer_cancel) {
+    c = xfer_recv_byte(1000);
+    if (c < 0) {
+      continue;
     }
 
     if (c == '\r' || c == '\n') {
