@@ -938,7 +938,14 @@ int menu_select_disk_format(void) {
     }
 
     font_set_font(menu_font[0]);
-    font_draw_string(cx - 145, cy + 38, "Up/Down  Enter=OK  Esc=cancel");
+    font_set_font(menu_font[0]);
+    font_draw_string(cx - 145, cy + 38, "Up/Down  Enter=");
+    font_set_font(menu_font[1]);
+    font_draw_string(cx - 145 + 150, cy + 38, "OK");
+    font_set_font(menu_font[0]);
+    font_draw_string(cx - 145 + 180, cy + 38, "Esc=");
+    font_set_font(menu_font[1]);
+    font_draw_string(cx - 145 + 220, cy + 38, "cancel");
 
     menu_dirty = SDL_TRUE;
     menu_show();
@@ -1109,9 +1116,23 @@ void menu_fs_draw_path(const char *path) {
     }
   }
 
-  /* Navigation hints */
-  font_set_font(menu_font[0]);
-  font_draw_string(12, menu_height - 20, "Bksp=up  Space/Enter=open  Esc=cancel");
+  /* Navigation hints — keys in cyan, actions in white */
+  {
+    int hx = 12;
+    int hy = menu_height - 20;
+    font_set_font(menu_font[0]);
+    font_draw_string(hx, hy, "Bksp=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 50, hy, "up");
+    font_set_font(menu_font[0]);
+    font_draw_string(hx + 80, hy, "Space/Enter=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 200, hy, "open");
+    font_set_font(menu_font[0]);
+    font_draw_string(hx + 250, hy, "Esc=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 290, hy, "cancel");
+  }
 
   menu_dirty = 1;
 }
