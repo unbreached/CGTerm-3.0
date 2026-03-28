@@ -18,7 +18,7 @@ RM ?= rm -f
 
 CC ?= gcc
 CFLAGS ?= -O2 -Wall $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -I$(SRCDIR)
-LDFLAGS ?= $(shell sdl-config --libs) $(SOCKETLIBS)
+LDFLAGS ?= $(shell sdl-config --libs) $(SOCKETLIBS) -lm
 
 COMMON_SRCS := \
 	kernal.c \

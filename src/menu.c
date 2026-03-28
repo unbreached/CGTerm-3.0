@@ -621,7 +621,7 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
       }
 
       /* Set palette entry 1 to rainbow color for this character */
-      rainbow.r = rr; rainbow.g = gg; rainbow.b = bb; rainbow.unused = 255;
+      rainbow.r = rr; rainbow.g = gg; rainbow.b = bb;
       SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &rainbow, 1, 1);
 
       ch[0] = gp[i];
