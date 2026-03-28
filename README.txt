@@ -47,6 +47,9 @@
             ▄▄             
 
     CGTERM 3.0 ::: C64 SCENE EDiTiON //scene code by...... m00p
+                                     //support by......... mermaid
+                                     //ideas by........... Larry
+                                     //tested by.......... hedning
                                      //original code by... MagerValp
 
 
