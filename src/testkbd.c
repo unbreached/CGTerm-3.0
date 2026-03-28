@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef WINDOWS
+#ifdef WINDOWS
+#include "getopt_win.h"
+#else
 #include <unistd.h>
 #endif
 #include <SDL.h>
