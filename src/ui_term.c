@@ -345,6 +345,9 @@ void ui_select_disk_format(void) {
 
 void select_send_file(FileSelector *fs) {
   xfer_send(fs->selectedfile->name);
+  menu_draw_message("Transfer complete. Press any key.");
+  menu_show();
+  gfx_vbl();
 }
 
 

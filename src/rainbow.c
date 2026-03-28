@@ -425,23 +425,30 @@ int rainbow_send(const char *filename) {
 
   rainbow_sent_bytes = 0;
 
+  /* Wait for RB_GOO from receiver — scan through any BBS status screen data */
   rainbow_send_status("Rainbow: waiting for receiver");
-  for (;;) {
-    if (xfer_cancel) {
-      xfer_send_byte(RB_CAN);
-      rainbow_fail("Rainbow: cancelled");
-      return 0;
+  {
+    int attempts = 30;
+    int found = 0;
+    while (attempts-- > 0 && !xfer_cancel) {
+      c = xfer_recv_byte(1000);
+      if (c < 0) continue;
+      if ((unsigned char)c == RB_GOO) {
+        found = 1;
+        break;
+      }
+      if ((unsigned char)c == RB_CAN) {
+        rainbow_fail("Rainbow: cancelled by remote");
+        return 0;
+      }
     }
-    c = xfer_recv_byte(RB_START_TIMEOUT);
-    if (c < 0) {
-      rainbow_fail("Rainbow: receiver not ready");
-      return 0;
-    }
-    if ((unsigned char)c == RB_GOO) {
-      break;
-    }
-    if ((unsigned char)c == RB_CAN) {
-      rainbow_fail("Rainbow: cancelled by remote");
+    if (!found) {
+      if (xfer_cancel) {
+        xfer_send_byte(RB_CAN);
+        rainbow_fail("Rainbow: cancelled");
+      } else {
+        rainbow_fail("Rainbow: receiver not ready");
+      }
       return 0;
     }
   }
