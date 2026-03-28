@@ -1060,7 +1060,26 @@ void menu_draw_bookmarks_sel(int selected) {
 
   /* Hint */
   font_set_font(menu_font[0]);
-  font_draw_string(15, menu_height - 20, "Arrows/Enter  #=jump  A=add  +=save  Esc");
+  {
+    int hx = 15;
+    int hy = menu_height - 20;
+    font_set_font(menu_font[0]);
+    font_draw_string(hx, hy, "Enter/#=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 80, hy, "connect");
+    font_set_font(menu_font[0]);
+    font_draw_string(hx + 155, hy, "A=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 175, hy, "add");
+    font_set_font(menu_font[0]);
+    font_draw_string(hx + 210, hy, "E=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 230, hy, "edit");
+    font_set_font(menu_font[0]);
+    font_draw_string(hx + 275, hy, "D=");
+    font_set_font(menu_font[1]);
+    font_draw_string(hx + 295, hy, "del");
+  }
 
   menu_dirty = SDL_TRUE;
 }

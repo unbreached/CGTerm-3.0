@@ -244,11 +244,58 @@ static int bm_input_len = 0;
 static int bm_cursor = 0;
 static char bm_new_alias[64];
 static char bm_new_host[256];
+static int bm_edit_index = -1;  /* -1 = adding new, >= 0 = editing */
+
+/* Rewrite all bookmarks to the bookmark file */
+static void bm_rewrite_all(void) {
+  FILE *cfg;
+  char fname[256];
+  int i;
+#ifdef WINDOWS
+  snprintf(fname, sizeof(fname), "cgterm-bookmarks.cfg");
+#else
+  snprintf(fname, sizeof(fname), "%s/.cgterm-bookmarks", cfg_homedir);
+#endif
+  if ((cfg = fopen(fname, "w")) != NULL) {
+    for (i = 0; i < cfg_numbookmarks; i++) {
+      fprintf(cfg, "bookmark = %s, %s, %d\n",
+        cfg_bookmark_alias[i], cfg_bookmark_host[i], cfg_bookmark_port[i]);
+    }
+    fclose(cfg);
+  }
+}
+
+static void bm_delete(int index) {
+  int i;
+  if (index < 0 || index >= cfg_numbookmarks) return;
+  /* Free the strings */
+  if (cfg_bookmark_alias[index]) free(cfg_bookmark_alias[index]);
+  if (cfg_bookmark_host[index]) free(cfg_bookmark_host[index]);
+  /* Shift remaining entries down */
+  for (i = index; i < cfg_numbookmarks - 1; i++) {
+    cfg_bookmark_alias[i] = cfg_bookmark_alias[i + 1];
+    cfg_bookmark_host[i] = cfg_bookmark_host[i + 1];
+    cfg_bookmark_port[i] = cfg_bookmark_port[i + 1];
+  }
+  cfg_bookmark_alias[cfg_numbookmarks - 1] = NULL;
+  cfg_bookmark_host[cfg_numbookmarks - 1] = NULL;
+  cfg_bookmark_port[cfg_numbookmarks - 1] = 0;
+  cfg_numbookmarks--;
+  bm_rewrite_all();
+}
 
 void bm_add_port(char *portstr) {
   int port = atoi(portstr);
   if (port <= 0 || port > 65535) port = 6400;
-  if (cfg_numbookmarks < 40) {
+  if (bm_edit_index >= 0 && bm_edit_index < cfg_numbookmarks) {
+    /* Editing existing bookmark */
+    if (cfg_bookmark_alias[bm_edit_index]) free(cfg_bookmark_alias[bm_edit_index]);
+    if (cfg_bookmark_host[bm_edit_index]) free(cfg_bookmark_host[bm_edit_index]);
+    addhost(bm_edit_index, bm_new_alias, bm_new_host, port);
+    bm_rewrite_all();
+    bm_edit_index = -1;
+    menu_draw_message("Bookmark updated!");
+  } else if (cfg_numbookmarks < 40) {
     addhost(cfg_numbookmarks, bm_new_alias, bm_new_host, port);
     ++cfg_numbookmarks;
     cfg_save_bookmark(bm_new_alias, bm_new_host, port);
@@ -350,8 +397,30 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
 
   case SDLK_a:
     /* Add new bookmark */
+    bm_edit_index = -1;
     menu_hide();
     ui_inputcall(20, "BBS Name:", "", &bm_add_alias, FOCUS_REQUESTER);
+    break;
+
+  case SDLK_e:
+    /* Edit highlighted bookmark */
+    if (bm_cursor >= 0 && bm_cursor < cfg_numbookmarks) {
+      bm_edit_index = bm_cursor;
+      menu_hide();
+      ui_inputcall(20, "BBS Name:", cfg_bookmark_alias[bm_cursor], &bm_add_alias, FOCUS_REQUESTER);
+    }
+    break;
+
+  case SDLK_d:
+    /* Delete highlighted bookmark */
+    if (bm_cursor >= 0 && bm_cursor < cfg_numbookmarks) {
+      bm_delete(bm_cursor);
+      if (bm_cursor >= cfg_numbookmarks && cfg_numbookmarks > 0) {
+        bm_cursor = cfg_numbookmarks - 1;
+      }
+      menu_draw_bookmarks_sel(bm_cursor);
+      menu_show();
+    }
     break;
 
   case SDLK_PLUS:
