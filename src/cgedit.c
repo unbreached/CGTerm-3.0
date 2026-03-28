@@ -48,7 +48,6 @@ void usage(void) {
 int main(int argc, char *argv[]) {
   unsigned char k;
   int opt;
-  unsigned char *rowchar, *rowcolor;
   char fname[1024];
 
   cfg_init(argv[0]);
@@ -204,8 +203,6 @@ int main(int argc, char *argv[]) {
       if (cfg_editmode == 0) {
 	ffd2(k);
       } else {
-	rowchar = &gfx_0400[gfx_cursy * cfg_columns];
-	rowcolor = &gfx_d800[gfx_cursy * cfg_columns];
 	switch (k) {
 	case ' ':
 	  gfx_togglerev();

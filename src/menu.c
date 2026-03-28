@@ -1029,7 +1029,6 @@ void menu_draw_bookmarks(void) {
 
 
 void menu_fs_draw(const char *title) {
-  SDL_Rect r;
   /* Fill entire surface with solid dark background — no bleed-through */
   Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
   SDL_FillRect(menu_surface, NULL, solidbg);

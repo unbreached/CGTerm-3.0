@@ -83,23 +83,6 @@ static unsigned char rainbow_checksum(const unsigned char *data, int len) {
   return (unsigned char)sum;
 }
 
-static int rainbow_wait_for_control(unsigned char expected, int timeout) {
-  signed int c;
-
-  for (;;) {
-    c = xfer_recv_byte(timeout);
-    if (c < 0) {
-      return c;
-    }
-    if ((unsigned char)c == expected) {
-      return 1;
-    }
-    if ((unsigned char)c == RB_CAN) {
-      return -2;
-    }
-  }
-}
-
 static int rainbow_recv_exact(unsigned char *buf, int len, int timeout) {
   int i;
   signed int c;
@@ -425,7 +408,6 @@ int rainbow_send(const char *filename) {
   unsigned char block[260];
   unsigned char blockno = 0;
   int blocklen;
-  signed int c;
   const char *ext;
   unsigned char filetype = 'P';
 

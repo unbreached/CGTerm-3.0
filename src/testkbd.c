@@ -197,6 +197,7 @@ int main(int argc, char *argv[]) {
 	shift = event.key.keysym.mod & KMOD_SHIFT ? 1 : 0;
 	ctrl = event.key.keysym.mod & KMOD_CTRL ? 1 : 0;
 	alt = event.key.keysym.mod & KMOD_ALT ? 1 : 0;
+	(void)shift; (void)ctrl; (void)alt;
 	keysym = event.key.keysym.sym;
 	switch (keysym) {
 	case SDLK_F12:

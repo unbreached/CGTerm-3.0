@@ -22,6 +22,6 @@ typedef struct dir {
 extern char *dir_type[];
 
 
-Dir *dir_read(char *path);
+Dir *dir_read(const char *path);
 void dir_free(Dir *dir);
 DirEntry *dir_find(Dir *dir, int entrynum);

@@ -37,7 +37,7 @@ Dir *dir_read_image(DiskImage *di) {
   int offset;
   DirEntry *entry = NULL;
 
-  if ((fh = di_open(di, "$", T_PRG, "rb")) == NULL) {
+  if ((fh = di_open(di, (const unsigned char *)"$", T_PRG, "rb")) == NULL) {
     return(NULL);
   }
 
@@ -117,7 +117,7 @@ Dir *dir_read_image(DiskImage *di) {
 }
 
 
-Dir *dir_read_opendir(DIR *dirhandle, char *path) {
+Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
   Dir *dir;
   DirEntry *entry = NULL;
   struct dirent *dirent;
@@ -322,7 +322,7 @@ Dir *dir_read_opendir(DIR *dirhandle, char *path) {
 }
 
 
-Dir *dir_read(char *path) {
+Dir *dir_read(const char *path) {
   DIR *dirhandle;
   DiskImage *di;
   Dir *dir;
@@ -330,7 +330,7 @@ Dir *dir_read(char *path) {
   if ((dirhandle = opendir(path))) {
     dir = dir_read_opendir(dirhandle, path);
     closedir(dirhandle);
-  } else if ((di = di_load_image(path))) {
+  } else if ((di = di_load_image((char *)path))) {
     dir = dir_read_image(di);
     di_free_image(di);
   } else {

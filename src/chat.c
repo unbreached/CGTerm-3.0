@@ -34,25 +34,25 @@ STAT:message\r			status message
 INFO:message\r			info message from server
 LOCL:message\r			local client message
 */
-void print_msg(unsigned char *msg) {
-  unsigned char *p;
-  unsigned char *data = msg + 5;
+void print_msg(const char *msg) {
+  char *p;
+  const char *data = msg + 5;
 
-  if (strlen((const char *)msg) < 5) {
+  if (strlen(msg) < 5) {
     print("\x96" "sERVER SENT GARBAGE!\x0d");
     return;
   }
 
-  if (strncmp("helo:", (const char *)msg, 5) == 0) {
-    if (strncmp("64chat ", (const char *)data, 7) != 0) {
+  if (strncmp("helo:", msg, 5) == 0) {
+    if (strncmp("64chat ", data, 7) != 0) {
       print("mALFORMED SERVER MESSAGE\x0d");
       return;
     }
     ffd2(5);
     print(data);
     ffd2(13);
-  } else if (strncmp("talk:", (const char *)msg, 5) == 0) {
-    if ((p = (unsigned char *)strchr((const char *)data, ':')) == NULL) {
+  } else if (strncmp("talk:", msg, 5) == 0) {
+    if ((p = strchr(data, ':')) == NULL) {
       print("\x96" "mALFORMED SERVER MESSAGE\x0d");
       return;
     }
@@ -63,8 +63,8 @@ void print_msg(unsigned char *msg) {
     ffd2(' ');
     print(p);
     ffd2(13);
-  } else if (strncmp("mesg:", (const char *)msg, 5) == 0) {
-    if ((p = (unsigned char *)strchr((const char *)data, ':')) == NULL) {
+  } else if (strncmp("mesg:", msg, 5) == 0) {
+    if ((p = strchr(data, ':')) == NULL) {
       print("\x96" "mALFORMED SERVER MESSAGE\x0d");
       return;
     }
@@ -75,19 +75,19 @@ void print_msg(unsigned char *msg) {
     ffd2(' ');
     print(p);
     ffd2(13);
-  } else if (strncmp("stat:", (const char *)msg, 5) == 0) {
+  } else if (strncmp("stat:", msg, 5) == 0) {
     ffd2(150);
     print(data);
     ffd2(13);
-  } else if (strncmp("locl:", (const char *)msg, 5) == 0) {
+  } else if (strncmp("locl:", msg, 5) == 0) {
     ffd2(150);
     print(data);
     ffd2(13);
-  } else if (strncmp("info:", (const char *)msg, 5) == 0) {
+  } else if (strncmp("info:", msg, 5) == 0) {
     ffd2(155);
     print(data);
     ffd2(13);
-  } else if (strncmp("noop:", (const char *)msg, 5) == 0) {
+  } else if (strncmp("noop:", msg, 5) == 0) {
     // do nothing
   } else {
     print("\x96" "uNKNOWN SERVER MESSAGE\x0d");
@@ -100,7 +100,7 @@ void print_msg(unsigned char *msg) {
 void chat_print_msg(const unsigned char *msg) {
   status_clear();
   gfx_setcursxy(0, outputline);
-  print_msg(msg);
+  print_msg((const char *)msg);
   outputline = gfx_cursy;
   gfx_setcursxy(input_pos, 24);
   gfx_fgcolor(input_color);
@@ -292,7 +292,7 @@ void chat_inputkey(unsigned char key) {
       }
       if (input_len < input_maxlen) {
 	++input_len;
-	i = strlen(input_buffer + input_pos + input_offset) + 1;
+	i = strlen((const char *)(input_buffer + input_pos + input_offset)) + 1;
 	memmove(input_buffer + input_pos + input_offset + 1,
 		input_buffer + input_pos + input_offset,
 		i);
