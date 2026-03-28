@@ -429,78 +429,45 @@ int rainbow_send(const char *filename) {
   /*
    * Rainbow upload handshake (from rainbow_protocol_cb.asm):
    *
-   * BBS receiver flow (_c494 / _c49d):
-   *   1. Wait for ANY byte from sender (wake-up)
-   *   2. Send GOO ($83) repeatedly, wait for SOH ($89)
+   * BBS receiver flow:
+   *   _c49d: drain incoming bytes until silence (timeout)
+   *   _c4b1: send GOO ($83) repeatedly, wait for SOH ($89)
+   *   _c41b: got SOH → send ACK, receive block
    *
-   * Sender flow (_c23a):
-   *   1. Wait for GOO from receiver
-   *   2. Send SOH + block data
+   * Problem: We can't reliably detect GOO ($83) because it's
+   * the same as PETSCII orange (appears in BBS status screen).
    *
-   * Problem: GOO is 0x83, same as PETSCII orange color code,
-   * so BBS status screen output can contain false GOOs.
-   *
-   * Solution: first drain status screen bytes (wait for silence),
-   * then send wake-up byte, then wait for GOO. At this point
-   * the BBS should be past its status screen and in the protocol.
+   * Solution: Skip GOO detection entirely. Instead:
+   * 1. Send a wake-up byte to satisfy _c49d drain loop
+   * 2. Wait for silence (BBS finishes status screen + drain)
+   * 3. Let rainbow_send_block handle the SOH/ACK handshake
+   *    The BBS at _c4b1 sends GOO and waits for SOH.
+   *    rainbow_send_block sends SOH and waits for ACK.
+   *    When BBS gets SOH it sends ACK. Handshake complete.
    */
   rainbow_send_status("Rainbow: waiting for receiver");
   {
-    int found = 0;
     int silence_count = 0;
-    int attempts;
 
-    /* Phase 1: drain BBS status screen — read until 2 seconds of silence */
-    while (!xfer_cancel && silence_count < 2) {
+    /* Phase 1: drain BBS status screen — read until 3 seconds of silence */
+    while (!xfer_cancel && silence_count < 3) {
       c = xfer_recv_byte(1000);
       if (c < 0) {
         silence_count++;
       } else {
-        silence_count = 0;  /* reset on any data */
+        silence_count = 0;
       }
     }
 
-    /* Phase 2: send ONE wake-up byte, then wait for BBS GOO.
-     * The BBS drain loop (_c49d) has ~1 second timeout.
-     * After our wake-up, it needs silence to advance to _c4b1.
-     * So we send ONE byte and wait patiently — resend only every 3 seconds. */
-    xfer_send_byte(RB_GOO);
-    {
-      unsigned int last_wake = timer_get_ticks();
-      unsigned int now;
-      attempts = 20;
-
-      while (attempts-- > 0 && !xfer_cancel) {
-        c = xfer_recv_byte(1000);
-
-        /* Resend wake-up only every 3 seconds to avoid resetting BBS drain timer */
-        now = timer_get_ticks();
-        if (c < 0 && now > last_wake + 3000) {
-          xfer_send_byte(RB_GOO);
-          last_wake = now;
-        }
-
-        if (c < 0) continue;
-        if ((unsigned char)c == RB_GOO) {
-          found = 1;
-          break;
-        }
-        if ((unsigned char)c == RB_CAN) {
-          rainbow_fail("Rainbow: cancelled by remote");
-          return 0;
-        }
-      }
-    }
-    if (!found) {
-      if (xfer_cancel) {
-        xfer_send_byte(RB_CAN);
-        rainbow_fail("Rainbow: cancelled");
-      } else {
-        rainbow_fail("Rainbow: receiver not ready");
-      }
-      return 0;
+    /* Phase 2: send wake-up byte for BBS _c49d drain loop */
+    if (!xfer_cancel) {
+      xfer_send_byte(0x00);  /* any byte works — BBS just needs to see traffic */
+      /* Small delay for BBS to timeout on drain and enter _c4b1 GOO loop */
+      xfer_recv_byte(2000);  /* wait 2s, discard any response */
     }
   }
+  /* Now proceed to send block#0 — rainbow_send_block sends SOH,
+   * BBS at _c4b1 receives SOH, sends ACK. Handshake is in the block send. */
 
   ext = strrchr(filename, '.');
   if (ext) {
