@@ -286,7 +286,7 @@ void ui_create_d64_name(char *filename) {
       filename);
   }
 
-  ui_inputcall(16, "Disk label:", "cgterm", &ui_create_d64_label, FOCUS_REQUESTER);
+  ui_inputcall(16, "Disk label:", "c64warez", &ui_create_d64_label, FOCUS_REQUESTER);
 }
 
 void ui_select_disk_format(void) {
@@ -306,7 +306,7 @@ void ui_select_disk_format(void) {
   new_d64_size = sizes[selection];
   new_d64_ext = exts[selection];
 
-  snprintf(defname, sizeof(defname), "download%s", new_d64_ext);
+  snprintf(defname, sizeof(defname), "c64warez%s", new_d64_ext);
   ui_inputcall(20, "Image filename:", defname, &ui_create_d64_name, FOCUS_REQUESTER);
 }
 
