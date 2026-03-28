@@ -8,12 +8,15 @@
 #include "menu.h"
 
 
-static int filesperpage = 23;  /* fits in 640x400 menu surface */
+static int filesperpage = 23;  /* default, recalculated in fs_new */
 
 
 /* Initialize an empty file selector */
 FileSelector *fs_new(const char *title, const char *path) {
   FileSelector *fs;
+
+  filesperpage = (menu_height - 70) / 14;
+  if (filesperpage < 5) filesperpage = 5;
 
   if ((fs = malloc(sizeof(*fs))) == NULL) {
     return(NULL);

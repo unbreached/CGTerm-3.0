@@ -16,7 +16,7 @@
 #define XM_C   0x43
 
 #ifndef XMODEM_DEBUG
-#define XMODEM_DEBUG 1
+#define XMODEM_DEBUG 0
 #endif
 
 #if XMODEM_DEBUG
@@ -25,6 +25,7 @@
 #define XMDBG(...) do { } while (0)
 #endif
 
+#if XMODEM_DEBUG
 static const char *xm_name(int c) {
   switch (c) {
   case XM_SOH: return "SOH";
@@ -39,13 +40,19 @@ static const char *xm_name(int c) {
   default:     return "?";
   }
 }
+#endif
 
 static void xm_dbg_byte(const char *dir, int c) {
+#if XMODEM_DEBUG
   if (c >= 0) {
     XMDBG("[XMODEM] %s %s (%02X)\n", dir, xm_name(c), c & 0xff);
   } else {
     XMDBG("[XMODEM] %s %s (%d)\n", dir, xm_name(c), c);
   }
+#else
+  (void)dir;
+  (void)c;
+#endif
 }
 
 static void xm_send_byte_dbg(int c) {
@@ -356,7 +363,6 @@ int xmodem_send(int send1k) {
   xmodem_send_block(blocknum, blocksize, usecrc);
 
   while (bytesleft > 0) {
-    printf("[XM-SEND] waiting for response. bytesleft=%d sentbytes=%d blocknum=%d\n", bytesleft, sentbytes, blocknum); fflush(stdout);
     c = xm_recv_byte_dbg(10000);
     switch (c) {
     case -2:
@@ -399,22 +405,14 @@ int xmodem_send(int send1k) {
     }
   }
 
-  printf("[XM-SEND] loop exited. bytesleft=%d sentbytes=%d\n", bytesleft, sentbytes);
-  fflush(stdout);
-
   xfer_progress_status("Finishing...", sentbytes, xfer_file_size);
-  printf("[XM-SEND] sending EOT\n"); fflush(stdout);
   xm_send_byte_dbg(XM_EOT);
   c = xm_recv_byte_dbg(10000);
-  printf("[XM-SEND] EOT response: 0x%02x (%d) %s\n", c >= 0 ? c : 0, c, xm_name(c)); fflush(stdout);
   if (c != XM_ACK) {
-    printf("[XM-SEND] sending second EOT\n"); fflush(stdout);
     xm_send_byte_dbg(XM_EOT);
     c = xm_recv_byte_dbg(10000);
-    printf("[XM-SEND] second EOT response: 0x%02x (%d) %s\n", c >= 0 ? c : 0, c, xm_name(c)); fflush(stdout);
   }
 
-  printf("[XM-SEND] done, returning 1\n"); fflush(stdout);
   xfer_progress_status("Transfer complete", xfer_file_size, xfer_file_size);
   return 1;
 }
