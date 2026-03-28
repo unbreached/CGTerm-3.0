@@ -8,7 +8,7 @@
 #include "menu.h"
 
 
-static int filesperpage = 13;
+static int filesperpage = 23;  /* fits in 640x400 menu surface */
 
 
 /* Initialize an empty file selector */
@@ -110,6 +110,7 @@ void fs_draw(FileSelector *fs) {
   int l;
 
   menu_fs_draw(fs->title);
+  menu_fs_draw_path(fs->path);
 
   if (fs->numentries) {
     de = fs->dir->firstentry;

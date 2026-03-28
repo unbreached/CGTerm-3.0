@@ -38,9 +38,9 @@ int cfg_columns = 40;
 int cfg_rows = 25;
 int cfg_sound = 1;
 int cfg_numbookmarks = 0;
-char *cfg_bookmark_alias[10];
-char *cfg_bookmark_host[10];
-int cfg_bookmark_port[10];
+char *cfg_bookmark_alias[40];
+char *cfg_bookmark_host[40];
+int cfg_bookmark_port[40];
 char cfg_xferdir[256];
 char cfg_dldir[256];
 int cfg_editmode = 0;
@@ -255,7 +255,7 @@ int addbookmark(char *line) {
   char alias[256], hostname[256];
   int port;
 
-  if (cfg_numbookmarks >= 10) {
+  if (cfg_numbookmarks >= 40) {
     printf("Too many bookmarks\n");
     return(0);
   }

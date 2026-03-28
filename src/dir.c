@@ -150,15 +150,55 @@ Dir *dir_read_opendir(DIR *dirhandle, char *path) {
     strcpy(dir->title, path);
   }
 
-/*
-struct dirent {
-	u_int32_t d_fileno;
-	u_int16_t d_reclen;
-	u_int8_t  d_type;
-	u_int8_t  d_namlen;
-	char	d_name[255 + 1];
-}
-*/
+  /* Add "[ Use this folder ]" as first entry */
+  {
+    DirEntry *use_entry;
+    if ((use_entry = malloc(sizeof(*use_entry))) != NULL) {
+      use_entry->prev = NULL;
+      use_entry->next = NULL;
+      if ((use_entry->name = malloc(20))) {
+        strcpy(use_entry->name, "[ Use this folder ]");
+      }
+      memset(use_entry->rawname, 0xa0, 16);
+      use_entry->type = T_SEQ;  /* special type — not DIR, not PRG */
+      use_entry->closed = 1;
+      use_entry->locked = 0;
+      use_entry->track = 0;
+      use_entry->sector = 0;
+      use_entry->size = 0;
+      use_entry->tagged = 0;
+      use_entry->mtime = 0;
+      dir->firstentry = use_entry;
+      entry = use_entry;
+      dir->numentries = 1;
+    }
+  }
+
+  /* Add ".." entry for going back */
+  if (dir->firstentry) {
+    DirEntry *dotdot;
+    if ((dotdot = malloc(sizeof(*dotdot))) != NULL) {
+      dotdot->prev = entry;
+      dotdot->next = NULL;
+      entry->next = dotdot;
+      entry = dotdot;
+      if ((dotdot->name = malloc(3))) {
+        strcpy(dotdot->name, "..");
+      }
+      memset(dotdot->rawname, 0xa0, 16);
+      dotdot->rawname[0] = '.';
+      dotdot->rawname[1] = '.';
+      dotdot->type = T_DIR;
+      dotdot->closed = 1;
+      dotdot->locked = 0;
+      dotdot->track = 0;
+      dotdot->sector = 0;
+      dotdot->size = 0;
+      dotdot->tagged = 0;
+      dotdot->mtime = 0;
+      dir->numentries = 2;
+    }
+  }
 
   while ((dirent = readdir(dirhandle))) {
     namelen = strlen(dirent->d_name);
@@ -241,6 +281,12 @@ struct dirent {
       while (a && a->next) {
         DirEntry *b = a->next;
         int doswap = 0;
+        /* Never sort special entries ([ Use this folder ], ..) */
+        if ((a->name && (a->name[0] == '[' || a->name[0] == '.')) ||
+            (b->name && (b->name[0] == '[' || b->name[0] == '.'))) {
+          a = a->next;
+          continue;
+        }
         if (a->type != T_DIR && b->type == T_DIR) {
           doswap = 1;
         } else if (a->type == T_DIR && b->type != T_DIR) {

@@ -169,8 +169,15 @@ void ui_selectdirkey(SDL_keysym *keysym) {
         }
       }
     }
-    if (fsel->selectedfile->type == T_DIR) {
-      /* Enter directory */
+    /* "[ Use this folder ]" entry — select current directory */
+    if (fsel->selectedfile->name &&
+        strcmp(fsel->selectedfile->name, "[ Use this folder ]") == 0) {
+      menu_hide();
+      kbd_focus = select_focus;
+      select_done_call(fsel);
+      fs_free(fsel);
+    } else if (fsel->selectedfile->type == T_DIR) {
+      /* Enter directory (including ".." to go up) */
       cfg_change_dir(fsel->path, fsel->selectedfile->name);
       fs_read_dir(fsel, fsel->path);
       fs_draw(fsel);
