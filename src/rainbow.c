@@ -7,6 +7,7 @@
 #include "menu.h"
 #include "xfer.h"
 #include "rainbow.h"
+#include "timer.h"
 
 #define RB_CAN 0xc1
 #define RB_ACK 0x81
@@ -425,13 +426,29 @@ int rainbow_send(const char *filename) {
 
   rainbow_sent_bytes = 0;
 
-  /* Wait for RB_GOO from receiver — scan through any BBS status screen data */
-  rainbow_send_status("Rainbow: waiting for receiver");
+  /* Signal the BBS we're ready, then wait for RB_GOO.
+   * Send RB_GOO periodically (like Punter's GOO pre-signal)
+   * while scanning incoming bytes for the BBS's RB_GOO response. */
+  rainbow_send_status("Rainbow: signaling receiver");
   {
     int attempts = 30;
     int found = 0;
-    while (attempts-- > 0 && !xfer_cancel) {
+    unsigned int last_signal = 0;
+    unsigned int now;
+
+    xfer_send_byte(RB_GOO);
+    last_signal = timer_get_ticks();
+
+    while (attempts > 0 && !xfer_cancel) {
       c = xfer_recv_byte(1000);
+
+      now = timer_get_ticks();
+      if (now > last_signal + 2000) {
+        xfer_send_byte(RB_GOO);
+        last_signal = now;
+        attempts--;
+      }
+
       if (c < 0) continue;
       if ((unsigned char)c == RB_GOO) {
         found = 1;
