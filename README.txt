@@ -450,7 +450,6 @@ Asset Path Resolution Fix (paths.c)
 
 
 TODO:
-- Add support for MultiPunter upload
 - Add support for connection status
 - Add support for larger bookmarks
 - Migrate from SDL 1.2 to SDL 2.0
