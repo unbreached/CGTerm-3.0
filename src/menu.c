@@ -425,21 +425,24 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   int size;
   int blocks;
   static Uint32 xfer_start_ticks = 0;
+  static int xfer_started = 0;
   Uint32 now;
-  int speed_kbs = 0;
-  int show_speed = 0;
+  int speed_bps = 0;
 
   if (bytes < 0) bytes = 0;
   if (total < 0) total = 0;
   if (total > 0 && bytes > total) bytes = total;
 
   now = SDL_GetTicks();
-  if (bytes == 0) {
+  if (!xfer_started || bytes == 0) {
     xfer_start_ticks = now;
+    xfer_started = 1;
   }
-  if (xfer_start_ticks > 0 && (now - xfer_start_ticks) >= 1000 && bytes > 0) {
-    speed_kbs = (int)((long)bytes * 1000 / (now - xfer_start_ticks) / 1024);
-    show_speed = 1;
+  {
+    Uint32 elapsed = now - xfer_start_ticks;
+    if (elapsed > 500 && bytes > 0) {
+      speed_bps = (int)((long)bytes * 1000 / elapsed);
+    }
   }
 
   /* Clear the dynamic area (below the static header lines) */
@@ -466,12 +469,12 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   font_draw_string(10, 86, line);
 
   /* [status]: */
-  if (total > 0 && show_speed) {
-    snprintf(line, sizeof(line), "[status]: %d of %d (%d KB/s)", bytes, total, speed_kbs);
+  if (total > 0 && speed_bps > 0) {
+    snprintf(line, sizeof(line), "[status]: %d of %d (%d B/s)", bytes, total, speed_bps);
   } else if (total > 0) {
     snprintf(line, sizeof(line), "[status]: %d of %d", bytes, total);
-  } else if (show_speed) {
-    snprintf(line, sizeof(line), "[status]: %d (%d KB/s)", bytes, speed_kbs);
+  } else if (speed_bps > 0) {
+    snprintf(line, sizeof(line), "[status]: %d (%d B/s)", bytes, speed_bps);
   } else {
     snprintf(line, sizeof(line), "[status]: %d", bytes);
   }
