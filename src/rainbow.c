@@ -428,51 +428,52 @@ int rainbow_send(const char *filename) {
 
   /*
    * Rainbow upload handshake (from rainbow_protocol_cb.asm):
-   * 1. BBS receiver waits for ANY byte from sender (_c49d loop)
-   * 2. BBS then sends GOO repeatedly, waiting for SOH
-   * 3. We receive GOO, respond with SOH + block#0
    *
-   * So we must: send a wake-up byte, then wait for GOO (0x83).
-   * Problem: 0x83 is also PETSCII orange, so BBS status screen
-   * bytes might contain it. We drain status bytes first, then
-   * send wake-up, then look for the real GOO from the protocol.
+   * BBS receiver flow (_c494 / _c49d):
+   *   1. Wait for ANY byte from sender (wake-up)
+   *   2. Send GOO ($83) repeatedly, wait for SOH ($89)
+   *
+   * Sender flow (_c23a):
+   *   1. Wait for GOO from receiver
+   *   2. Send SOH + block data
+   *
+   * Problem: GOO is 0x83, same as PETSCII orange color code,
+   * so BBS status screen output can contain false GOOs.
+   *
+   * Solution: first drain status screen bytes (wait for silence),
+   * then send wake-up byte, then wait for GOO. At this point
+   * the BBS should be past its status screen and in the protocol.
    */
   rainbow_send_status("Rainbow: waiting for receiver");
   {
     int found = 0;
-    unsigned int last_wake = 0;
-    unsigned int now;
-    int attempts = 30;
+    int silence_count = 0;
+    int attempts;
 
-    /* Send initial wake-up byte to trigger BBS receiver */
-    xfer_send_byte(RB_GOO);
-    last_wake = timer_get_ticks();
-
-    while (attempts > 0 && !xfer_cancel) {
+    /* Phase 1: drain BBS status screen — read until 2 seconds of silence */
+    while (!xfer_cancel && silence_count < 2) {
       c = xfer_recv_byte(1000);
-
-      /* Resend wake-up every 2 seconds */
-      now = timer_get_ticks();
-      if (now > last_wake + 2000) {
-        xfer_send_byte(RB_GOO);
-        last_wake = now;
-        attempts--;
+      if (c < 0) {
+        silence_count++;
+      } else {
+        silence_count = 0;  /* reset on any data */
       }
+    }
 
-      if (c < 0) continue;
+    /* Phase 2: send wake-up and wait for GOO */
+    xfer_send_byte(RB_GOO);
+    attempts = 20;
 
-      /* Look for GOO followed quickly by another GOO (confirms it's
-       * the protocol, not a stray PETSCII 0x83 from status screen).
-       * The BBS sends GOO repeatedly in a tight loop at _c4b1. */
+    while (attempts-- > 0 && !xfer_cancel) {
+      c = xfer_recv_byte(1000);
+      if (c < 0) {
+        /* Resend wake-up on timeout */
+        xfer_send_byte(RB_GOO);
+        continue;
+      }
       if ((unsigned char)c == RB_GOO) {
-        /* Check if another GOO follows within 500ms */
-        int c2 = xfer_recv_byte(500);
-        if (c2 >= 0 && (unsigned char)c2 == RB_GOO) {
-          found = 1;
-          break;
-        }
-        /* Single GOO could be status screen — keep scanning */
-        /* But if c2 was something else, put logic continues */
+        found = 1;
+        break;
       }
       if ((unsigned char)c == RB_CAN) {
         rainbow_fail("Rainbow: cancelled by remote");
