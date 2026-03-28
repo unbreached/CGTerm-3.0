@@ -88,6 +88,7 @@ void xfer_progress(const char *message) {
 
 void xfer_save_file(char *filename);
 void xfer_check_kbd(void);
+static void xfer_fix_filename(char *filename);
 
 static void xfer_log_errno(const char *prefix, const char *path) {
   if (path && *path) {
@@ -211,9 +212,6 @@ static void multipunter_sanitize_filename(const char *src, char *dst, size_t dst
     if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
       c = '_';
     }
-    if (c == ',') {
-      c = '.';
-    }
     if (c == '.') {
       sawdot = 1;
     }
@@ -230,7 +228,12 @@ static void multipunter_sanitize_filename(const char *src, char *dst, size_t dst
     return;
   }
 
-  if (!sawdot && multipunter_ext_from_type(filetype)[0] && strlen(dst) + strlen(multipunter_ext_from_type(filetype)) + 1 < dstsz) {
+  /* Convert C64 filetype suffixes: ,p → .prg, ,s → .seq, etc. */
+  xfer_fix_filename(dst);
+
+  /* If still no extension, add one based on the Punter filetype byte */
+  if (!sawdot && !strchr(dst, '.') && multipunter_ext_from_type(filetype)[0] &&
+      strlen(dst) + strlen(multipunter_ext_from_type(filetype)) + 1 < dstsz) {
     strcat(dst, multipunter_ext_from_type(filetype));
   }
 }
@@ -793,8 +796,42 @@ void xfer_save_file_in_dir(char *filename) {
   gfx_vbl();
 }
 
+/*
+ * Convert C64 filetype suffixes to PC extensions:
+ *   ,p → .prg    ,s → .seq    ,u → .usr    ,l → .rel
+ * Also handles uppercase variants.
+ */
+static void xfer_fix_filename(char *filename) {
+  size_t len = strlen(filename);
+  char *comma;
+
+  if (len < 3) return;
+
+  /* Find last comma */
+  comma = strrchr(filename, ',');
+  if (comma && strlen(comma) == 2) {
+    char type = comma[1];
+    const char *ext = NULL;
+
+    switch (type) {
+    case 'p': case 'P': ext = ".prg"; break;
+    case 's': case 'S': ext = ".seq"; break;
+    case 'u': case 'U': ext = ".usr"; break;
+    case 'l': case 'L': ext = ".rel"; break;
+    }
+    if (ext) {
+      /* Replace ",X" with ".ext" */
+      if ((size_t)(comma - filename) + 4 < 256) {
+        strcpy(comma, ext);
+      }
+    }
+  }
+}
+
 void xfer_save_file(char *filename) {
   char *p;
+
+  xfer_fix_filename(filename);
 
   /* Check if download target is a disk image (.d64/.d71/.d81) */
   if ((p = strrchr(cfg_dldir, '.'))) {
