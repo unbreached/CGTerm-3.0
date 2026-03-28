@@ -144,8 +144,25 @@ void ui_selectdirkey(SDL_keysym *keysym) {
   case SDLK_RETURN:
   case SDLK_KP_ENTER:
     fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
+    if (select_mode == SEL_DIR) {
+      /* In DIR mode: if we're inside a D64, select it as the target.
+       * Otherwise, enter directories or select the current path. */
+      {
+        char *dp = strrchr(fsel->path, '.');
+        int inside_image = (dp && strlen(dp) == 4 &&
+          (dp[1] == 'd' || dp[1] == 'D') && isdigit(dp[2]) && isdigit(dp[3]));
+        if (inside_image) {
+          /* We're inside a D64 — select it as download/upload target */
+          menu_hide();
+          kbd_focus = select_focus;
+          select_done_call(fsel);
+          fs_free(fsel);
+          break;
+        }
+      }
+    }
     if (fsel->selectedfile->type == T_DIR) {
-      /* Enter directory on Return too */
+      /* Enter directory */
       cfg_change_dir(fsel->path, fsel->selectedfile->name);
       fs_read_dir(fsel, fsel->path);
       fs_draw(fsel);
