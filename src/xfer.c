@@ -651,6 +651,31 @@ void xfer_save_file_in_image(char *filename) {
   char msgbuf[4096];
   int bytesleft, l;
   unsigned char rawname[16];
+  FileType ftype = T_PRG;
+  char cleanname[256];
+  char *comma;
+
+  /* Copy filename and detect C64 filetype from ",X" suffix */
+  snprintf(cleanname, sizeof(cleanname), "%s", filename);
+  comma = strrchr(cleanname, ',');
+  if (comma && strlen(comma) == 2) {
+    switch (comma[1]) {
+    case 'p': case 'P': ftype = T_PRG; break;
+    case 's': case 'S': ftype = T_SEQ; break;
+    case 'u': case 'U': ftype = T_USR; break;
+    }
+    *comma = 0;  /* Strip the ",X" suffix for the D64 name */
+  }
+  /* Also strip PC extensions if present (.prg, .seq, etc.) */
+  {
+    char *dot = strrchr(cleanname, '.');
+    if (dot && strlen(dot) == 4) {
+      if (strcasecmp(dot, ".prg") == 0) { ftype = T_PRG; *dot = 0; }
+      else if (strcasecmp(dot, ".seq") == 0) { ftype = T_SEQ; *dot = 0; }
+      else if (strcasecmp(dot, ".usr") == 0) { ftype = T_USR; *dot = 0; }
+      else if (strcasecmp(dot, ".rel") == 0) { ftype = T_REL; *dot = 0; }
+    }
+  }
 
   if ((di = di_load_image(cfg_dldir)) == NULL) {
     menu_draw_message("Couldn't open disk image");
@@ -668,9 +693,9 @@ void xfer_save_file_in_image(char *filename) {
     return;
   }
 
-  di_rawname_from_name(rawname, filename);
+  di_rawname_from_name(rawname, cleanname);
 
-  to = di_open(di, rawname, T_PRG, "wb");
+  to = di_open(di, rawname, ftype, "wb");
   if (to == NULL) {
     fclose(from);
     di_free_image(di);
@@ -698,7 +723,7 @@ void xfer_save_file_in_image(char *filename) {
   remove(xfer_tempdlname);
   xfer_tempdlname[0] = 0;
 
-  snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", filename);
+  snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", cleanname);
   menu_draw_message(msgbuf);
 
  done:
@@ -829,19 +854,21 @@ static void xfer_fix_filename(char *filename) {
 void xfer_save_file(char *filename) {
   char *p;
 
-  xfer_fix_filename(filename);
-
   /* Check if download target is a disk image (.d64/.d71/.d81) */
   if ((p = strrchr(cfg_dldir, '.'))) {
     if (strlen(p) == 4) {
       if (p[1] == 'd' || p[1] == 'D') {
         if (isdigit(p[2]) && isdigit(p[3])) {
+          /* Save into D64 — use C64 name, don't apply PC extensions */
           xfer_save_file_in_image(filename);
           return;
         }
       }
     }
   }
+
+  /* Save to filesystem — convert C64 filetype to PC extension */
+  xfer_fix_filename(filename);
   xfer_save_file_in_dir(filename);
 }
 
