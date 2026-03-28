@@ -54,13 +54,14 @@ Section "CGTerm (required)" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
 
-  ; Binaries
-  File "..\bin\cgterm.exe"
-  File /nonfatal "..\bin\cgchat.exe"
-  File /nonfatal "..\bin\cgedit.exe"
+  ; Binaries — use cross-compiled dist or native build
+  ; Try dist\win32 first (cross-compiled), fall back to bin\
+  File "..\dist\win32\cgterm.exe"
+  File /nonfatal "..\dist\win32\cgchat.exe"
+  File /nonfatal "..\dist\win32\cgedit.exe"
 
   ; SDL runtime DLL
-  File "..\dist\staging\SDL.dll"
+  File "..\dist\win32\SDL.dll"
 
   ; Assets
   SetOutPath "$INSTDIR\assets"
