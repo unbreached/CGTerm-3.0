@@ -241,6 +241,7 @@ void ui_requestkey(SDL_keysym *keysym) {
 
 static char bm_input[4] = "";
 static int bm_input_len = 0;
+static int bm_cursor = 0;
 static char bm_new_alias[64];
 static char bm_new_host[256];
 
@@ -272,6 +273,7 @@ void bm_add_alias(char *alias) {
 void ui_bookmarkkey(SDL_keysym *keysym) {
   int b;
   char _DebugMsg[256];
+  int max_bm = cfg_numbookmarks > 0 ? cfg_numbookmarks : 1;
 
   switch (keysym->sym) {
 
@@ -281,6 +283,38 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     bm_input[0] = 0;
     menu_hide();
     kbd_focus = FOCUS_TERM;
+    break;
+
+  case SDLK_UP:
+    if (bm_cursor > 0) {
+      bm_cursor--;
+      menu_draw_bookmarks_sel(bm_cursor);
+      menu_show();
+    }
+    break;
+
+  case SDLK_DOWN:
+    if (bm_cursor < max_bm - 1) {
+      bm_cursor++;
+      menu_draw_bookmarks_sel(bm_cursor);
+      menu_show();
+    }
+    break;
+
+  case SDLK_LEFT:
+    if (bm_cursor >= 20) {
+      bm_cursor -= 20;
+      menu_draw_bookmarks_sel(bm_cursor);
+      menu_show();
+    }
+    break;
+
+  case SDLK_RIGHT:
+    if (bm_cursor + 20 < max_bm) {
+      bm_cursor += 20;
+      menu_draw_bookmarks_sel(bm_cursor);
+      menu_show();
+    }
     break;
 
   case SDLK_BACKSPACE:
@@ -294,17 +328,19 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
   case SDLK_KP_ENTER:
     if (bm_input_len > 0) {
       b = atoi(bm_input);
-      bm_input_len = 0;
-      bm_input[0] = 0;
-      if (b >= 0 && b < cfg_numbookmarks) {
-        menu_hide();
-        kbd_focus = FOCUS_TERM;
-        cfg_sethost(cfg_bookmark_host[b]);
-        cfg_port = cfg_bookmark_port[b];
-        snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
-        cfg_debug(_DebugMsg);
-        net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
-      }
+    } else {
+      b = bm_cursor;
+    }
+    bm_input_len = 0;
+    bm_input[0] = 0;
+    if (b >= 0 && b < cfg_numbookmarks) {
+      menu_hide();
+      kbd_focus = FOCUS_TERM;
+      cfg_sethost(cfg_bookmark_host[b]);
+      cfg_port = cfg_bookmark_port[b];
+      snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
+      cfg_debug(_DebugMsg);
+      net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
     } else {
       menu_hide();
       kbd_focus = FOCUS_TERM;

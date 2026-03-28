@@ -27,6 +27,7 @@ void menu_draw_rectangle(void);
 void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath);
 void menu_draw_message(const char *message);
 void menu_draw_bookmarks(void);
+void menu_draw_bookmarks_sel(int selected);
 void menu_fs_draw(const char *title);
 void menu_fs_draw_path(const char *path);
 void menu_fs_draw_line(int line, const char *text, int selected, int font);

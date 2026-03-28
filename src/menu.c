@@ -974,7 +974,7 @@ void menu_print_bookmark(int slot, int col, char *text) {
 }
 
 
-void menu_draw_bookmarks(void) {
+void menu_draw_bookmarks_sel(int selected) {
   int i;
   int cx = menu_width / 2;
   Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
@@ -995,19 +995,36 @@ void menu_draw_bookmarks(void) {
 
   /* Left column: slots 0-19 */
   for (i = 0; i < 20; ++i) {
+    /* Highlight selected entry */
+    if (i == selected) {
+      SDL_Rect r;
+      r.x = 12; r.y = 32 + i * 17 - 1; r.w = cx - 14; r.h = 15;
+      SDL_FillRect(menu_surface, &r, selectcolor);
+    }
     menu_print_bookmark(i, 0,
       (i < cfg_numbookmarks) ? cfg_bookmark_alias[i] : NULL);
   }
 
   /* Right column: slots 20-39 */
   for (i = 0; i < 20; ++i) {
+    if (i + 20 == selected) {
+      SDL_Rect r;
+      r.x = cx + 8; r.y = 32 + i * 17 - 1; r.w = cx - 14; r.h = 15;
+      SDL_FillRect(menu_surface, &r, selectcolor);
+    }
     menu_print_bookmark(i, 1,
       (i + 20 < cfg_numbookmarks) ? cfg_bookmark_alias[i + 20] : NULL);
   }
 
   /* Hint */
   font_set_font(menu_font[0]);
-  font_draw_string(15, menu_height - 20, "#=connect  A=add  +=save current  Esc");
+  font_draw_string(15, menu_height - 20, "Arrows/Enter  #=jump  A=add  +=save  Esc");
+
+  menu_dirty = SDL_TRUE;
+}
+
+void menu_draw_bookmarks(void) {
+  menu_draw_bookmarks_sel(-1);
 }
 
 

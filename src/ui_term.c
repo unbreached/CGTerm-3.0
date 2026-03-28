@@ -367,7 +367,7 @@ void ui_metakey(SDL_keysym *keysym) {
       menu_show();
       kbd_focus = FOCUS_REQUESTER;
     } else {
-      menu_draw_bookmarks();
+      menu_draw_bookmarks_sel(0);
       menu_show();
       kbd_focus = FOCUS_BOOKMARKS;
     }
