@@ -3,6 +3,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sys/stat.h>
 #include "diskimage.h"
 #include "dir.h"
 
@@ -76,6 +77,7 @@ Dir *dir_read_image(DiskImage *di) {
   entry->sector = 0;
   entry->size = 0;
   entry->tagged = 0;
+  entry->mtime = 0;
   dir->numentries = 1;
 
   while (di_read(fh, buffer, 254) == 254) {
@@ -104,6 +106,7 @@ Dir *dir_read_image(DiskImage *di) {
 	entry->sector = buffer[offset + 4];
 	entry->size = buffer[offset + 31]<<8 | buffer[offset + 30];
 	entry->tagged = 0;
+	entry->mtime = 0;
 	++(dir->numentries);
       }
     }
@@ -208,6 +211,21 @@ struct dirent {
       entry->sector = 0;
       entry->size = 0;
       entry->tagged = 0;
+      /* Get modification time */
+      {
+        struct stat st;
+        char fullpath[512];
+#ifdef WINDOWS
+        snprintf(fullpath, sizeof(fullpath), "%s\\%s", path, entry->name);
+#else
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->name);
+#endif
+        if (stat(fullpath, &st) == 0) {
+          entry->mtime = (long)st.st_mtime;
+        } else {
+          entry->mtime = 0;
+        }
+      }
       ++(dir->numentries);
     }
   }
@@ -227,8 +245,13 @@ struct dirent {
           doswap = 1;
         } else if (a->type == T_DIR && b->type != T_DIR) {
           doswap = 0;
-        } else if (a->name && b->name) {
-          doswap = (strcasecmp(a->name, b->name) > 0);
+        } else if (a->type == T_DIR && b->type == T_DIR) {
+          /* Directories: alphabetical */
+          if (a->name && b->name)
+            doswap = (strcasecmp(a->name, b->name) > 0);
+        } else {
+          /* Files: newest first (by mtime) */
+          doswap = (a->mtime < b->mtime);
         }
         if (doswap) {
           /* Swap data fields */
@@ -242,6 +265,7 @@ struct dirent {
           tt = a->track; a->track = b->track; b->track = tt;
           tt = a->sector; a->sector = b->sector; b->sector = tt;
           tt = a->tagged; a->tagged = b->tagged; b->tagged = tt;
+          { long tm = a->mtime; a->mtime = b->mtime; b->mtime = tm; }
           swapped = 1;
         }
         a = a->next;

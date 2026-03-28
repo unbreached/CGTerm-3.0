@@ -262,10 +262,12 @@ void ui_create_d64_label(char *label) {
   gfx_vbl();
 }
 
+static char new_d64_dir[256];
+
 void ui_create_d64_name(char *filename) {
-  /* Build full path in the download directory */
+  /* Build full path using the selected directory */
   if (strchr(filename, '.') == NULL) {
-    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s.d64", cfg_dldir,
+    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s.d64", new_d64_dir,
 #ifdef WINDOWS
       '\\',
 #else
@@ -273,7 +275,7 @@ void ui_create_d64_name(char *filename) {
 #endif
       filename);
   } else {
-    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s", cfg_dldir,
+    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s", new_d64_dir,
 #ifdef WINDOWS
       '\\',
 #else
@@ -283,6 +285,11 @@ void ui_create_d64_name(char *filename) {
   }
 
   ui_inputcall(16, "Disk label:", "cgterm", &ui_create_d64_label, FOCUS_REQUESTER);
+}
+
+void select_d64_dir_done(FileSelector *fs) {
+  snprintf(new_d64_dir, sizeof(new_d64_dir), "%s", fs->path);
+  ui_inputcall(20, "Image filename:", "download.d64", &ui_create_d64_name, FOCUS_REQUESTER);
 }
 
 
@@ -361,7 +368,8 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_n:
-    ui_inputcall(20, "Image filename:", "download.d64", &ui_create_d64_name, FOCUS_REQUESTER);
+    /* Pick directory first, then filename, then label */
+    kbd_select_dir_from(&select_d64_dir_done, FOCUS_TERM, "Save D64 where?", cfg_dldir);
     break;
 
   case SDLK_q:

@@ -10,6 +10,7 @@ typedef struct direntry {
   int track;
   int sector;
   int tagged;
+  long mtime;
 } DirEntry;
 
 typedef struct dir {
