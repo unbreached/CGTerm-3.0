@@ -125,6 +125,27 @@ else
     echo "    Install with: brew install makensis"
 fi
 
+# Sign the installer if osslsigncode and cert are available
+if command -v osslsigncode >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/signing/cert.pem" ]; then
+    if [ -f "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe" ]; then
+        echo "[*] Signing installer..."
+        osslsigncode sign \
+            -certs "$ROOT_DIR/scripts/signing/cert.pem" \
+            -key "$ROOT_DIR/scripts/signing/key.pem" \
+            -n "CGTerm 3.0 - Scene Edition" \
+            -i "https://bbs.retrohack.se" \
+            -t http://timestamp.sectigo.com \
+            -in "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe" \
+            -out "$ROOT_DIR/dist/CGTerm-3.0-Setup-signed.exe" 2>&1
+        if [ $? -eq 0 ]; then
+            mv "$ROOT_DIR/dist/CGTerm-3.0-Setup-signed.exe" "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe"
+            echo "[+] Installer signed"
+        else
+            echo "[!] Signing failed — using unsigned installer"
+        fi
+    fi
+fi
+
 # Create zip
 echo "[*] Creating distribution zip..."
 cd "$ROOT_DIR/dist"
