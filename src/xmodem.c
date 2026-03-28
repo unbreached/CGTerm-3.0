@@ -115,10 +115,23 @@ int xmodem_save_data(unsigned char *data, int length) {
   if (data) {
     XMDBG("[XMODEM] save_data buffer incoming length=%d pending=%u\n", length, xmodem_buffer_len);
     if (xmodem_buffer_len) {
-      if (xfer_save_data(xmodem_buffer, xmodem_buffer_len) != (int)xmodem_buffer_len) {
-        XMDBG("[XMODEM] save_data write failed on buffered block len=%u\n", xmodem_buffer_len);
-        return 0;
+      /* Check if the NEW block is all padding — if so, don't write
+       * the previous block yet. It might be the true last data block
+       * that needs trimming. */
+      int all_pad = 1;
+      int i;
+      for (i = 0; i < length; i++) {
+        if (data[i] != XM_PAD) { all_pad = 0; break; }
       }
+      if (!all_pad) {
+        /* New block has real data — safe to write the buffered one */
+        if (xfer_save_data(xmodem_buffer, xmodem_buffer_len) != (int)xmodem_buffer_len) {
+          XMDBG("[XMODEM] save_data write failed on buffered block len=%u\n", xmodem_buffer_len);
+          return 0;
+        }
+      }
+      /* If all_pad, we skip writing the previous block for now —
+       * it will be written (with trim) at final flush */
     }
     memcpy(xmodem_buffer, data, length);
     xmodem_buffer_len = (unsigned int)length;
@@ -343,6 +356,7 @@ int xmodem_send(int send1k) {
   xmodem_send_block(blocknum, blocksize, usecrc);
 
   while (bytesleft > 0) {
+    printf("[XM-SEND] waiting for response. bytesleft=%d sentbytes=%d blocknum=%d\n", bytesleft, sentbytes, blocknum); fflush(stdout);
     c = xm_recv_byte_dbg(10000);
     switch (c) {
     case -2:
@@ -385,15 +399,22 @@ int xmodem_send(int send1k) {
     }
   }
 
+  printf("[XM-SEND] loop exited. bytesleft=%d sentbytes=%d\n", bytesleft, sentbytes);
+  fflush(stdout);
+
   xfer_progress_status("Finishing...", sentbytes, xfer_file_size);
-  XMDBG("[XMODEM] send EOT\n");
+  printf("[XM-SEND] sending EOT\n"); fflush(stdout);
   xm_send_byte_dbg(XM_EOT);
   c = xm_recv_byte_dbg(10000);
+  printf("[XM-SEND] EOT response: 0x%02x (%d) %s\n", c >= 0 ? c : 0, c, xm_name(c)); fflush(stdout);
   if (c != XM_ACK) {
-    XMDBG("[XMODEM] send second EOT because got %s\n", xm_name(c));
+    printf("[XM-SEND] sending second EOT\n"); fflush(stdout);
     xm_send_byte_dbg(XM_EOT);
+    c = xm_recv_byte_dbg(10000);
+    printf("[XM-SEND] second EOT response: 0x%02x (%d) %s\n", c >= 0 ? c : 0, c, xm_name(c)); fflush(stdout);
   }
 
+  printf("[XM-SEND] done, returning 1\n"); fflush(stdout);
   xfer_progress_status("Transfer complete", xfer_file_size, xfer_file_size);
   return 1;
 }
