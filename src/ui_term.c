@@ -37,7 +37,8 @@ struct menu termmenu[] = {
 
 typedef enum selmode {
   SEL_DIR,
-  SEL_FILE
+  SEL_FILE,
+  SEL_MULTIFILE
 } SelectMode;
 FileSelector *fsel;
 void (*select_done_call)(FileSelector *);
@@ -63,6 +64,19 @@ void kbd_select_file(void (*donecall)(FileSelector *), Focus focus) {
   select_focus = focus;
   select_mode = SEL_FILE;
   fsel = fs_new("Select file", cfg_xferdir);
+  if (fsel) {
+    fs_draw(fsel);
+    menu_show();
+    kbd_focus = FOCUS_SELECTDIR;
+  }
+}
+
+
+void kbd_select_files(void (*donecall)(FileSelector *), Focus focus) {
+  select_done_call = donecall;
+  select_focus = focus;
+  select_mode = SEL_MULTIFILE;
+  fsel = fs_new("Tag files (space=tag enter=send)", cfg_xferdir);
   if (fsel) {
     fs_draw(fsel);
     menu_show();
@@ -106,6 +120,10 @@ void ui_selectdirkey(SDL_keysym *keysym) {
 	fs_read_dir(fsel, fsel->path);
 	fs_draw(fsel);
       }
+    } else if (select_mode == SEL_MULTIFILE) {
+      /* Toggle tag on current file */
+      fs_toggle_tag(fsel, fsel->current + fsel->offset);
+      fs_draw(fsel);
     }
     break;
 
@@ -117,6 +135,14 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       kbd_focus = select_focus;
       select_done_call(fsel);
       fs_free(fsel);
+    } else if (select_mode == SEL_MULTIFILE) {
+      /* Send all tagged files */
+      if (fsel->numtagged > 0) {
+	menu_hide();
+	kbd_focus = select_focus;
+	select_done_call(fsel);
+	fs_free(fsel);
+      }
     } else {
       if (fsel->selectedfile->type == T_PRG || fsel->selectedfile->type == T_SEQ) {
 	menu_hide();
@@ -168,6 +194,11 @@ void select_set_xferdir(FileSelector *fs) {
 
 void select_send_file(FileSelector *fs) {
   xfer_send(fs->selectedfile->name);
+}
+
+
+void select_send_multipunter(FileSelector *fs) {
+  xfer_send_multipunter(fs);
 }
 
 
@@ -326,7 +357,11 @@ void ui_xferkey(SDL_keysym *keysym) {
   case SDLK_KP_ENTER:
     if (xfer_protocol) {
       if (xfer_direction == DIR_SEND) {
-	kbd_select_file(&select_send_file, FOCUS_REQUESTER);
+	if (xfer_protocol == PROT_MULTIPUNTER) {
+	  kbd_select_files(&select_send_multipunter, FOCUS_REQUESTER);
+	} else {
+	  kbd_select_file(&select_send_file, FOCUS_REQUESTER);
+	}
       } else if (xfer_direction == DIR_RECV) {
 	if (xfer_recv()) {
 	  if (xfer_protocol == PROT_MULTIPUNTER) {

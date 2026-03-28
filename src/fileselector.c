@@ -28,6 +28,7 @@ FileSelector *fs_new(const char *title, const char *path) {
   snprintf(fs->path, sizeof(fs->path), "%s", path);
 
   fs->selectedfile = NULL;
+  fs->numtagged = 0;
 
   fs_read_dir(fs, fs->path);
   return(fs);
@@ -68,18 +69,44 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
 
 void fs_draw_name(FileSelector *fs, int entry, int line, int selected) {
   DirEntry *de;
+  char display[32];
 
   de = fs->dir->firstentry;
   while (entry--) {
     de = de->next;
   }
-  menu_fs_draw_line(line, de->name, selected, de->type == T_DIR ? 1 : 0);
+  if (de->tagged) {
+    snprintf(display, sizeof(display), "*%.29s", de->name);
+  } else {
+    snprintf(display, sizeof(display), " %.29s", de->name);
+  }
+  menu_fs_draw_line(line, display, selected || de->tagged, de->type == T_DIR ? 1 : 0);
+}
+
+int fs_toggle_tag(FileSelector *fs, int entry) {
+  DirEntry *de;
+
+  de = fs->dir->firstentry;
+  while (entry--) {
+    de = de->next;
+  }
+  if (de->type == T_DIR) {
+    return fs->numtagged;  /* don't tag directories */
+  }
+  de->tagged = !de->tagged;
+  if (de->tagged) {
+    fs->numtagged++;
+  } else {
+    fs->numtagged--;
+  }
+  return fs->numtagged;
 }
 
 
 /* Draw file selector */
 void fs_draw(FileSelector *fs) {
   DirEntry *de;
+  char display[32];
   int l;
 
   menu_fs_draw(fs->title);
@@ -92,7 +119,12 @@ void fs_draw(FileSelector *fs) {
     }
     l = 0;
     while (de && l < fs->filesperpage) {
-      menu_fs_draw_line(l, de->name, l == fs->current ? 1 : 0, de->type == T_DIR ? 1 : 0);
+      if (de->tagged) {
+        snprintf(display, sizeof(display), "*%.29s", de->name);
+      } else {
+        snprintf(display, sizeof(display), " %.29s", de->name);
+      }
+      menu_fs_draw_line(l, display, (l == fs->current) || de->tagged, de->type == T_DIR ? 1 : 0);
       de = de->next;
       ++l;
     }

@@ -21,6 +21,8 @@
 #include "punter.h"
 #include "rainbow.h"
 #include "diskimage.h"
+#include "dir.h"
+#include "fileselector.h"
 #include "config.h"
 
 #define XFER_PATH_MAX 1024
@@ -593,8 +595,7 @@ void xfer_send(char *filename) {
     } else if (xfer_protocol == PROT_RAINBOW) {
       rainbow_send(filename);
     } else if (xfer_protocol == PROT_MULTIPUNTER) {
-      menu_draw_message("Multi Punter send not implemented");
-      gfx_vbl();
+      /* Multi Punter send is handled by xfer_send_multipunter() */
     }
     fclose(xfer_sendfile);
   } else {
@@ -774,5 +775,111 @@ void xfer_save_file(char *filename) {
     }
   }
   xfer_save_file_in_dir(filename);
+}
+
+
+void xfer_send_multipunter(FileSelector *fs) {
+  DirEntry *de;
+  char name[256];
+  char msg[256];
+  int filecount = 0;
+  int total_tagged = fs->numtagged;
+  char *p;
+  int deletetmp;
+
+  xfer_cancel = 0;
+  xfer_starttime = timer_get_ticks();
+
+  /* Loop through all entries, send tagged ones */
+  de = fs->dir->firstentry;
+  while (de && !xfer_cancel) {
+    if (!de->tagged) {
+      de = de->next;
+      continue;
+    }
+
+    /* Send file announcement: 0x09 + filename + \r */
+    snprintf(msg, sizeof(msg), "Multi Punter: %s (%d/%d)",
+             de->name, filecount + 1, total_tagged);
+    menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
+    menu_show();
+    gfx_vbl();
+
+    xfer_send_byte(0x09);
+    {
+      const char *s = de->name;
+      while (*s) {
+        xfer_send_byte(*s++);
+      }
+    }
+    xfer_send_byte('\r');
+
+    /* Open the file */
+    deletetmp = 0;
+    if ((p = strrchr(cfg_xferdir, '.')) && strlen(p) == 4 &&
+        (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3])) {
+      if (xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
+        snprintf(name, sizeof(name), "%s", xfer_tempulname);
+        deletetmp = 1;
+      } else {
+        snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
+        menu_draw_message(msg);
+        menu_show();
+        gfx_vbl();
+        de = de->next;
+        continue;
+      }
+    } else {
+      snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
+#ifdef WINDOWS
+        '\\',
+#else
+        '/',
+#endif
+        de->name);
+    }
+
+    if ((xfer_sendfile = fopen(name, "rb"))) {
+      if (fseek(xfer_sendfile, 0, SEEK_END)) {
+        fclose(xfer_sendfile);
+        de = de->next;
+        continue;
+      }
+      xfer_file_size = (int)ftell(xfer_sendfile);
+      fseek(xfer_sendfile, 0, SEEK_SET);
+      xfer_saved_bytes = 0;
+
+      /* Do a standard Punter send for this file */
+      punter_send();
+
+      fclose(xfer_sendfile);
+      filecount++;
+    } else {
+      snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
+      menu_draw_message(msg);
+      menu_show();
+      gfx_vbl();
+    }
+
+    if (deletetmp) {
+      remove(name);
+    }
+
+    de = de->next;
+  }
+
+  /* Send batch end: 0x09 + 0x04 (EOT) */
+  xfer_send_byte(0x09);
+  xfer_send_byte(0x04);
+
+  if (filecount > 0) {
+    snprintf(msg, sizeof(msg), "Sent %d Multi Punter file%s",
+             filecount, filecount == 1 ? "" : "s");
+    menu_draw_message(msg);
+  } else {
+    menu_draw_message("Multi Punter: no files sent");
+  }
+  menu_show();
+  gfx_vbl();
 }
 

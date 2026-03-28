@@ -9,6 +9,7 @@ typedef struct direntry {
   int locked;
   int track;
   int sector;
+  int tagged;
 } DirEntry;
 
 typedef struct dir {

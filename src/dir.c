@@ -75,6 +75,7 @@ Dir *dir_read_image(DiskImage *di) {
   entry->track = 0;
   entry->sector = 0;
   entry->size = 0;
+  entry->tagged = 0;
   dir->numentries = 1;
 
   while (di_read(fh, buffer, 254) == 254) {
@@ -102,6 +103,7 @@ Dir *dir_read_image(DiskImage *di) {
 	entry->track = buffer[offset + 3];
 	entry->sector = buffer[offset + 4];
 	entry->size = buffer[offset + 31]<<8 | buffer[offset + 30];
+	entry->tagged = 0;
 	++(dir->numentries);
       }
     }
@@ -205,6 +207,7 @@ struct dirent {
       entry->track = 0;
       entry->sector = 0;
       entry->size = 0;
+      entry->tagged = 0;
       ++(dir->numentries);
     }
   }

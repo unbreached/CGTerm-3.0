@@ -25,8 +25,11 @@ extern unsigned char xfer_buffer[];
 extern int xfer_debug;
 
 
+struct fileselector;
+
 int xfer_recv(void);
 void xfer_send(char *filename);
+void xfer_send_multipunter(struct fileselector *fs);
 void xfer_save_file(char *filename);
 
 void xfer_send_byte(unsigned char c);
