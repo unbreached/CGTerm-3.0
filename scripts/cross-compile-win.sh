@@ -40,8 +40,9 @@ mkdir -p "$DIST_DIR"
 
 CC="i686-w64-mingw32-gcc"
 CFLAGS="-O2 -Wall -DWINDOWS -I$SDL_DIR/include/SDL -I$ROOT_DIR/src"
-# Skip SDLmain (incompatible with modern MinGW), use -lSDL directly
-LDFLAGS="-L$SDL_DIR/lib -lmingw32 -lSDL -lws2_32 -mwindows"
+# Statically link compiler runtime so no extra DLLs are needed.
+# -mconsole shows a console window with error output for debugging.
+LDFLAGS="-static-libgcc -L$SDL_DIR/lib -lmingw32 -lSDL -lws2_32 -mconsole"
 OBJDIR="$ROOT_DIR/build/obj-win32"
 SRCDIR="$ROOT_DIR/src"
 

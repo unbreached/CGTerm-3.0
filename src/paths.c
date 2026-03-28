@@ -133,8 +133,26 @@ int path_init(const char *argv0) {
   }
 
 #ifdef WINDOWS
+  /* Check exe_dir\assets first, then exe_dir\..\assets, then exe_dir itself */
+  snprintf(candidate, sizeof(candidate), "%s\\assets", exe_dir);
+  if (dir_has_asset(candidate, "us.kbd")) {
+    snprintf(g_asset_root, sizeof(g_asset_root), "%s", candidate);
+    snprintf(g_system_config_dir, sizeof(g_system_config_dir), "%s", exe_dir);
+    return 1;
+  }
+  {
+    char parent[PATH_MAX];
+    snprintf(parent, sizeof(parent), "%s", exe_dir);
+    dirname_inplace(parent);
+    snprintf(candidate, sizeof(candidate), "%s\\assets", parent);
+    if (dir_has_asset(candidate, "us.kbd")) {
+      snprintf(g_asset_root, sizeof(g_asset_root), "%s", candidate);
+      snprintf(g_system_config_dir, sizeof(g_system_config_dir), "%s", parent);
+      return 1;
+    }
+  }
   snprintf(g_asset_root, sizeof(g_asset_root), "%s", exe_dir);
-  snprintf(g_system_config_dir, sizeof(g_system_config_dir), ".");
+  snprintf(g_system_config_dir, sizeof(g_system_config_dir), "%s", exe_dir);
   return 1;
 #elif defined(__APPLE__)
   if (strstr(exe_dir, ".app/Contents/MacOS")) {
