@@ -25,12 +25,13 @@ struct menu termmenu[] = {
   {6, "F", "Toggle fullscreen mode"},
   {7, "I", "Set transfer disk image"},
   {8, "L", "Load seq file"},
-  {9, "Q", "Quit CGTerm"},
-  {10, "R", "Reconnect"},
-  {11, "S", "Save screen to seq file"},
-  {12, "T", "Transfer file"},
-  {13, "V", "Play macro"},
-  {14, "Alt", "Toggle case"},
+  {9, "N", "New .d64 disk image"},
+  {10, "Q", "Quit CGTerm"},
+  {11, "R", "Reconnect"},
+  {12, "S", "Save screen to seq file"},
+  {13, "T", "Transfer file"},
+  {14, "V", "Play macro"},
+  {15, "Alt", "Toggle case"},
   {0, NULL, NULL}
 };
 
@@ -205,6 +206,60 @@ void select_set_xferdir(FileSelector *fs) {
 }
 
 
+/* New disk image creation — two-step input chain */
+static char new_d64_path[256];
+
+void ui_create_d64_label(char *label) {
+  DiskImage *di;
+  unsigned char rawname[16];
+  unsigned char rawid[2] = { '0', '0' };
+  char msg[256];
+
+  di = di_create_image(new_d64_path, 174848);
+  if (di == NULL) {
+    menu_draw_message("Couldn't create disk image!");
+    menu_show();
+    gfx_vbl();
+    return;
+  }
+
+  di_rawname_from_name(rawname, label);
+  di_format(di, rawname, rawid);
+  di_free_image(di);
+
+  /* Set download directory to the new .d64 */
+  snprintf(cfg_dldir, 256, "%s", new_d64_path);
+
+  snprintf(msg, sizeof(msg), "Created: %s", new_d64_path);
+  menu_draw_message(msg);
+  menu_show();
+  gfx_vbl();
+}
+
+void ui_create_d64_name(char *filename) {
+  /* Build full path in the download directory */
+  if (strchr(filename, '.') == NULL) {
+    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s.d64", cfg_dldir,
+#ifdef WINDOWS
+      '\\',
+#else
+      '/',
+#endif
+      filename);
+  } else {
+    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s", cfg_dldir,
+#ifdef WINDOWS
+      '\\',
+#else
+      '/',
+#endif
+      filename);
+  }
+
+  ui_inputcall(16, "Disk label:", "cgterm", &ui_create_d64_label, FOCUS_REQUESTER);
+}
+
+
 void select_send_file(FileSelector *fs) {
   xfer_send(fs->selectedfile->name);
 }
@@ -273,6 +328,10 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_l:
     ui_inputcall(30, "Load SEQ file:", "screen.seq", &kbd_loadseq, FOCUS_TERM);
+    break;
+
+  case SDLK_n:
+    ui_inputcall(20, "Image filename:", "download.d64", &ui_create_d64_name, FOCUS_REQUESTER);
     break;
 
   case SDLK_q:
