@@ -520,7 +520,7 @@ static int punter_send_block(int len) {
  *     BBS: lastblock SYN exchange
  *     Us:  wait S/B → send SYN, wait SYN → send S/B
  */
-int punter_send(void) {
+static int punter_send_internal(int send_presignal) {
   int blocknum;
   int sent_bytes = 0;
   int remaining;
@@ -532,17 +532,18 @@ int punter_send(void) {
   /*
    * Phase 1: Filetype init block
    *
-   * C*BASE upload flow (bbs.bas lines 5591-5620):
+   * For single Punter upload (bbs.bas lines 5591-5620):
    * The BBS waits for CGTerm to send "GOO" BEFORE it enters initrecv2.
-   * It reads from the modem looking for 'G' (0x47) or 'A' (0x41).
-   * Only after receiving our signal does it call sys51008 (initrecv2).
    *
-   * So we must: send GOO → BBS starts initrecv2 → BBS sends GOO → we send ACK
+   * For Multi Punter upload (bbs.bas lines 3600-3678):
+   * The BBS already received the filename announcement and goes straight
+   * to sys51008 (initrecv2). No pre-signal needed.
    */
 
-
-  /* Send GOO to signal the BBS we're ready to upload */
-  punter_send_string("GOO");
+  if (send_presignal) {
+    /* Send GOO to signal the BBS we're ready to upload */
+    punter_send_string("GOO");
+  }
 
   /* Now BBS enters initrecv2 → recvblk → sends GOO, waits ACK */
 
@@ -708,4 +709,12 @@ int punter_send(void) {
 
 
   return 1;
+}
+
+int punter_send(void) {
+  return punter_send_internal(1);
+}
+
+int punter_send_no_presignal(void) {
+  return punter_send_internal(0);
 }

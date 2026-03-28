@@ -849,8 +849,9 @@ void xfer_send_multipunter(FileSelector *fs) {
       fseek(xfer_sendfile, 0, SEEK_SET);
       xfer_saved_bytes = 0;
 
-      /* Do a standard Punter send for this file */
-      punter_send();
+      /* Punter send without the GOO pre-signal — the BBS already started
+       * initrecv2 after reading our filename announcement (bbs.bas line 3677) */
+      punter_send_no_presignal();
 
       fclose(xfer_sendfile);
       filecount++;
