@@ -426,30 +426,58 @@ int rainbow_send(const char *filename) {
 
   rainbow_sent_bytes = 0;
 
-  /* Wait for RB_GOO from the BBS receiver.
-   * The BBS (receiver) sends GOO when ready.
-   * We scan through any BBS status screen bytes to find it.
-   * Based on rainbow_protocol_cb.asm: receiver sends GOO, sender waits. */
+  /*
+   * Rainbow upload handshake (from rainbow_protocol_cb.asm):
+   * 1. BBS receiver waits for ANY byte from sender (_c49d loop)
+   * 2. BBS then sends GOO repeatedly, waiting for SOH
+   * 3. We receive GOO, respond with SOH + block#0
+   *
+   * So we must: send a wake-up byte, then wait for GOO (0x83).
+   * Problem: 0x83 is also PETSCII orange, so BBS status screen
+   * bytes might contain it. We drain status bytes first, then
+   * send wake-up, then look for the real GOO from the protocol.
+   */
   rainbow_send_status("Rainbow: waiting for receiver");
   {
     int found = 0;
-    int timeout_count = 60;  /* 60 seconds max */
+    unsigned int last_wake = 0;
+    unsigned int now;
+    int attempts = 30;
 
-    while (timeout_count > 0 && !xfer_cancel) {
+    /* Send initial wake-up byte to trigger BBS receiver */
+    xfer_send_byte(RB_GOO);
+    last_wake = timer_get_ticks();
+
+    while (attempts > 0 && !xfer_cancel) {
       c = xfer_recv_byte(1000);
-      if (c < 0) {
-        timeout_count--;
-        continue;
+
+      /* Resend wake-up every 2 seconds */
+      now = timer_get_ticks();
+      if (now > last_wake + 2000) {
+        xfer_send_byte(RB_GOO);
+        last_wake = now;
+        attempts--;
       }
+
+      if (c < 0) continue;
+
+      /* Look for GOO followed quickly by another GOO (confirms it's
+       * the protocol, not a stray PETSCII 0x83 from status screen).
+       * The BBS sends GOO repeatedly in a tight loop at _c4b1. */
       if ((unsigned char)c == RB_GOO) {
-        found = 1;
-        break;
+        /* Check if another GOO follows within 500ms */
+        int c2 = xfer_recv_byte(500);
+        if (c2 >= 0 && (unsigned char)c2 == RB_GOO) {
+          found = 1;
+          break;
+        }
+        /* Single GOO could be status screen — keep scanning */
+        /* But if c2 was something else, put logic continues */
       }
       if ((unsigned char)c == RB_CAN) {
         rainbow_fail("Rainbow: cancelled by remote");
         return 0;
       }
-      /* Skip any other bytes (BBS status screen) */
     }
     if (!found) {
       if (xfer_cancel) {
