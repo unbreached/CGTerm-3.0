@@ -33,6 +33,7 @@ COMMON_SRCS := \
 	crc.c \
 	sound.c \
 	macro.c \
+	clipboard.c \
 	ui.c
 
 TERM_SRCS := \

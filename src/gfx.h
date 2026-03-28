@@ -39,3 +39,4 @@ void gfx_set_offset(int offset);
 void gfx_copy_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned char *rect_0400, unsigned char *rect_d800);
 void gfx_clear_rect(int rect_x, int rect_y, int rect_w, int rect_h);
 void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned char *rect_0400, unsigned char *rect_d800);
+int gfx_save_screenshot(const char *filename);

@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "macro.h"
 #include "ui.h"
+#include "clipboard.h"
 
 
 int focus_count = 0;
@@ -353,6 +354,9 @@ int kbd_getkey() {
                 if (kbd_focus == FOCUS_TERM) {
                     if (event.key.keysym.mod & KMOD_META) {
                         ui_metakey(&event.key.keysym);
+                    } else if ((event.key.keysym.mod & KMOD_CTRL) && event.key.keysym.sym == SDLK_v) {
+                        clipboard_paste();
+                        return 0;
                     } else {
                         key = translatekey(&event.key.keysym, &shift, &ctrl, &cbm);
                         snprintf(_DebugMsg, sizeof(_DebugMsg), "Key: %d Mod: %d Shift: %d Ctrl: %d CBM: %d", event.key.keysym.sym,event.key.keysym.mod,shift,ctrl,cbm);

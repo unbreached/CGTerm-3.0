@@ -648,3 +648,11 @@ void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned cha
     }
   }
 }
+
+
+int gfx_save_screenshot(const char *filename) {
+  if (SDL_SaveBMP(gfx_screen, filename) == 0) {
+    return 0;
+  }
+  return -1;
+}

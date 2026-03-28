@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <SDL.h>
 #include "gfx.h"
 #include "menu.h"
@@ -32,15 +33,16 @@ struct menu termmenu[] = {
   {13, "",  "-- SCREEN & MACROS --"},
   {14, "L", "Load seq file"},
   {15, "S", "Save screen to seq file"},
-  {16, "C", "Start/stop recording macro"},
-  {17, "V", "Play macro"},
-  {18, "A", "Abort load or macro"},
-  {19, "",  ""},
-  {20, "",  "-- SETTINGS --"},
-  {21, "E", "Toggle local echo"},
-  {22, "F", "Toggle fullscreen mode"},
-  {23, "",  ""},
-  {24, "Q", "Quit CGTerm"},
+  {16, "P", "Screenshot (BMP)"},
+  {17, "C", "Start/stop recording macro"},
+  {18, "V", "Play macro"},
+  {19, "A", "Abort load or macro"},
+  {20, "",  ""},
+  {21, "",  "-- SETTINGS --"},
+  {22, "E", "Toggle local echo"},
+  {23, "F", "Toggle fullscreen mode"},
+  {24, "",  ""},
+  {25, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
 
@@ -411,6 +413,33 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_l:
     ui_inputcall(30, "Load SEQ file:", "screen.seq", &kbd_loadseq, FOCUS_TERM);
+    break;
+
+  case SDLK_p:
+    {
+      time_t now;
+      struct tm *tm_info;
+      char bmpname[64];
+      char bmppath[512];
+      char msg[256];
+
+      now = time(NULL);
+      tm_info = localtime(&now);
+      strftime(bmpname, sizeof(bmpname), "cgterm_%Y%m%d_%H%M%S.bmp", tm_info);
+#ifdef WINDOWS
+      snprintf(bmppath, sizeof(bmppath), "%s\\%s", cfg_dldir, bmpname);
+#else
+      snprintf(bmppath, sizeof(bmppath), "%s/%s", cfg_dldir, bmpname);
+#endif
+      if (gfx_save_screenshot(bmppath) == 0) {
+        snprintf(msg, sizeof(msg), "Screenshot saved: %s", bmpname);
+      } else {
+        snprintf(msg, sizeof(msg), "Screenshot failed!");
+      }
+      menu_draw_message(msg);
+      menu_show();
+      kbd_focus = FOCUS_REQUESTER;
+    }
     break;
 
   case SDLK_n:
