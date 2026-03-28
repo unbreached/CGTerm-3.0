@@ -82,6 +82,8 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
+  cfg_load_bookmarks();
+
   cfg_localecho = 1;
 
   while ((opt = getopt(argc, argv, "r:d:z:k:o:fs48")) != -1) {

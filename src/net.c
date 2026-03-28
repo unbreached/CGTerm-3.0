@@ -14,7 +14,9 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <errno.h>
+#include <time.h>
 #include "net.h"
+#include "config.h"
 
 #if defined(__WIN32__) || defined(WINDOWS)
 /* Windows */
@@ -92,6 +94,7 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
     fcntl(conn, F_SETFL, O_NONBLOCK);
 #endif
     if (net_status) net_status(1, "Connected");
+    cfg_log_connection(host, port);
     return(0);
   } else {
     if (net_status) net_status(2, strerror(errno));
@@ -100,12 +103,12 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
 }
 
 
-signed int net_receive(void) {
+static signed int net_raw_byte(void) {
   if (!ISCONNECTED()) {
     return(-2);
   }
   if (!buflen) {
-    buflen = recv(conn, buffer, BUFSIZE, 0);
+    buflen = recv(conn, (char *)buffer, BUFSIZE, 0);
     if (buflen == 0) {
       net_disconnect();
       return(-2);
@@ -123,6 +126,42 @@ signed int net_receive(void) {
   }
   --buflen;
   return(*bufptr++);
+}
+
+
+signed int net_receive(void) {
+  signed int c;
+
+  for (;;) {
+    c = net_raw_byte();
+    if (c < 0) return c;
+
+    if (c != 0xFF) return c;
+
+    /* IAC detected */
+    c = net_raw_byte();
+    if (c < 0) return c;
+
+    if (c == 0xFF) {
+      /* Escaped 0xFF literal */
+      return 0xFF;
+    } else if (c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) {
+      /* WILL / WONT / DO / DONT: consume the option byte */
+      c = net_raw_byte();
+      if (c < 0) return c;
+      /* Discard all three bytes and continue */
+    } else if (c == 0xFA) {
+      /* SB: consume until IAC SE (0xFF 0xF0) */
+      int prev = 0;
+      for (;;) {
+        c = net_raw_byte();
+        if (c < 0) return c;
+        if (prev == 0xFF && c == 0xF0) break;
+        prev = c;
+      }
+    }
+    /* Otherwise discard the two bytes (IAC + command) and loop */
+  }
 }
 
 

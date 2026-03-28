@@ -251,20 +251,7 @@ void bm_add_port(char *portstr) {
   if (cfg_numbookmarks < 40) {
     addhost(cfg_numbookmarks, bm_new_alias, bm_new_host, port);
     ++cfg_numbookmarks;
-    {
-      FILE *cfg;
-      char fname[256];
-#ifdef WINDOWS
-      snprintf(fname, sizeof(fname), "cgterm.cfg");
-#else
-      extern char *cfg_homedir;
-      snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
-#endif
-      if ((cfg = fopen(fname, "a")) != NULL) {
-        fprintf(cfg, "bookmark = %s, %s, %d\n", bm_new_alias, bm_new_host, port);
-        fclose(cfg);
-      }
-    }
+    cfg_save_bookmark(bm_new_alias, bm_new_host, port);
     menu_draw_message("Bookmark added!");
   } else {
     menu_draw_message("Bookmark list full!");
@@ -374,20 +361,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       if (cfg_numbookmarks < 40) {
         addhost(cfg_numbookmarks, cfg_host, cfg_host, cfg_port);
         ++cfg_numbookmarks;
-        {
-          FILE *cfg;
-          char fname[256];
-#ifdef WINDOWS
-          snprintf(fname, sizeof(fname), "cgterm.cfg");
-#else
-          extern char *cfg_homedir;
-          snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
-#endif
-          if ((cfg = fopen(fname, "a")) != NULL) {
-            fprintf(cfg, "bookmark = %s, %s, %d\n", cfg_host, cfg_host, cfg_port);
-            fclose(cfg);
-          }
-        }
+        cfg_save_bookmark(cfg_host, cfg_host, cfg_port);
         menu_draw_message("Current BBS added to bookmarks!");
       } else {
         menu_draw_message("Bookmark list full!");

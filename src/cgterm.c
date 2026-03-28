@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #ifdef WINDOWS
 #include "getopt_win.h"
 #else
@@ -24,6 +25,26 @@ unsigned int lastsend = 0;
 unsigned int lastrecv = 0;
 unsigned int lastvbl = 0;
 FILE *logh;
+static int log_newline = 1;
+
+
+static void log_write_byte(int byte, FILE *f) {
+  if (f == NULL) return;
+  if (log_newline) {
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    fprintf(f, "[%02d:%02d:%02d] ",
+            tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    log_newline = 0;
+  }
+  if (fputc(byte, f) == EOF) {
+    return;
+  }
+  if (byte == 0x0d) {
+    fputc('\n', f);
+    log_newline = 1;
+  }
+}
 
 
 char *default_cgterm_cfg[] = {
@@ -116,6 +137,8 @@ int main(int argc, char *argv[]) {
     cfg_readconfig(fname);
   }
 #endif
+
+  cfg_load_bookmarks();
 
   while ((opt = getopt(argc, argv, "r:d:z:k:o:fs48lb")) != -1) {
       
@@ -385,11 +408,7 @@ int main(int argc, char *argv[]) {
 	if (cfg_localecho) {
 	  ffd2(k);
 	  if (logh) {
-	    if (fputc(k, logh) == EOF) {
-	      printf("Error writing to %s\n", cfg_logfile);
-	      fclose(logh);
-	      logh = NULL;
-	    }
+	    log_write_byte(k, logh);
 	  }
 	}
       }
@@ -397,11 +416,7 @@ int main(int argc, char *argv[]) {
       if (c >= 0) {
 	ffd2(c);
 	if (logh) {
-	  if (fputc(c, logh) == EOF) {
-	    printf("Error writing to %s\n", cfg_logfile);
-	    fclose(logh);
-	    logh = NULL;
-	  }
+	  log_write_byte(c, logh);
 	}
       }
 

@@ -27,6 +27,7 @@ extern char cfg_dldir[];
 extern int cfg_editmode;
 extern int cfg_debugmode;
 extern int cfg_splash;
+extern char cfg_bookmarkfile[];
 
 
 int cfg_init(char *argv0);
@@ -38,3 +39,6 @@ void cfg_writeconfig(char **data, char *configfile);
 void cfg_disable_splash(void);
 void cfg_debug(const char *s);
 void addhost(int num, char *alias, char *hostname, int port);
+void cfg_load_bookmarks(void);
+void cfg_save_bookmark(char *alias, char *host, int port);
+void cfg_log_connection(const char *host, int port);

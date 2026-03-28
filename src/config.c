@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
 #ifdef WINDOWS
 #include <direct.h>
 #else
@@ -46,6 +47,11 @@ char cfg_dldir[256];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
 int cfg_splash = 1;
+#ifdef WINDOWS
+char cfg_bookmarkfile[256] = "cgterm-bookmarks.cfg";
+#else
+char cfg_bookmarkfile[256] = "~/.cgterm-bookmarks";
+#endif
 
 char host[256];
 char keyboard[256];
@@ -421,6 +427,8 @@ signed int cfg_readconfig(char *configfile) {
 	    fclose(cfg);
 	    return(-1);
 	  }
+	} else if (strcmp(key, "bookmarkfile") == 0) {
+	  snprintf(cfg_bookmarkfile, sizeof(cfg_bookmarkfile), "%s", value);
 	} else if (strcmp(key, "bookmark") == 0) {
 	  if (addbookmark(linebuf) == 0) {
 	    printf("Syntax error in %s line %d\n", configfile, line + 1);
@@ -487,4 +495,73 @@ void cfg_debug(const char *s){
     if(cfg_debugmode == 1){
         puts(s);
     }
+}
+
+
+static void cfg_resolve_bookmarkfile(char *resolved, size_t size) {
+  if (cfg_bookmarkfile[0] == '~' && cfg_bookmarkfile[1] == '/') {
+    snprintf(resolved, size, "%s%s", cfg_homedir, cfg_bookmarkfile + 1);
+  } else {
+    snprintf(resolved, size, "%s", cfg_bookmarkfile);
+  }
+}
+
+
+void cfg_load_bookmarks(void) {
+  FILE *bf;
+  char linebuf[256];
+  char resolved[512];
+
+  cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
+
+  if ((bf = fopen(resolved, "r")) == NULL) {
+    return;
+  }
+
+  while (fgets(linebuf, sizeof(linebuf), bf) != NULL) {
+    if (linebuf[0] == '#' || strlen(linebuf) < 3) {
+      continue;
+    }
+    addbookmark(linebuf);
+  }
+
+  fclose(bf);
+}
+
+
+void cfg_save_bookmark(char *alias, char *host, int port) {
+  FILE *bf;
+  char resolved[512];
+
+  cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
+
+  if ((bf = fopen(resolved, "a")) != NULL) {
+    fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
+    fclose(bf);
+  }
+}
+
+
+void cfg_log_connection(const char *host, int port) {
+  FILE *hf;
+  char fname[512];
+  time_t now;
+  struct tm *tm_info;
+
+#ifdef WINDOWS
+  snprintf(fname, sizeof(fname), "cgterm-history.log");
+#else
+  snprintf(fname, sizeof(fname), "%s/.cgterm-history", cfg_homedir);
+#endif
+
+  now = time(NULL);
+  tm_info = localtime(&now);
+
+  if ((hf = fopen(fname, "a")) != NULL) {
+    fprintf(hf, "%04d-%02d-%02d %02d:%02d:%02d  %s:%d\n",
+            tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+            tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec,
+            host, port);
+    fclose(hf);
+  }
 }

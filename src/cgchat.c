@@ -104,6 +104,8 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
+  cfg_load_bookmarks();
+
   while ((opt = getopt(argc, argv, "z:k:fs48")) != -1) {
     switch (opt) {
 
