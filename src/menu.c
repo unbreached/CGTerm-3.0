@@ -557,35 +557,104 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
   }
   SDL_UnlockSurface(menu_surface);
 
-  /* Rotating 3D wireframe cube */
+  /* Morphing 3D wireframe shape — cube morphs to diamond and back */
   {
-    static const float verts[8][3] = {
+    static const float cube[8][3] = {
       {-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},
       {-1,-1, 1},{1,-1, 1},{1,1, 1},{-1,1, 1}
+    };
+    static const float diamond[8][3] = {
+      {0,-1.5f,0},{1,0,-1},{0,0,-1.5f},{-1,0,-1},
+      {0,-1.5f,0},{1,0, 1},{0,0, 1.5f},{-1,0, 1}
+    };
+    static const float star[8][3] = {
+      {0,-1.8f,0},{1.8f,0,0},{0,1.8f,0},{-1.8f,0,0},
+      {0,0,-1.8f},{1,1,1},{0,0,1.8f},{-1,-1,-1}
     };
     static const int edges[12][2] = {
       {0,1},{1,2},{2,3},{3,0},
       {4,5},{5,6},{6,7},{7,4},
       {0,4},{1,5},{2,6},{3,7}
     };
+    /* Extra cross-edges for more complex wireframe */
+    static const int xedges[4][2] = {
+      {0,6},{1,7},{2,4},{3,5}
+    };
+
     float ca = cosf(t), sa = sinf(t);
-    float cb = cosf(t*0.7f), sb = sinf(t*0.7f);
+    float cb = cosf(t * 0.7f), sb = sinf(t * 0.7f);
+    float cc = cosf(t * 0.4f), sc = sinf(t * 0.4f);
     int px[8], py[8];
-    Uint32 cube_col = SDL_MapRGBA(menu_surface->format, 0x00, 0xff, 0x80, SDL_ALPHA_OPAQUE);
+
+    /* Morph between shapes */
+    float morph_cycle = fmodf(t * 0.15f, 3.0f);
+    float morph_t, verts[8][3];
+    const float (*shape_a)[3], (*shape_b)[3];
+
+    if (morph_cycle < 1.0f) {
+      shape_a = cube; shape_b = diamond; morph_t = morph_cycle;
+    } else if (morph_cycle < 2.0f) {
+      shape_a = diamond; shape_b = star; morph_t = morph_cycle - 1.0f;
+    } else {
+      shape_a = star; shape_b = cube; morph_t = morph_cycle - 2.0f;
+    }
+    /* Smooth easing */
+    morph_t = morph_t * morph_t * (3.0f - 2.0f * morph_t);
+
+    for (i = 0; i < 8; i++) {
+      verts[i][0] = shape_a[i][0] + (shape_b[i][0] - shape_a[i][0]) * morph_t;
+      verts[i][1] = shape_a[i][1] + (shape_b[i][1] - shape_a[i][1]) * morph_t;
+      verts[i][2] = shape_a[i][2] + (shape_b[i][2] - shape_a[i][2]) * morph_t;
+    }
 
     for (i = 0; i < 8; i++) {
       float x = verts[i][0], y = verts[i][1], z = verts[i][2];
-      float x2 = x * ca - z * sa;
-      float z2 = x * sa + z * ca;
-      float y2 = y * cb - z2 * sb;
-      float z3 = y * sb + z2 * cb;
-      float scale = 40.0f / (z3 + 4.0f);
-      px[i] = (int)(x2 * scale) + w / 2;
-      py[i] = (int)(y2 * scale) + h / 2 - 10;
+      float x2, z2, y2, z3, x3, y3;
+      float scale;
+      /* Rotate X */
+      x2 = x * ca - z * sa; z2 = x * sa + z * ca;
+      /* Rotate Y */
+      y2 = y * cb - z2 * sb; z3 = y * sb + z2 * cb;
+      /* Rotate Z */
+      x3 = x2 * cc - y2 * sc; y3 = x2 * sc + y2 * cc;
+
+      scale = 160.0f / (z3 + 5.0f);
+      px[i] = (int)(x3 * scale) + w / 2;
+      py[i] = (int)(y3 * scale) + h / 2 - 20;
     }
+
+    /* Draw edges with color cycling */
     for (i = 0; i < 12; i++) {
+      float hue = fmodf(t * 0.5f + i * 0.08f, 1.0f);
+      int rr, gg, bb;
+      float h6 = hue * 6.0f;
+      float ff = h6 - (int)h6;
+      int qv = (int)(255 * (1.0f - ff));
+      int tv = (int)(255 * ff);
+      Uint32 ecol;
+      switch ((int)h6 % 6) {
+        case 0: rr=255; gg=tv;  bb=0;   break;
+        case 1: rr=qv;  gg=255; bb=0;   break;
+        case 2: rr=0;   gg=255; bb=tv;  break;
+        case 3: rr=0;   gg=qv;  bb=255; break;
+        case 4: rr=tv;  gg=0;   bb=255; break;
+        default:rr=255; gg=0;   bb=qv;  break;
+      }
+      ecol = SDL_MapRGBA(menu_surface->format, rr, gg, bb, SDL_ALPHA_OPAQUE);
       menu_draw_line(px[edges[i][0]], py[edges[i][0]],
-                     px[edges[i][1]], py[edges[i][1]], cube_col);
+                     px[edges[i][1]], py[edges[i][1]], ecol);
+    }
+    /* Extra cross-edges with dimmer color */
+    for (i = 0; i < 4; i++) {
+      float hue = fmodf(t * 0.3f + i * 0.2f + 0.5f, 1.0f);
+      int rr = (int)(sinf(hue * 6.28f) * 80 + 100);
+      int gg = (int)(sinf(hue * 6.28f + 2.0f) * 80 + 100);
+      int bb = (int)(sinf(hue * 6.28f + 4.0f) * 80 + 100);
+      Uint32 xcol;
+      if (rr < 0) rr = 0; if (gg < 0) gg = 0; if (bb < 0) bb = 0;
+      xcol = SDL_MapRGBA(menu_surface->format, rr, gg, bb, SDL_ALPHA_OPAQUE);
+      menu_draw_line(px[xedges[i][0]], py[xedges[i][0]],
+                     px[xedges[i][1]], py[xedges[i][1]], xcol);
     }
   }
 
@@ -710,25 +779,27 @@ int menu_select_disk_format(void) {
 
   for (;;) {
     int i;
+    int cx = menu_width / 2;
+    int cy = menu_height / 2;
     menu_cls();
-    menu_draw_borderbox(7, 57, menu_width - 8, menu_height - 58);
+    menu_draw_borderbox(cx - 160, cy - 50, cx + 160, cy + 50);
 
     font_set_font(menu_font[1]);
-    font_draw_string(30, 62, "Select disk format:");
+    font_draw_string(cx - 100, cy - 44, "Select disk format:");
 
     for (i = 0; i < 3; i++) {
       if (i == selection) {
         SDL_Rect r;
         Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x80, 0x80, 0x00, 0xc0);
-        r.x = 20; r.y = 82 + i * 16; r.w = menu_width - 40; r.h = 14;
+        r.x = cx - 150; r.y = cy - 22 + i * 18; r.w = 300; r.h = 16;
         SDL_FillRect(menu_surface, &r, sel);
       }
       font_set_font(i == selection ? menu_font[1] : menu_font[0]);
-      font_draw_string(24, 84 + i * 16, formats[i]);
+      font_draw_string(cx - 145, cy - 20 + i * 18, formats[i]);
     }
 
     font_set_font(menu_font[0]);
-    font_draw_string(24, 140, "Up/Down  Enter=OK  Esc=cancel");
+    font_draw_string(cx - 145, cy + 38, "Up/Down  Enter=OK  Esc=cancel");
 
     menu_dirty = SDL_TRUE;
     menu_show();

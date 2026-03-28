@@ -193,13 +193,13 @@ int gfx_init(int fullscreen, char *appname) {
   font = 1;
   memset(dirty, SDL_FALSE, sizeof(dirty));
 
-  menu_init(320, 200);
-  gfx_menu_width = 320;
-  gfx_menu_height = 200;
-  gfx_menu_xpos = (gfx_width - gfx_menu_width) / 2;
-  gfx_menu_ypos = (gfx_height - gfx_menu_height) / 2;
-  gfx_menu_firstline = gfx_menu_ypos / charheight;
-  gfx_menu_lastline = (gfx_menu_ypos + gfx_menu_height - 1) / charheight;
+  menu_init(gfx_width, gfx_height);
+  gfx_menu_width = gfx_width;
+  gfx_menu_height = gfx_height;
+  gfx_menu_xpos = 0;
+  gfx_menu_ypos = 0;
+  gfx_menu_firstline = 0;
+  gfx_menu_lastline = (gfx_height - 1) / charheight;
 
   cursorctr = 0;
   cursorvis = SDL_FALSE;

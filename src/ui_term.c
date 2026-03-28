@@ -17,21 +17,29 @@
 
 
 struct menu termmenu[] = {
-  {1, "A", "Abort load or macro"},
-  {2, "B", "Open bookmarks"},
-  {3, "C", "Start/stop recording macro"},
-  {4, "D", "Connect/disconnect"},
-  {5, "E", "Toggle local echo"},
-  {6, "F", "Toggle fullscreen mode"},
-  {7, "I", "Set upload path / image"},
-  {8, "J", "Set download path / image"},
-  {9, "L", "Load seq file"},
-  {10, "N", "New .d64 disk image"},
-  {11, "Q", "Quit CGTerm"},
-  {12, "R", "Reconnect"},
-  {13, "S", "Save screen to seq file"},
-  {14, "T", "Transfer file"},
-  {15, "V", "Play macro"},
+  {1,  "",  "-- CONNECTION --"},
+  {2,  "B", "Open bookmarks"},
+  {3,  "D", "Connect/disconnect"},
+  {4,  "R", "Reconnect"},
+  {5,  "",  ""},
+  {6,  "",  "-- TRANSFERS --"},
+  {7,  "T", "Transfer file"},
+  {8,  "I", "Set upload path / image"},
+  {9,  "J", "Set download path / image"},
+  {10, "N", "New disk image (D64/D71/D81)"},
+  {11, "",  ""},
+  {12, "",  "-- SCREEN & MACROS --"},
+  {13, "L", "Load seq file"},
+  {14, "S", "Save screen to seq file"},
+  {15, "C", "Start/stop recording macro"},
+  {16, "V", "Play macro"},
+  {17, "A", "Abort load or macro"},
+  {18, "",  ""},
+  {19, "",  "-- SETTINGS --"},
+  {20, "E", "Toggle local echo"},
+  {21, "F", "Toggle fullscreen mode"},
+  {22, "",  ""},
+  {23, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
 
@@ -266,38 +274,42 @@ void ui_create_d64_label(char *label) {
 
 static char new_d64_dir[256];
 
-void ui_create_d64_name(char *filename) {
-  /* Build full path using the selected directory and format extension */
-  if (strchr(filename, '.') == NULL) {
-    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s%s", new_d64_dir,
-#ifdef WINDOWS
-      '\\',
-#else
-      '/',
-#endif
-      filename, new_d64_ext);
-  } else {
-    snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s", new_d64_dir,
-#ifdef WINDOWS
-      '\\',
-#else
-      '/',
-#endif
-      filename);
-  }
+static char new_d64_filename[64];
 
+void select_d64_dir_done(FileSelector *fs) {
+  /* Final step: got the directory, now create the image */
+  snprintf(new_d64_dir, sizeof(new_d64_dir), "%s", fs->path);
+  /* Build full path */
+  snprintf(new_d64_path, sizeof(new_d64_path), "%s%c%s",
+    new_d64_dir,
+#ifdef WINDOWS
+    '\\',
+#else
+    '/',
+#endif
+    new_d64_filename);
   ui_inputcall(16, "Disk label:", "c64warez", &ui_create_d64_label, FOCUS_REQUESTER);
 }
 
+void ui_create_d64_name_done(char *filename) {
+  /* Step 2 done: got filename, now pick directory */
+  snprintf(new_d64_filename, sizeof(new_d64_filename), "%s", filename);
+  /* Add extension if missing */
+  if (strchr(new_d64_filename, '.') == NULL) {
+    size_t len = strlen(new_d64_filename);
+    snprintf(new_d64_filename + len, sizeof(new_d64_filename) - len, "%s", new_d64_ext);
+  }
+  kbd_select_dir_from(&select_d64_dir_done, FOCUS_TERM, "Save where?", cfg_dldir);
+}
+
 void ui_select_disk_format(void) {
-  /* Blocking format selector using menu system */
+  /* Step 1: pick format, then filename, then directory */
   int selection = menu_select_disk_format();
   const int sizes[] = {174848, 349696, 819200};
   const char *exts[] = {".d64", ".d71", ".d81"};
   char defname[32];
 
   if (selection < 0) {
-    /* Cancelled */
     menu_hide();
     kbd_focus = FOCUS_TERM;
     return;
@@ -307,12 +319,7 @@ void ui_select_disk_format(void) {
   new_d64_ext = exts[selection];
 
   snprintf(defname, sizeof(defname), "c64warez%s", new_d64_ext);
-  ui_inputcall(20, "Image filename:", defname, &ui_create_d64_name, FOCUS_REQUESTER);
-}
-
-void select_d64_dir_done(FileSelector *fs) {
-  snprintf(new_d64_dir, sizeof(new_d64_dir), "%s", fs->path);
-  ui_select_disk_format();
+  ui_inputcall(20, "Image filename:", defname, &ui_create_d64_name_done, FOCUS_REQUESTER);
 }
 
 
@@ -391,8 +398,8 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_n:
-    /* Pick directory first, then filename, then label */
-    kbd_select_dir_from(&select_d64_dir_done, FOCUS_TERM, "Save D64 where?", cfg_dldir);
+    /* Format → filename → directory → label → create */
+    ui_select_disk_format();
     break;
 
   case SDLK_q:
