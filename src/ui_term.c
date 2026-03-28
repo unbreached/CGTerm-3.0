@@ -22,24 +22,25 @@ struct menu termmenu[] = {
   {3,  "D", "Connect/disconnect"},
   {4,  "R", "Reconnect"},
   {5,  "",  ""},
-  {6,  "",  "-- TRANSFERS --"},
+  {6,  "",  "-- TRANSFERS & FiLES --"},
   {7,  "T", "Transfer file"},
   {8,  "I", "Set upload path / image"},
   {9,  "J", "Set download path / image"},
-  {10, "N", "New disk image (D64/D71/D81)"},
-  {11, "",  ""},
-  {12, "",  "-- SCREEN & MACROS --"},
-  {13, "L", "Load seq file"},
-  {14, "S", "Save screen to seq file"},
-  {15, "C", "Start/stop recording macro"},
-  {16, "V", "Play macro"},
-  {17, "A", "Abort load or macro"},
-  {18, "",  ""},
-  {19, "",  "-- SETTINGS --"},
-  {20, "E", "Toggle local echo"},
-  {21, "F", "Toggle fullscreen mode"},
-  {22, "",  ""},
-  {23, "Q", "Quit CGTerm"},
+  {10, "U", "Unjoin disk image"},
+  {11, "N", "New disk image (D64/D71/D81)"},
+  {12, "",  ""},
+  {13, "",  "-- SCREEN & MACROS --"},
+  {14, "L", "Load seq file"},
+  {15, "S", "Save screen to seq file"},
+  {16, "C", "Start/stop recording macro"},
+  {17, "V", "Play macro"},
+  {18, "A", "Abort load or macro"},
+  {19, "",  ""},
+  {20, "",  "-- SETTINGS --"},
+  {21, "E", "Toggle local echo"},
+  {22, "F", "Toggle fullscreen mode"},
+  {23, "",  ""},
+  {24, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
 
@@ -130,8 +131,12 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
     if (select_mode == SEL_MULTIFILE) {
       if (fsel->selectedfile->type == T_DIR) {
-	/* Enter directory */
-	cfg_change_dir(fsel->path, fsel->selectedfile->name);
+	/* Enter directory. "." means go up */
+	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+	  cfg_change_dir(fsel->path, "..");
+	} else {
+	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
+	}
 	fs_read_dir(fsel, fsel->path);
 	fs_draw(fsel);
       } else {
@@ -142,7 +147,11 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     } else {
       /* SEL_DIR and SEL_FILE: space enters directories */
       if (fsel->selectedfile->type == T_DIR) {
-	cfg_change_dir(fsel->path, fsel->selectedfile->name);
+	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+	  cfg_change_dir(fsel->path, "..");
+	} else {
+	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
+	}
 	fs_read_dir(fsel, fsel->path);
 	fs_draw(fsel);
       }
@@ -177,8 +186,12 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       select_done_call(fsel);
       fs_free(fsel);
     } else if (fsel->selectedfile->type == T_DIR) {
-      /* Enter directory (including ".." to go up) */
-      cfg_change_dir(fsel->path, fsel->selectedfile->name);
+      /* Enter directory. "." means go up one level */
+      if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+        cfg_change_dir(fsel->path, "..");
+      } else {
+        cfg_change_dir(fsel->path, fsel->selectedfile->name);
+      }
       fs_read_dir(fsel, fsel->path);
       fs_draw(fsel);
     } else if (select_mode == SEL_DIR) {
@@ -407,6 +420,23 @@ void ui_metakey(SDL_keysym *keysym) {
   case SDLK_n:
     /* Format → filename → directory → label → create */
     ui_select_disk_format();
+    break;
+
+  case SDLK_u:
+    /* Unjoin disk image — reset download path to ~/Downloads */
+    {
+      char *home = cfg_homedir;
+      if (home && home[0] != '.') {
+#ifdef WINDOWS
+        snprintf(cfg_dldir, 256, "%s\\Downloads", home);
+#else
+        snprintf(cfg_dldir, 256, "%s/Downloads", home);
+#endif
+      }
+      menu_draw_message("Disk image unjoined");
+      menu_show();
+      kbd_focus = FOCUS_REQUESTER;
+    }
     break;
 
   case SDLK_q:

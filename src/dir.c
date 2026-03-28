@@ -174,7 +174,7 @@ Dir *dir_read_opendir(DIR *dirhandle, char *path) {
     }
   }
 
-  /* Add ".." entry for going back */
+  /* Add "." entry for going back */
   if (dir->firstentry) {
     DirEntry *dotdot;
     if ((dotdot = malloc(sizeof(*dotdot))) != NULL) {
@@ -183,7 +183,7 @@ Dir *dir_read_opendir(DIR *dirhandle, char *path) {
       entry->next = dotdot;
       entry = dotdot;
       if ((dotdot->name = malloc(3))) {
-        strcpy(dotdot->name, "..");
+        strcpy(dotdot->name, ".");
       }
       memset(dotdot->rawname, 0xa0, 16);
       dotdot->rawname[0] = '.';
