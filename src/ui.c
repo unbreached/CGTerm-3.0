@@ -232,7 +232,7 @@ void ui_requestkey(SDL_keysym *keysym) {
 
 void ui_bookmarkkey(SDL_keysym *keysym) {
   int b;
-  char *_DebugMsg;
+  char _DebugMsg[256];
 
   switch (keysym->sym) {
 
@@ -244,7 +244,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     break;
 
   default:
-    asprintf(&_DebugMsg,"Bookmark Key: %d Mod: %d Unicode: %d\n", keysym->sym,keysym->mod,keysym->unicode);
+    snprintf(_DebugMsg, sizeof(_DebugMsg), "Bookmark Key: %d Mod: %d Unicode: %d\n", keysym->sym,keysym->mod,keysym->unicode);
     cfg_debug(_DebugMsg);
     // Makes sure key is between 0-9 on either keypad or number keys
     if (keysym->unicode >= 48 && keysym->unicode <= 57) {
@@ -254,7 +254,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
 	kbd_focus = FOCUS_TERM;
 	cfg_sethost(cfg_bookmark_host[b]);
 	cfg_port = cfg_bookmark_port[b];
-    asprintf(&_DebugMsg,"Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b],cfg_bookmark_port[b]);
+    snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b],cfg_bookmark_port[b]);
     cfg_debug(_DebugMsg);
 	net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
       }

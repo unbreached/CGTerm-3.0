@@ -335,7 +335,7 @@ unsigned char translatekey(SDL_keysym *keysym, unsigned char *shift, unsigned ch
 int kbd_getkey() {
     SDL_Event event;
     int c, f;
-    char *_DebugMsg;
+    char _DebugMsg[256];
     unsigned char key = 0;
     
     unsigned char shift, ctrl, cbm;
@@ -355,7 +355,7 @@ int kbd_getkey() {
                         ui_metakey(&event.key.keysym);
                     } else {
                         key = translatekey(&event.key.keysym, &shift, &ctrl, &cbm);
-                        asprintf(&_DebugMsg,"Key: %d Mod: %d Shift: %d Ctrl: %d CBM: %d", event.key.keysym.sym,event.key.keysym.mod,shift,ctrl,cbm);
+                        snprintf(_DebugMsg, sizeof(_DebugMsg), "Key: %d Mod: %d Shift: %d Ctrl: %d CBM: %d", event.key.keysym.sym,event.key.keysym.mod,shift,ctrl,cbm);
                         cfg_debug(_DebugMsg);
                         if (macro_rec && key != 0) {
                             macrobuf_key[macro_len] = key;

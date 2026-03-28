@@ -221,9 +221,9 @@ void cfg_sethost(char *h) {
 void addhost(int num, char *alias, char *hostname, int port) {
     char *ptr;
     char *chr;
-    char *_debugMsg;
-    
-  asprintf(&_debugMsg,"adding %s (%s:%d)", alias, hostname, port);
+    char _debugMsg[256];
+
+  snprintf(_debugMsg, sizeof(_debugMsg), "adding %s (%s:%d)", alias, hostname, port);
     cfg_debug(_debugMsg);
   if ((ptr = malloc(strlen(hostname) + 1)) == NULL) {
     printf("Malloc failed, prepare to crash\n"); // :P

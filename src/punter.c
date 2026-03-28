@@ -522,7 +522,6 @@ static int punter_send_block(int len) {
  */
 int punter_send(void) {
   int blocknum;
-  int datalen;
   int sent_bytes = 0;
   int remaining;
   char status_msg[64];
