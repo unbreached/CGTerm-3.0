@@ -404,23 +404,20 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     break;
 
   default:
-    /* Buffer digit keys */
-    if (keysym->unicode >= '0' && keysym->unicode <= '9' && bm_input_len < 2) {
-      bm_input[bm_input_len++] = (char)keysym->unicode;
-      bm_input[bm_input_len] = 0;
-
-      /* Two digits entered — connect immediately */
-      if (bm_input_len == 2) {
-        b = atoi(bm_input);
-        bm_input_len = 0;
-        bm_input[0] = 0;
-        if (b >= 0 && b < cfg_numbookmarks) {
-          menu_hide();
-          kbd_focus = FOCUS_TERM;
-          cfg_sethost(cfg_bookmark_host[b]);
-          cfg_port = cfg_bookmark_port[b];
-          net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
-        }
+    /* 0-9: instant connect to bookmark 0-9 */
+    if (keysym->unicode >= '0' && keysym->unicode <= '9') {
+      b = keysym->unicode - '0';
+      bm_cursor = b;
+      if (b < cfg_numbookmarks) {
+        menu_hide();
+        kbd_focus = FOCUS_TERM;
+        cfg_sethost(cfg_bookmark_host[b]);
+        cfg_port = cfg_bookmark_port[b];
+        net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
+      } else {
+        /* No bookmark at this slot — just move cursor */
+        menu_draw_bookmarks_sel(bm_cursor);
+        menu_show();
       }
     }
     break;
