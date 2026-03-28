@@ -334,7 +334,7 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   font_set_font(menu_font[0]);
 
   /* [FiLENAME]: */
-  snprintf(line, sizeof(line), "[fIlename]: %.20s", xfer_disp_filename);
+  snprintf(line, sizeof(line), "[filename]: %.20s", xfer_disp_filename);
   font_draw_string(10, 74, line);
 
   /* [block number]: */
@@ -403,7 +403,7 @@ void menu_update_xfer_block_progress(const char *status, const char *protocol, i
   font_set_font(menu_font[0]);
 
   /* [FiLENAME]: */
-  snprintf(line, sizeof(line), "[fIlename]: %.20s", xfer_disp_filename);
+  snprintf(line, sizeof(line), "[filename]: %.20s", xfer_disp_filename);
   font_draw_string(10, 74, line);
 
   /* [block number]: */
@@ -452,9 +452,9 @@ void menu_draw_xfer_progress(const char *filename, int direction, int protocol) 
   menu_cls();
   menu_draw_borderbox(7, 47, menu_width - 8, menu_height - 38);
 
-  /* [protocol]: uploadIng/downloadIng */
+  /* [protocol]: uploading/downloading */
   font_set_font(menu_font[1]);
-  snprintf(s, sizeof(s), "[%s]: %sIng", proto[protocol],
+  snprintf(s, sizeof(s), "[%s]: %sing", proto[protocol],
     direction == 1 ? "upload" : "download");
   font_draw_string(10, 52, s);
   font_set_font(menu_font[0]);
