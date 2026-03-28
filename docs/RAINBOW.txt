@@ -1,0 +1,102 @@
+--------------------------------------------------
+[ RAINBOW PROTOCOL SUPPORT ]
+--------------------------------------------------
+
+This edition adds experimental support for the
+Rainbow file transfer protocol.
+
+Rainbow is a block based protocol.
+It allows reliable file transfer with
+acknowledgement, retransmission and
+checksum validation.
+
+Rainbow has been integrated into CGTerm as a
+selectable transfer protocol alongside the
+existing XMODEM and Punter implementations.
+
+Current support focuses on single-file transfers
+and basic compatibility with Commodore-side
+Rainbow implementations.
+
+
+Rainbow Features
+----------------
+- New Rainbow transfer protocol implementation
+- Integrated with CGTerm transfer system
+- Single-file send support
+- Single-file receive support
+- Block-based transfer with checksum validation
+- ACK / NAK retry handling
+- Basic error detection and cancel support
+
+
+Selecting Rainbow
+-----------------
+Rainbow can be selected from the transfer menu.
+
+Transfer Menu Key:
+- W  = Rainbow protocol
+
+
+Source Files Added
+------------------
+The Rainbow implementation is contained in:
+
+- src/rainbow.c
+- src/rainbow.h
+
+
+Files Updated
+-------------
+Several existing modules were updated to integrate
+Rainbow into the transfer system.
+
+- src/xfer.c
+- src/xfer.h
+- src/menu.c
+- src/ui_term.c
+- Makefile
+
+
+Implementation Notes
+--------------------
+The Rainbow implementation follows the documented
+control byte structure used by Commodore Rainbow
+transfers.
+
+Control bytes include:
+
+GOO   : transfer start
+SOH   : block header
+ACK   : block accepted
+NAK   : block retry
+EOT   : end of transfer
+CAN   : cancel transfer
+
+Transfers use a block structure containing block
+numbers, size information, payload data and a
+checksum for verification.
+
+
+Current Limitations
+-------------------
+Rainbow support should currently be considered
+experimental.
+
+The following features are not fully implemented:
+
+- multi-file Rainbow transfer
+- full Commodore REL file handling
+- advanced metadata compatibility
+- extensive interoperability testing
+
+
+Future Improvements
+-------------------
+Possible improvements for future versions:
+
+- multi-file Rainbow transfers
+- improved Commodore filetype handling
+- configurable block sizes
+- better compatibility tuning
+- additional transfer diagnostics
