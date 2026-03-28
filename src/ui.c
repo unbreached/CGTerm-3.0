@@ -241,6 +241,33 @@ void ui_requestkey(SDL_keysym *keysym) {
 
 static char bm_input[4] = "";
 static int bm_input_len = 0;
+static char bm_new_alias[64];
+static char bm_new_host[256];
+
+void bm_add_port(char *portstr) {
+  int port = atoi(portstr);
+  if (port <= 0 || port > 65535) port = 6400;
+  if (cfg_numbookmarks < 40) {
+    addhost(cfg_numbookmarks, bm_new_alias, bm_new_host, port);
+    ++cfg_numbookmarks;
+    menu_draw_message("Bookmark added!");
+  } else {
+    menu_draw_message("Bookmark list full!");
+  }
+  menu_show();
+  gfx_vbl();
+  kbd_focus = FOCUS_REQUESTER;
+}
+
+void bm_add_host(char *host) {
+  snprintf(bm_new_host, sizeof(bm_new_host), "%s", host);
+  ui_inputcall(6, "Port:", "6400", &bm_add_port, FOCUS_REQUESTER);
+}
+
+void bm_add_alias(char *alias) {
+  snprintf(bm_new_alias, sizeof(bm_new_alias), "%s", alias);
+  ui_inputcall(30, "Hostname:", "", &bm_add_host, FOCUS_REQUESTER);
+}
 
 void ui_bookmarkkey(SDL_keysym *keysym) {
   int b;
@@ -281,6 +308,34 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     } else {
       menu_hide();
       kbd_focus = FOCUS_TERM;
+    }
+    break;
+
+  case SDLK_a:
+    /* Add new bookmark */
+    menu_hide();
+    ui_inputcall(20, "BBS Name:", "", &bm_add_alias, FOCUS_REQUESTER);
+    break;
+
+  case SDLK_PLUS:
+  case SDLK_EQUALS:  /* + is shift+= on many keyboards */
+    /* Add current connection as bookmark */
+    if (cfg_host && net_connected()) {
+      if (cfg_numbookmarks < 40) {
+        addhost(cfg_numbookmarks, cfg_host, cfg_host, cfg_port);
+        ++cfg_numbookmarks;
+        menu_draw_message("Current BBS added to bookmarks!");
+      } else {
+        menu_draw_message("Bookmark list full!");
+      }
+      menu_show();
+      gfx_vbl();
+      kbd_focus = FOCUS_REQUESTER;
+    } else {
+      menu_draw_message("Not connected to any BBS");
+      menu_show();
+      gfx_vbl();
+      kbd_focus = FOCUS_REQUESTER;
     }
     break;
 

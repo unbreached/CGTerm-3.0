@@ -57,19 +57,18 @@ Dir *dir_read_image(DiskImage *di) {
 
   dir->title = make_name(di_title(di));
 
-  // add ..
+  // add . (go back)
   if ((dir->firstentry = malloc(sizeof(*(dir->firstentry)))) == NULL) {
     goto ReadDirDone;
   }
   entry = dir->firstentry;
   entry->prev = NULL;
   entry->next = NULL;
-  if ((entry->name = malloc(3))) {
-    strcpy(entry->name, "..");
+  if ((entry->name = malloc(2))) {
+    strcpy(entry->name, ".");
   }
   memset(entry->rawname, 0xa0, 16);
   entry->rawname[0] = '.';
-  entry->rawname[1] = '.';
   entry->type = T_DIR;
   entry->closed = 1;
   entry->locked = 0;

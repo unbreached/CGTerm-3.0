@@ -37,3 +37,4 @@ int cfg_change_dir(char *dirbuffer, const char *newdir);
 void cfg_writeconfig(char **data, char *configfile);
 void cfg_disable_splash(void);
 void cfg_debug(const char *s);
+void addhost(int num, char *alias, char *hostname, int port);

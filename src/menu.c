@@ -1007,7 +1007,7 @@ void menu_draw_bookmarks(void) {
 
   /* Hint */
   font_set_font(menu_font[0]);
-  font_draw_string(15, menu_height - 20, "Type number + Enter  Esc=back");
+  font_draw_string(15, menu_height - 20, "#=connect  A=add  +=save current  Esc");
 }
 
 
@@ -1037,6 +1037,14 @@ void menu_fs_draw_path(const char *path) {
     snprintf(truncpath, sizeof(truncpath), "...%s", path + pathlen - maxchars + 4);
   } else {
     snprintf(truncpath, sizeof(truncpath), "%s", path);
+  }
+  /* Replace backslashes with forward slashes for display
+   * (C64 font maps 0x5C to pound sign) */
+  {
+    char *bp;
+    for (bp = truncpath; *bp; bp++) {
+      if (*bp == '\\') *bp = '/';
+    }
   }
 
   {
