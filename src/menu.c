@@ -337,13 +337,13 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   snprintf(line, sizeof(line), "[fIlename]: %.20s", xfer_disp_filename);
   font_draw_string(10, 74, line);
 
-  /* [block sIze]: */
+  /* [block number]: */
   blocks = (bytes + 253) / 254;
   if (total > 0) {
     int total_blocks = (total + 253) / 254;
-    snprintf(line, sizeof(line), "[block sIze]: %d / %d", blocks, total_blocks);
+    snprintf(line, sizeof(line), "[block number]: %d / %d", blocks, total_blocks);
   } else {
-    snprintf(line, sizeof(line), "[block sIze]: %d", blocks);
+    snprintf(line, sizeof(line), "[block number]: %d", blocks);
   }
   font_draw_string(10, 86, line);
 
@@ -406,11 +406,11 @@ void menu_update_xfer_block_progress(const char *status, const char *protocol, i
   snprintf(line, sizeof(line), "[fIlename]: %.20s", xfer_disp_filename);
   font_draw_string(10, 74, line);
 
-  /* [block sIze]: */
+  /* [block number]: */
   if (total_blocks > 0) {
-    snprintf(line, sizeof(line), "[block sIze]: %d / %d", current_blocks, total_blocks);
+    snprintf(line, sizeof(line), "[block number]: %d / %d", current_blocks, total_blocks);
   } else {
-    snprintf(line, sizeof(line), "[block sIze]: %d", current_blocks);
+    snprintf(line, sizeof(line), "[block number]: %d", current_blocks);
   }
   font_draw_string(10, 86, line);
 
