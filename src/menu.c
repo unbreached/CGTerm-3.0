@@ -112,13 +112,13 @@ int menu_init(int width, int height) {
     return(1);
   }
   transparent = SDL_MapRGBA(menu_surface->format, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
-  bgcolor = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, 0xf0);
-  fgcolor = SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0x00, SDL_ALPHA_OPAQUE);
+  bgcolor = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, 0xf0);
+  fgcolor = SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, SDL_ALPHA_OPAQUE);
   shadecolor = SDL_MapRGBA(menu_surface->format, 0x00, 0x00, 0x00, SDL_ALPHA_OPAQUE);
   hilitecolor = SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0xff, SDL_ALPHA_OPAQUE);
-  inputbg = SDL_MapRGBA(menu_surface->format, 0x20, 0x20, 0x20, 0xe0);
-  cursorcolor = SDL_MapRGB(menu_surface->format, 0x80, 0x80, 0x00);
-  selectcolor = SDL_MapRGBA(menu_surface->format, 0xd0, 0xd0, 0x20, 0xc0);
+  inputbg = SDL_MapRGBA(menu_surface->format, 0x0e, 0x14, 0x28, 0xe0);
+  cursorcolor = SDL_MapRGB(menu_surface->format, 0x00, 0x66, 0x88);
+  selectcolor = SDL_MapRGBA(menu_surface->format, 0x20, 0x60, 0xa0, 0xc0);
 
   font_init(menu_surface);
 
@@ -147,7 +147,7 @@ int menu_init(int width, int height) {
     font_free(menu_font[1]);
     return(1);
   }
-  SDL_FillRect(cursorsurface, NULL, SDL_MapRGB(cursorsurface->format, 0xff, 0xff, 0x00));
+  SDL_FillRect(cursorsurface, NULL, SDL_MapRGB(cursorsurface->format, 0x00, 0xcc, 0xff));
   SDL_SetAlpha(cursorsurface, SDL_SRCALPHA|SDL_RLEACCEL, 0x80);
 
   return(0);
@@ -190,7 +190,7 @@ void menu_print_key(int line, char *key, char *text) {
 
   if (key[0] == 0 && text[0] == '-') {
     /* Category header — draw centered in cyan/light blue */
-    SDL_Color hdr_color = {0x40, 0xc0, 0xff, 255};
+    SDL_Color hdr_color = {0x40, 0xff, 0x80, 255};
     SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &hdr_color, 1, 1);
     font_set_font(menu_font[1]);
     font_draw_string(x - 10, y, text);
@@ -225,7 +225,7 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
 }
 
 static void menu_draw_section(int x, int y, const char *title) {
-  SDL_Color cyan = {0x40, 0xc0, 0xff, 255};
+  SDL_Color cyan = {0x40, 0xff, 0x80, 255};
   SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &cyan, 1, 1);
   font_set_font(menu_font[1]);
   font_draw_string(x, y, title);
@@ -240,8 +240,8 @@ void menu_print_menu(struct menu *menu) {
   int lx = 15;          /* left column x */
   int rx = cx + 10;     /* right column x */
   int ty;               /* current y */
-  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
-  Uint32 linecol = SDL_MapRGBA(menu_surface->format, 0x40, 0x40, 0x60, SDL_ALPHA_OPAQUE);
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+  Uint32 linecol = SDL_MapRGBA(menu_surface->format, 0x20, 0x40, 0x60, SDL_ALPHA_OPAQUE);
 
   (void)menu;  /* We draw our own layout */
 
@@ -302,7 +302,7 @@ void menu_print_menu(struct menu *menu) {
 
   /* Border */
   menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
-    SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0x00, SDL_ALPHA_OPAQUE));
+    SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, SDL_ALPHA_OPAQUE));
 }
 
 
@@ -326,7 +326,7 @@ void menu_update_input(const char *text, int cursorpos) {
 
 void menu_draw_input(const char *title) {
   int cy = menu_height / 2;
-  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
   SDL_FillRect(menu_surface, NULL, solidbg);
   menu_draw_borderbox(15, cy - 20, menu_width - 16, cy + 20);
   font_set_font(menu_font[0]);
@@ -636,7 +636,7 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
   float t = frame * 0.02f;
   int w = menu_width;
   int h = menu_height;
-  Uint32 black = SDL_MapRGBA(menu_surface->format, 0, 0, 0, SDL_ALPHA_OPAQUE);
+  Uint32 black = SDL_MapRGBA(menu_surface->format, 0x05, 0x08, 0x15, 0xf0);
 
   if (!splash_stars_inited) splash_init_stars();
 
@@ -870,7 +870,7 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
 
   /* Yellow separator line */
   menu_draw_line(0, h - 50, w - 1, h - 50,
-    SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0x00, 0xff));
+    SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, 0xff));
 
   /* Credits — two lines */
   font_set_font(menu_font[0]);
@@ -914,7 +914,7 @@ int menu_select_disk_format(void) {
     for (i = 0; i < 3; i++) {
       if (i == selection) {
         SDL_Rect r;
-        Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x80, 0x80, 0x00, 0xc0);
+        Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x00, 0x66, 0x88, 0x80);
         r.x = cx - 150; r.y = cy - 22 + i * 18; r.w = 300; r.h = 16;
         SDL_FillRect(menu_surface, &r, sel);
       }
@@ -953,7 +953,7 @@ int menu_select_disk_format(void) {
 void menu_draw_message(const char *message) {
   int cx = menu_width / 2;
   int cy = menu_height / 2;
-  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
   SDL_FillRect(menu_surface, NULL, solidbg);
   menu_draw_borderbox(15, cy - 15, menu_width - 16, cy + 15);
   font_set_font(menu_font[0]);
@@ -983,11 +983,11 @@ void menu_print_bookmark(int slot, int col, char *text) {
     font_draw_string(x + 20, y, text);
   } else {
     /* Empty slot */
-    SDL_Color dimcol = {0x50, 0x50, 0x60, 255};
+    SDL_Color dimcol = {0x30, 0x40, 0x60, 255};
     SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &dimcol, 1, 1);
     font_draw_string(x + 20, y, "Add your BBS here");
     {
-      SDL_Color yellow = {0xff, 0xff, 0x00, 255};
+      SDL_Color yellow = {0x00, 0xcc, 0xff, 255};
       SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &yellow, 1, 1);
     }
   }
@@ -997,7 +997,7 @@ void menu_print_bookmark(int slot, int col, char *text) {
 void menu_draw_bookmarks_sel(int selected) {
   int i;
   int cx = menu_width / 2;
-  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
 
   SDL_FillRect(menu_surface, NULL, solidbg);
   menu_draw_borderbox(7, 7, menu_width - 8, menu_height - 8);
@@ -1011,7 +1011,7 @@ void menu_draw_bookmarks_sel(int selected) {
 
   /* Divider line */
   menu_draw_line(cx, 32, cx, menu_height - 32,
-    SDL_MapRGBA(menu_surface->format, 0x40, 0x40, 0x60, SDL_ALPHA_OPAQUE));
+    SDL_MapRGBA(menu_surface->format, 0x20, 0x40, 0x60, SDL_ALPHA_OPAQUE));
 
   /* Left column: slots 0-19 */
   for (i = 0; i < 20; ++i) {
@@ -1050,7 +1050,7 @@ void menu_draw_bookmarks(void) {
 
 void menu_fs_draw(const char *title) {
   /* Fill entire surface with solid dark background — no bleed-through */
-  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
   SDL_FillRect(menu_surface, NULL, solidbg);
   menu_draw_borderbox(7, 7, menu_width - 8, menu_height - 8);
   font_set_font(menu_font[1]);
@@ -1084,12 +1084,12 @@ void menu_fs_draw_path(const char *path) {
   }
 
   {
-    SDL_Color pathcol = {0x80, 0xc0, 0xff, 255};
+    SDL_Color pathcol = {0x00, 0xdd, 0xff, 255};
     SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &pathcol, 1, 1);
     font_set_font(menu_font[0]);
     font_draw_string(12, 26, truncpath);
     {
-      SDL_Color yellow = {0xff, 0xff, 0x00, 255};
+      SDL_Color yellow = {0x00, 0xcc, 0xff, 255};
       SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &yellow, 1, 1);
     }
   }
@@ -1133,7 +1133,7 @@ void menu_fs_draw_line(int line, const char *text, int selected, int isdir) {
 
   if (isdir) {
     /* Directories in cyan */
-    SDL_Color dircol = {0x40, 0xd0, 0xff, 255};
+    SDL_Color dircol = {0x40, 0xff, 0x80, 255};
     SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &dircol, 1, 1);
     font_set_font(menu_font[1]);
     font_draw_string(x, y + 1, string);
