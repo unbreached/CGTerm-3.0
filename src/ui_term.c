@@ -161,24 +161,14 @@ void ui_selectdirkey(SDL_keysym *keysym) {
   case SDLK_RETURN:
   case SDLK_KP_ENTER:
     fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
-    if (select_mode == SEL_DIR) {
-      /* In DIR mode: if we're inside a D64, select it as the target.
-       * Otherwise, enter directories or select the current path. */
-      {
-        char *dp = strrchr(fsel->path, '.');
-        int inside_image = (dp && strlen(dp) == 4 &&
-          (dp[1] == 'd' || dp[1] == 'D') && isdigit(dp[2]) && isdigit(dp[3]));
-        if (inside_image) {
-          /* We're inside a D64 — select it as download/upload target */
-          menu_hide();
-          kbd_focus = select_focus;
-          select_done_call(fsel);
-          fs_free(fsel);
-          break;
-        }
-      }
+    /* "." always goes back, even inside a D64/D81 */
+    if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+      cfg_change_dir(fsel->path, "..");
+      fs_read_dir(fsel, fsel->path);
+      fs_draw(fsel);
+      break;
     }
-    /* "[ Use this folder ]" entry — select current directory */
+    /* "[ Use this folder ]" entry — select current directory or image */
     if (fsel->selectedfile->name &&
         strcmp(fsel->selectedfile->name, "[ Use this folder ]") == 0) {
       menu_hide();
