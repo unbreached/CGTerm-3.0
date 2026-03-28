@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef WINDOWS
+#ifdef WINDOWS
+#include "getopt_win.h"
+#else
 #include <unistd.h>
 #endif
 #include "SDL.h"
@@ -199,18 +201,11 @@ int main(int argc, char *argv[]) {
   if (cfg_sound && sound_init()) {
     printf("Sound init failed, sound disabled\n");
   } else {
-#ifdef WINDOWS
-    if ((sound_bell = sound_load_sample("bell.wav")) < 0) {
-      printf("Couldn't load bell.wav\n");
-      return(18);
-    }
-#else
-    snprintf(fname, sizeof(fname), "%s/bell.wav", cfg_prefix);
+    path_build_asset(fname, sizeof(fname), "bell.wav");
     if ((sound_bell = sound_load_sample(fname)) < 0) {
       printf("Couldn't load %s\n", fname);
       return(19);
     }
-#endif
   }
 
   if (cfg_columns == 40) {

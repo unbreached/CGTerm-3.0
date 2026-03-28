@@ -121,33 +121,19 @@ int menu_init(int width, int height) {
 
   font_init(menu_surface);
 
-#ifdef WINDOWS
-  if ((menu_font[0] = font_load_font("10x12yellow.bmp", 10, 12, 32, 4)) == NULL) {
-    printf("Couldn't load 10x12yellow.bmp\n");
-    SDL_FreeSurface(menu_surface);
-    return(1);
-  }
-  if ((menu_font[1] = font_load_font("10x12white.bmp", 10, 12, 32, 4)) == NULL) {
-    printf("Couldn't load 10x12white.bmp\n");
-    SDL_FreeSurface(menu_surface);
-    font_free(menu_font[0]);
-    return(1);
-  }
-#else
-  snprintf(fname, sizeof(fname), "%s/10x12yellow.bmp", cfg_prefix);
+  path_build_asset(fname, sizeof(fname), "10x12yellow.bmp");
   if ((menu_font[0] = font_load_font(fname, 10, 12, 32, 4)) == NULL) {
     printf("Couldn't load %s\n", fname);
     SDL_FreeSurface(menu_surface);
     return(1);
   }
-  snprintf(fname, sizeof(fname), "%s/10x12white.bmp", cfg_prefix);
+  path_build_asset(fname, sizeof(fname), "10x12white.bmp");
   if ((menu_font[1] = font_load_font(fname, 10, 12, 32, 4)) == NULL) {
     printf("Couldn't load %s\n", fname);
     SDL_FreeSurface(menu_surface);
     font_free(menu_font[0]);
     return(1);
   }
-#endif
 
   if ((cursorsurface = SDL_CreateRGBSurface(SDL_SWSURFACE, 10, 12, 32,
 					   0x000000ff,
