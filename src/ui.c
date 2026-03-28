@@ -230,42 +230,56 @@ void ui_requestkey(SDL_keysym *keysym) {
 }
 
 
+static char bm_input[4] = "";
+static int bm_input_len = 0;
+
 void ui_bookmarkkey(SDL_keysym *keysym) {
   int b;
   char _DebugMsg[256];
 
   switch (keysym->sym) {
 
-  case SDLK_RETURN:
   case SDLK_ESCAPE:
   case SDLK_q:
+    bm_input_len = 0;
+    bm_input[0] = 0;
     menu_hide();
     kbd_focus = FOCUS_TERM;
     break;
 
-  default:
-    snprintf(_DebugMsg, sizeof(_DebugMsg), "Bookmark Key: %d Mod: %d Unicode: %d\n", keysym->sym,keysym->mod,keysym->unicode);
-    cfg_debug(_DebugMsg);
-    b = -1;
-    /* 0-9 for left column slots 0-9 */
-    if (keysym->unicode >= '0' && keysym->unicode <= '9') {
-      b = keysym->unicode - '0';
+  case SDLK_BACKSPACE:
+  case SDLK_DELETE:
+    if (bm_input_len > 0) {
+      bm_input[--bm_input_len] = 0;
     }
-    /* A-T for right column (slots 20-39) */
-    if (keysym->unicode >= 'a' && keysym->unicode <= 't') {
-      b = keysym->unicode - 'a' + 20;
-    }
-    if (keysym->unicode >= 'A' && keysym->unicode <= 'T') {
-      b = keysym->unicode - 'A' + 20;
-    }
-    if (b >= 0 && b < cfg_numbookmarks) {
+    break;
+
+  case SDLK_RETURN:
+  case SDLK_KP_ENTER:
+    if (bm_input_len > 0) {
+      b = atoi(bm_input);
+      bm_input_len = 0;
+      bm_input[0] = 0;
+      if (b >= 0 && b < cfg_numbookmarks) {
+        menu_hide();
+        kbd_focus = FOCUS_TERM;
+        cfg_sethost(cfg_bookmark_host[b]);
+        cfg_port = cfg_bookmark_port[b];
+        snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
+        cfg_debug(_DebugMsg);
+        net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
+      }
+    } else {
       menu_hide();
       kbd_focus = FOCUS_TERM;
-      cfg_sethost(cfg_bookmark_host[b]);
-      cfg_port = cfg_bookmark_port[b];
-      snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b],cfg_bookmark_port[b]);
-      cfg_debug(_DebugMsg);
-      net_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
+    }
+    break;
+
+  default:
+    /* Buffer digit keys */
+    if (keysym->unicode >= '0' && keysym->unicode <= '9' && bm_input_len < 2) {
+      bm_input[bm_input_len++] = (char)keysym->unicode;
+      bm_input[bm_input_len] = 0;
     }
     break;
   }

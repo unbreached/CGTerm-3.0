@@ -863,13 +863,9 @@ void menu_print_bookmark(int slot, int col, char *text) {
 
   /* Slot label */
   if (col == 0) {
-    if (slot < 10) {
-      snprintf(label, sizeof(label), "%d", slot);
-    } else {
-      snprintf(label, sizeof(label), "%d", slot);
-    }
+    snprintf(label, sizeof(label), "%d", slot);
   } else {
-    snprintf(label, sizeof(label), "%c", 'A' + slot);
+    snprintf(label, sizeof(label), "%d", slot + 20);
   }
 
   font_set_font(menu_font[1]);
@@ -923,7 +919,7 @@ void menu_draw_bookmarks(void) {
 
   /* Hint */
   font_set_font(menu_font[0]);
-  font_draw_string(15, menu_height - 20, "0-9/shift=left  A-T=right  Esc=back");
+  font_draw_string(15, menu_height - 20, "Type number + Enter  Esc=back");
 }
 
 
