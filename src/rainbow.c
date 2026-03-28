@@ -426,30 +426,21 @@ int rainbow_send(const char *filename) {
 
   rainbow_sent_bytes = 0;
 
-  /* Signal the BBS we're ready, then wait for RB_GOO.
-   * Send RB_GOO periodically (like Punter's GOO pre-signal)
-   * while scanning incoming bytes for the BBS's RB_GOO response. */
-  rainbow_send_status("Rainbow: signaling receiver");
+  /* Wait for RB_GOO from the BBS receiver.
+   * The BBS (receiver) sends GOO when ready.
+   * We scan through any BBS status screen bytes to find it.
+   * Based on rainbow_protocol_cb.asm: receiver sends GOO, sender waits. */
+  rainbow_send_status("Rainbow: waiting for receiver");
   {
-    int attempts = 30;
     int found = 0;
-    unsigned int last_signal = 0;
-    unsigned int now;
+    int timeout_count = 60;  /* 60 seconds max */
 
-    xfer_send_byte(RB_GOO);
-    last_signal = timer_get_ticks();
-
-    while (attempts > 0 && !xfer_cancel) {
+    while (timeout_count > 0 && !xfer_cancel) {
       c = xfer_recv_byte(1000);
-
-      now = timer_get_ticks();
-      if (now > last_signal + 2000) {
-        xfer_send_byte(RB_GOO);
-        last_signal = now;
-        attempts--;
+      if (c < 0) {
+        timeout_count--;
+        continue;
       }
-
-      if (c < 0) continue;
       if ((unsigned char)c == RB_GOO) {
         found = 1;
         break;
@@ -458,6 +449,7 @@ int rainbow_send(const char *filename) {
         rainbow_fail("Rainbow: cancelled by remote");
         return 0;
       }
+      /* Skip any other bytes (BBS status screen) */
     }
     if (!found) {
       if (xfer_cancel) {
