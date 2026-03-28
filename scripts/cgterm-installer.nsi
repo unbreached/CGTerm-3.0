@@ -54,8 +54,7 @@ Section "CGTerm (required)" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
 
-  ; Binaries — use cross-compiled dist or native build
-  ; Try dist\win32 first (cross-compiled), fall back to bin\
+  ; Binaries (cross-compiled)
   File "..\dist\win32\cgterm.exe"
   File /nonfatal "..\dist\win32\cgchat.exe"
   File /nonfatal "..\dist\win32\cgedit.exe"
