@@ -261,6 +261,9 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
 #endif
         if (stat(fullpath, &st) == 0) {
           entry->mtime = (long)st.st_mtime;
+          if (entry->type != T_DIR) {
+            entry->size = (unsigned int)st.st_size;
+          }
         } else {
           entry->mtime = 0;
         }
@@ -286,17 +289,31 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
           a = a->next;
           continue;
         }
-        if (a->type != T_DIR && b->type == T_DIR) {
-          doswap = 1;
-        } else if (a->type == T_DIR && b->type != T_DIR) {
-          doswap = 0;
-        } else if (a->type == T_DIR && b->type == T_DIR) {
-          /* Directories: alphabetical */
-          if (a->name && b->name)
-            doswap = (strcasecmp(a->name, b->name) > 0);
-        } else {
-          /* Files: newest first (by mtime) */
-          doswap = (a->mtime < b->mtime);
+        /* Sort priority: 0=real dir, 1=disk image, 2=file */
+        {
+          int pa = 2, pb = 2;
+          if (a->type == T_DIR) {
+            char *d = a->name ? strrchr(a->name, '.') : NULL;
+            pa = (d && strlen(d)==4 && (d[1]=='d'||d[1]=='D') && isdigit(d[2]) && isdigit(d[3])) ? 1 : 0;
+          }
+          if (b->type == T_DIR) {
+            char *d = b->name ? strrchr(b->name, '.') : NULL;
+            pb = (d && strlen(d)==4 && (d[1]=='d'||d[1]=='D') && isdigit(d[2]) && isdigit(d[3])) ? 1 : 0;
+          }
+          if (pa != pb) {
+            doswap = (pa > pb);
+          } else if (pa == 0) {
+            /* Both real dirs: alphabetical */
+            if (a->name && b->name)
+              doswap = (strcasecmp(a->name, b->name) > 0);
+          } else if (pa == 1) {
+            /* Both disk images: alphabetical */
+            if (a->name && b->name)
+              doswap = (strcasecmp(a->name, b->name) > 0);
+          } else {
+            /* Both files: newest first (by mtime) */
+            doswap = (a->mtime < b->mtime);
+          }
         }
         if (doswap) {
           /* Swap data fields */

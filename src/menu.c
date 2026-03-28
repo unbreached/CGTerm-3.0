@@ -1129,11 +1129,13 @@ void menu_fs_clear(void) {
 }
 
 
-void menu_fs_draw_line(int line, const char *text, int selected, int isdir) {
+/* entrytype: 0=file, 1=dir, 2=disk image, 3=special (Use this folder, <- Back) */
+void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, unsigned int filesize) {
   SDL_Rect r;
   int x, y;
-  int maxchars = (menu_width - 24) / 10;
-  char string[64];
+  int maxname = (menu_width - 100) / 10;  /* leave room for size on right */
+  char namebuf[64];
+  char sizebuf[12];
 
   y = 42 + line * 14;
   x = 12;
@@ -1144,22 +1146,90 @@ void menu_fs_draw_line(int line, const char *text, int selected, int isdir) {
   r.y = y;
   SDL_FillRect(menu_surface, &r, selected ? selectcolor : bgcolor);
 
-  snprintf(string, maxchars < 63 ? maxchars + 1 : 63, "%-*s", maxchars, text);
+  if (maxname > 50) maxname = 50;
 
-  if (isdir) {
-    /* Directories in cyan */
+  /* Format size string for files */
+  sizebuf[0] = 0;
+  if (entrytype == 0 && filesize > 0) {
+    if (filesize >= 1048576) {
+      snprintf(sizebuf, sizeof(sizebuf), "%dM", (int)(filesize / 1048576));
+    } else if (filesize >= 1024) {
+      snprintf(sizebuf, sizeof(sizebuf), "%dK", (int)(filesize / 1024));
+    } else {
+      snprintf(sizebuf, sizeof(sizebuf), "%d", filesize);
+    }
+  } else if (entrytype == 2 && filesize > 0) {
+    if (filesize >= 1024) {
+      snprintf(sizebuf, sizeof(sizebuf), "%dK", (int)(filesize / 1024));
+    } else {
+      snprintf(sizebuf, sizeof(sizebuf), "%d", filesize);
+    }
+  }
+
+  /* Format name with type prefix */
+  switch (entrytype) {
+  case 1: /* directory */
+    snprintf(namebuf, sizeof(namebuf), "DIR: %s", text);
+    break;
+  case 2: /* disk image */
+    snprintf(namebuf, sizeof(namebuf), "IMG: %s", text);
+    break;
+  default:
+    snprintf(namebuf, sizeof(namebuf), "%s", text);
+    break;
+  }
+
+  /* Draw name */
+  switch (entrytype) {
+  case 1: {
+    /* Directories in light green */
     SDL_Color dircol = {0x40, 0xff, 0x80, 255};
     SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &dircol, 1, 1);
     font_set_font(menu_font[1]);
-    font_draw_string(x, y + 1, string);
+    font_draw_string(x, y + 1, namebuf);
     {
       SDL_Color white = {255, 255, 255, 255};
       SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
     }
-  } else {
-    /* Files in yellow */
-    font_set_font(menu_font[0]);
-    font_draw_string(x, y + 1, string);
+    break;
   }
+  case 2: {
+    /* Disk images in light cyan */
+    SDL_Color imgcol = {0x60, 0xc0, 0xff, 255};
+    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &imgcol, 1, 1);
+    font_set_font(menu_font[1]);
+    font_draw_string(x, y + 1, namebuf);
+    {
+      SDL_Color white = {255, 255, 255, 255};
+      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
+    }
+    break;
+  }
+  case 3: {
+    /* Special entries (Use this folder, <- Back) in white */
+    font_set_font(menu_font[1]);
+    font_draw_string(x, y + 1, namebuf);
+    break;
+  }
+  default:
+    /* Regular files */
+    font_set_font(menu_font[0]);
+    font_draw_string(x, y + 1, namebuf);
+    break;
+  }
+
+  /* Draw size on the right */
+  if (sizebuf[0]) {
+    int sw = (int)strlen(sizebuf) * 10;
+    SDL_Color dimcol = {0x60, 0x80, 0xa0, 255};
+    SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &dimcol, 1, 1);
+    font_set_font(menu_font[0]);
+    font_draw_string(menu_width - 16 - sw, y + 1, sizebuf);
+    {
+      SDL_Color restore = {0x00, 0xcc, 0xff, 255};
+      SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &restore, 1, 1);
+    }
+  }
+
   menu_dirty = 1;
 }

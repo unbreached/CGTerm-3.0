@@ -30,5 +30,5 @@ void menu_draw_bookmarks(void);
 void menu_draw_bookmarks_sel(int selected);
 void menu_fs_draw(const char *title);
 void menu_fs_draw_path(const char *path);
-void menu_fs_draw_line(int line, const char *text, int selected, int font);
+void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, unsigned int filesize);
 int menu_select_disk_format(void);
