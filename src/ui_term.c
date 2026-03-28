@@ -23,15 +23,15 @@ struct menu termmenu[] = {
   {4, "D", "Connect/disconnect"},
   {5, "E", "Toggle local echo"},
   {6, "F", "Toggle fullscreen mode"},
-  {7, "I", "Set transfer disk image"},
-  {8, "L", "Load seq file"},
-  {9, "N", "New .d64 disk image"},
-  {10, "Q", "Quit CGTerm"},
-  {11, "R", "Reconnect"},
-  {12, "S", "Save screen to seq file"},
-  {13, "T", "Transfer file"},
-  {14, "V", "Play macro"},
-  {15, "Alt", "Toggle case"},
+  {7, "I", "Set upload path / image"},
+  {8, "J", "Set download path / image"},
+  {9, "L", "Load seq file"},
+  {10, "N", "New .d64 disk image"},
+  {11, "Q", "Quit CGTerm"},
+  {12, "R", "Reconnect"},
+  {13, "S", "Save screen to seq file"},
+  {14, "T", "Transfer file"},
+  {15, "V", "Play macro"},
   {0, NULL, NULL}
 };
 
@@ -47,16 +47,21 @@ Focus select_focus;
 SelectMode select_mode;
 
 
-void kbd_select_dir(void (*donecall)(FileSelector *), Focus focus) {
+void kbd_select_dir_from(void (*donecall)(FileSelector *), Focus focus, const char *title, const char *startpath) {
   select_done_call = donecall;
   select_focus = focus;
   select_mode = SEL_DIR;
-  fsel = fs_new("Select disk image", cfg_xferdir);
+  fsel = fs_new(title, startpath);
   if (fsel) {
     fs_draw(fsel);
     menu_show();
     kbd_focus = FOCUS_SELECTDIR;
   }
+}
+
+
+void kbd_select_dir(void (*donecall)(FileSelector *), Focus focus) {
+  kbd_select_dir_from(donecall, focus, "Select path / image", cfg_xferdir);
 }
 
 
@@ -202,7 +207,11 @@ void ui_selectdirkey(SDL_keysym *keysym) {
 
 
 void select_set_xferdir(FileSelector *fs) {
-  snprintf(cfg_xferdir, 1024, "%s", fs->path);
+  snprintf(cfg_xferdir, 256, "%s", fs->path);
+}
+
+void select_set_dldir(FileSelector *fs) {
+  snprintf(cfg_dldir, 256, "%s", fs->path);
 }
 
 
@@ -324,6 +333,10 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_i:
     kbd_select_dir(&select_set_xferdir, FOCUS_TERM);
+    break;
+
+  case SDLK_j:
+    kbd_select_dir_from(&select_set_dldir, FOCUS_TERM, "Set download path / image", cfg_dldir);
     break;
 
   case SDLK_l:
