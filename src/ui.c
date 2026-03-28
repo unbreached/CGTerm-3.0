@@ -206,10 +206,19 @@ void ui_menukey(SDL_keysym *keysym) {
     kbd_focus = FOCUS_TERM;
     break;
 
-  default:
+  /* Valid menu keys — hide menu and handle */
+  case SDLK_a: case SDLK_b: case SDLK_c: case SDLK_d:
+  case SDLK_e: case SDLK_f: case SDLK_i: case SDLK_j:
+  case SDLK_l: case SDLK_n: case SDLK_q: case SDLK_r:
+  case SDLK_s: case SDLK_t: case SDLK_u: case SDLK_v:
+  case SDLK_LALT: case SDLK_RALT:
     menu_hide();
     kbd_focus = FOCUS_TERM;
     ui_metakey(keysym);
+    break;
+
+  default:
+    /* Ignore unknown keys — keep menu visible */
     break;
   }
 }

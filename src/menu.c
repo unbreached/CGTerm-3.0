@@ -208,13 +208,103 @@ void menu_print_key(int line, char *key, char *text) {
 }
 
 
-void menu_print_menu(struct menu *menu) {
-  menu_cls();
-  menu_draw_borderbox(7, 7, menu_width - 8, menu_height - 8);
-  while (menu->row) {
-    menu_print_key(menu->row - 1, menu->key, menu->text);
-    ++menu;
+static void menu_draw_ascii_line(int x, int y, const char *text) {
+  font_set_font(menu_font[1]);
+  font_draw_string(x, y, text);
+}
+
+static void menu_draw_item(int x, int y, const char *key, const char *text) {
+  char line[64];
+  if (key[0]) {
+    snprintf(line, sizeof(line), "[%s] %s", key, text);
+  } else {
+    snprintf(line, sizeof(line), "    %s", text);
   }
+  font_set_font(menu_font[0]);
+  font_draw_string(x, y, line);
+}
+
+static void menu_draw_section(int x, int y, const char *title) {
+  SDL_Color cyan = {0x40, 0xc0, 0xff, 255};
+  SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &cyan, 1, 1);
+  font_set_font(menu_font[1]);
+  font_draw_string(x, y, title);
+  {
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
+  }
+}
+
+void menu_print_menu(struct menu *menu) {
+  int cx = menu_width / 2;
+  int lx = 15;          /* left column x */
+  int rx = cx + 10;     /* right column x */
+  int ty;               /* current y */
+  Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x10, 0x10, 0x20, SDL_ALPHA_OPAQUE);
+  Uint32 linecol = SDL_MapRGBA(menu_surface->format, 0x40, 0x40, 0x60, SDL_ALPHA_OPAQUE);
+
+  (void)menu;  /* We draw our own layout */
+
+  SDL_FillRect(menu_surface, NULL, solidbg);
+
+  /* ASCII art logo */
+  ty = 10;
+  menu_draw_ascii_line(lx, ty,      " ______ _______ _______ _______ ______ _______");
+  menu_draw_ascii_line(lx, ty + 12, "|      |     __|_     _|    ___|   __ \\   |   |");
+  menu_draw_ascii_line(lx, ty + 24, "|   ---|    |  | |   | |    ___|      <       |");
+  menu_draw_ascii_line(lx, ty + 36, "|______|_______| |___| |_______|___|__|__|_|__|");
+
+  /* Subtitle */
+  font_set_font(menu_font[0]);
+  font_draw_string(lx + 60, ty + 54, "3.0 - SCENE EDiTiON");
+
+  /* Horizontal divider */
+  ty = ty + 72;
+  menu_draw_line(lx, ty, menu_width - lx, ty, linecol);
+
+  /* Vertical divider */
+  menu_draw_line(cx, ty, cx, menu_height - 30, linecol);
+
+  /* Left column */
+  ty += 8;
+  menu_draw_section(lx, ty, "CONNECTION");
+  menu_draw_item(lx, ty + 16, "B", "Bookmarks");
+  menu_draw_item(lx, ty + 30, "D", "Connect/Disconnect");
+  menu_draw_item(lx, ty + 44, "R", "Reconnect");
+
+  /* Left divider */
+  ty += 64;
+  menu_draw_line(lx, ty, cx - 5, ty, linecol);
+  ty += 8;
+  menu_draw_section(lx, ty, "SCREEN & MACROS");
+  menu_draw_item(lx, ty + 16, "L", "Load seq file");
+  menu_draw_item(lx, ty + 30, "S", "Save screen");
+  menu_draw_item(lx, ty + 44, "C", "Record macro");
+  menu_draw_item(lx, ty + 58, "V", "Play macro");
+  menu_draw_item(lx, ty + 72, "A", "Abort");
+
+  /* Right column */
+  ty = 10 + 72 + 8;
+  menu_draw_section(rx, ty, "TRANSFERS & FiLES");
+  menu_draw_item(rx, ty + 16, "T", "Transfer file");
+  menu_draw_item(rx, ty + 30, "I", "Upload path");
+  menu_draw_item(rx, ty + 44, "J", "Download path");
+  menu_draw_item(rx, ty + 58, "U", "Unjoin image");
+  menu_draw_item(rx, ty + 72, "N", "New disk image");
+
+  /* Right divider — aligned with left */
+  ty = 10 + 72 + 64 + 8;
+  menu_draw_line(cx + 5, ty, menu_width - lx, ty, linecol);
+  ty += 8;
+  menu_draw_section(rx, ty, "SETTINGS");
+  menu_draw_item(rx, ty + 16, "E", "Local echo");
+  menu_draw_item(rx, ty + 30, "F", "Fullscreen");
+
+  menu_draw_item(rx, ty + 58, "Q", "Quit CGTerm");
+
+  /* Border */
+  menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
+    SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0x00, SDL_ALPHA_OPAQUE));
 }
 
 
