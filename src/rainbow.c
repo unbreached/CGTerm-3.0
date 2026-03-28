@@ -460,24 +460,35 @@ int rainbow_send(const char *filename) {
       }
     }
 
-    /* Phase 2: send wake-up and wait for GOO */
+    /* Phase 2: send ONE wake-up byte, then wait for BBS GOO.
+     * The BBS drain loop (_c49d) has ~1 second timeout.
+     * After our wake-up, it needs silence to advance to _c4b1.
+     * So we send ONE byte and wait patiently — resend only every 3 seconds. */
     xfer_send_byte(RB_GOO);
-    attempts = 20;
+    {
+      unsigned int last_wake = timer_get_ticks();
+      unsigned int now;
+      attempts = 20;
 
-    while (attempts-- > 0 && !xfer_cancel) {
-      c = xfer_recv_byte(1000);
-      if (c < 0) {
-        /* Resend wake-up on timeout */
-        xfer_send_byte(RB_GOO);
-        continue;
-      }
-      if ((unsigned char)c == RB_GOO) {
-        found = 1;
-        break;
-      }
-      if ((unsigned char)c == RB_CAN) {
-        rainbow_fail("Rainbow: cancelled by remote");
-        return 0;
+      while (attempts-- > 0 && !xfer_cancel) {
+        c = xfer_recv_byte(1000);
+
+        /* Resend wake-up only every 3 seconds to avoid resetting BBS drain timer */
+        now = timer_get_ticks();
+        if (c < 0 && now > last_wake + 3000) {
+          xfer_send_byte(RB_GOO);
+          last_wake = now;
+        }
+
+        if (c < 0) continue;
+        if ((unsigned char)c == RB_GOO) {
+          found = 1;
+          break;
+        }
+        if ((unsigned char)c == RB_CAN) {
+          rainbow_fail("Rainbow: cancelled by remote");
+          return 0;
+        }
       }
     }
     if (!found) {
