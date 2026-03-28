@@ -855,6 +855,13 @@ void xfer_send_multipunter(FileSelector *fs) {
 
       fclose(xfer_sendfile);
       filecount++;
+
+      /* Wait for BBS to finish writing file and return to the
+       * get#5 loop (bbs.bas line 3610-3620). Drain any stray
+       * bytes from the Punter close-out before sending the
+       * next file announcement. */
+      timer_delay(2000);
+      while (net_receive() >= 0) { /* drain */ }
     } else {
       snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
       menu_draw_message(msg);

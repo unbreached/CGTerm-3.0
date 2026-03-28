@@ -113,24 +113,37 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     break;
 
   case SDLK_SPACE:
-    if (select_mode == SEL_DIR) {
-      fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
+    fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
+    if (select_mode == SEL_MULTIFILE) {
+      if (fsel->selectedfile->type == T_DIR) {
+	/* Enter directory */
+	cfg_change_dir(fsel->path, fsel->selectedfile->name);
+	fs_read_dir(fsel, fsel->path);
+	fs_draw(fsel);
+      } else {
+	/* Toggle tag on file */
+	fs_toggle_tag(fsel, fsel->current + fsel->offset);
+	fs_draw(fsel);
+      }
+    } else {
+      /* SEL_DIR and SEL_FILE: space enters directories */
       if (fsel->selectedfile->type == T_DIR) {
 	cfg_change_dir(fsel->path, fsel->selectedfile->name);
 	fs_read_dir(fsel, fsel->path);
 	fs_draw(fsel);
       }
-    } else if (select_mode == SEL_MULTIFILE) {
-      /* Toggle tag on current file */
-      fs_toggle_tag(fsel, fsel->current + fsel->offset);
-      fs_draw(fsel);
     }
     break;
 
   case SDLK_RETURN:
   case SDLK_KP_ENTER:
     fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
-    if (select_mode == SEL_DIR) {
+    if (fsel->selectedfile->type == T_DIR) {
+      /* Enter directory on Return too */
+      cfg_change_dir(fsel->path, fsel->selectedfile->name);
+      fs_read_dir(fsel, fsel->path);
+      fs_draw(fsel);
+    } else if (select_mode == SEL_DIR) {
       menu_hide();
       kbd_focus = select_focus;
       select_done_call(fsel);

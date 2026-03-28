@@ -159,8 +159,8 @@ struct dirent {
 
   while ((dirent = readdir(dirhandle))) {
     namelen = strlen(dirent->d_name);
-    if ((namelen == 1) && (dirent->d_name[0] == '.')) {
-      // skip .
+    if (dirent->d_name[0] == '.') {
+      /* skip hidden files and . / .. */
     } else {
       if (dir->numentries) {
 	if ((entry->next = malloc(sizeof(*(entry->next)))) == NULL) {
