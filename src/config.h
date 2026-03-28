@@ -26,6 +26,7 @@ extern char cfg_xferdir[];
 extern char cfg_dldir[];
 extern int cfg_editmode;
 extern int cfg_debugmode;
+extern int cfg_splash;
 
 
 int cfg_init(char *argv0);
@@ -34,4 +35,5 @@ signed int cfg_readconfig(char *configfile);
 void cfg_sethost(char *h);
 int cfg_change_dir(char *dirbuffer, const char *newdir);
 void cfg_writeconfig(char **data, char *configfile);
+void cfg_disable_splash(void);
 void cfg_debug(const char *s);

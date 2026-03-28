@@ -422,13 +422,11 @@ void xfer_send_byte(unsigned char c) {
 
 signed int xfer_recv_byte(int timeout) {
   signed int c;
-  unsigned int starttime, t;
+  unsigned int starttime;
 
   starttime = timer_get_ticks();
   while ((c = net_receive()) == -1) {
     if (timer_get_ticks() > starttime + timeout) {
-      t = timer_get_ticks() - xfer_starttime;
-      printf("xfer_recv_byte[%3d.%03d]: timeout\n", t / 1000, t % 1000);
       return(-1);
     } else {
       timer_delay(1);

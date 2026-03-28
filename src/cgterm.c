@@ -16,6 +16,7 @@
 #include "timer.h"
 #include "sound.h"
 #include "crc.h"
+#include "menu.h"
 
 
 int sendcrlf = 0;
@@ -206,6 +207,45 @@ int main(int argc, char *argv[]) {
       printf("Couldn't load %s\n", fname);
       return(19);
     }
+  }
+
+  /* Splash screen — covers entire CGTerm window */
+  if (cfg_splash) {
+    int splash_frame = 0;
+    int splash_done = 0;
+    SDL_Event splash_event;
+
+    /* Black out the PETSCII screen behind the overlay */
+    gfx_bgcolor(0);
+    ffd2(147);  /* clear screen */
+    gfx_setcursxy(-1, -1);  /* hide blinking cursor */
+
+    menu_show();
+    while (!splash_done) {
+      while (SDL_PollEvent(&splash_event)) {
+        switch (splash_event.type) {
+        case SDL_QUIT:
+          exit(0);
+          break;
+        case SDL_KEYDOWN:
+          if (splash_event.key.keysym.sym == SDLK_ESCAPE) {
+            splash_done = 1;
+          } else if (splash_event.key.keysym.sym == SDLK_x) {
+            cfg_disable_splash();
+            splash_done = 1;
+          }
+          break;
+        }
+      }
+      menu_draw_splash_frame(splash_frame, cfg_dldir, cfg_xferdir);
+      gfx_vbl();
+      timer_delay(20);
+      splash_frame++;
+    }
+    menu_hide();
+    menu_cls();
+    gfx_setcursxy(0, 0);
+    ffd2(147);  /* clear screen for normal use */
   }
 
   if (cfg_columns == 40) {

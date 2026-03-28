@@ -24,6 +24,7 @@ void menu_draw_xfer_progress(const char *filename, int direction, int protocol);
 void menu_update_xfer_progress(const char *message, int bytes, int total);
 void menu_update_xfer_block_progress(const char *status, const char *protocol, int current_blocks, int total_blocks);
 void menu_draw_rectangle(void);
+void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath);
 void menu_draw_message(const char *message);
 void menu_draw_bookmarks(void);
 void menu_fs_draw(const char *title);

@@ -45,6 +45,7 @@ char cfg_xferdir[256];
 char cfg_dldir[256];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
+int cfg_splash = 1;
 
 char host[256];
 char keyboard[256];
@@ -387,7 +388,18 @@ signed int cfg_readconfig(char *configfile) {
             fclose(cfg);
             return(-1);
         }
-        
+
+    } else if (strcmp(key, "splash") == 0) {
+        if (strcmp("yes", value) == 0) {
+            cfg_splash = 1;
+        } else if (strcmp("no", value) == 0) {
+            cfg_splash = 0;
+        } else {
+            printf("Invalid splash value in %s: %s\n", configfile, value);
+            fclose(cfg);
+            return(-1);
+        }
+
 	} else if (strcmp(key, "zoom") == 0) {
 	  cfg_zoom = strtol(value, (char **)NULL, 10);
 	  if (cfg_zoom <= 0 || cfg_zoom > 8) {
@@ -464,6 +476,10 @@ void cfg_writeconfig(char **data, char *configfile) {
   }
 
   fclose(cfg);
+}
+
+void cfg_disable_splash(void) {
+    cfg_splash = 0;
 }
 
 void cfg_debug(const char *s){

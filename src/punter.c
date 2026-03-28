@@ -4,12 +4,14 @@
 #include "gfx.h"
 #include "menu.h"
 #include "xfer.h"
+#include "timer.h"
 
 #define PUNTER_BLOCK_DATA_MAX 247  /* pktsize(254) - 7 header bytes */
 #define PUNTER_SEND_TIMEOUT 1000
 #define PUNTER_MAX_RETRIES 10
 
 int punter_last_filetype = 0;
+static int punter_scan_for_string(const char *target, int timeout_ms, int max_bytes);
 
 
 void punter_fail(char *message) {
@@ -80,8 +82,8 @@ int punter_handshake(char *sendstring, char *waitstring) {
 	//printf("punter_handshake: got \"%s\", done\n", waitstring);
 	return(1);
       } else if (strcmp(sendstring, p) == 0) {
-	//printf("punter_handshake: got echoed \"%s\", failed\n", sendstring);
-	return(0);
+	/* Could be BBS status screen output (e.g. "Good:" matches "GOO").
+	 * Don't fail — just retry. */
       } else {
 	if (strcmp("ACK", waitstring) == 0) {
 	  if (strcmp("CKA", p) == 0) {
@@ -254,15 +256,55 @@ void punter_countdown(int num) {
 
 int punter_recv(void) {
   signed int nextblocksize;
+  int attempts;
 
   menu_update_xfer_progress("Starting...", xfer_saved_bytes, 0);
   gfx_vbl();
 
-  if (punter_handshake("GOO", "ACK")) {
+  /*
+   * Initial handshake: send "GOO" repeatedly while consuming incoming
+   * bytes (BBS status screen), scanning for "ACK" in the stream.
+   */
+  {
+    int got_ack = 0;
+    signed int c;
+    unsigned int last_goo_time = 0;
+    unsigned int now;
+
+    attempts = 30;
+    punter_send_string("GOO");
+    last_goo_time = timer_get_ticks();
+
+    while (attempts > 0 && !xfer_cancel) {
+      c = xfer_recv_byte(1000);
+
+      now = timer_get_ticks();
+      if (now > last_goo_time + 2000) {
+        punter_send_string("GOO");
+        last_goo_time = now;
+        attempts--;
+      }
+
+      if (c < 0) {
+        continue;
+      }
+
+      if (c == 'A') {
+        c = xfer_recv_byte(500);
+        if (c == 'C') {
+          c = xfer_recv_byte(500);
+          if (c == 'K') {
+            got_ack = 1;
+            break;
+          }
+        }
+      }
+    }
+    if (!got_ack) {
+      punter_fail("Timed out");
+      return(0);
+    }
     punter_countdown(5);
-  } else {
-    punter_fail("Timed out");
-    return(0);
   }
 
   punter_last_filetype = 0;

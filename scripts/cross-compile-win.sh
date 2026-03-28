@@ -111,15 +111,39 @@ i686-w64-mingw32-strip "$DIST_DIR/cgterm.exe"
 i686-w64-mingw32-strip "$DIST_DIR/cgchat.exe"
 i686-w64-mingw32-strip "$DIST_DIR/cgedit.exe"
 
+# Build NSIS installer if makensis is available
+if command -v makensis >/dev/null 2>&1; then
+    echo "[*] Building NSIS installer..."
+    makensis "$ROOT_DIR/scripts/cgterm-installer.nsi"
+    if [ $? -eq 0 ]; then
+        echo "[+] Installer built: $ROOT_DIR/dist/CGTerm-3.0-Setup.exe"
+    else
+        echo "[!] NSIS failed — installer not created"
+    fi
+else
+    echo "[*] makensis not found — skipping installer"
+    echo "    Install with: brew install makensis"
+fi
+
+# Create zip
+echo "[*] Creating distribution zip..."
+cd "$ROOT_DIR/dist"
+rm -f CGTerm-3.0-win32.zip
+if [ -f CGTerm-3.0-Setup.exe ]; then
+    zip -r CGTerm-3.0-win32.zip win32/ CGTerm-3.0-Setup.exe
+else
+    zip -r CGTerm-3.0-win32.zip win32/
+fi
+
 # Show result
 echo ""
 echo " ============================================"
 echo "  Cross-compilation successful!"
 echo ""
-echo "  Output: $DIST_DIR/"
-ls -lh "$DIST_DIR/"*.exe "$DIST_DIR/SDL.dll"
+echo "  Output:"
+ls -lh "$ROOT_DIR/dist/"CGTerm-3.0-*
 echo ""
-echo "  To create a zip for distribution:"
-echo "    cd $ROOT_DIR/dist"
-echo "    zip -r CGTerm-3.0-win64.zip win32/"
+echo "  dist/win32/          — portable (unzip and run)"
+echo "  dist/CGTerm-3.0-Setup.exe — installer"
+echo "  dist/CGTerm-3.0-win32.zip — both in one zip"
 echo " ============================================"

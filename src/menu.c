@@ -349,11 +349,9 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
 
   /* [status]: */
   if (total > 0) {
-    snprintf(line, sizeof(line), "[status]: %d / %d bytes", bytes, total);
-  } else if (message && message[0]) {
-    snprintf(line, sizeof(line), "[status]: %s (%d)", message, bytes);
+    snprintf(line, sizeof(line), "[status]: %d of %d", bytes, total);
   } else {
-    snprintf(line, sizeof(line), "[status]: %d bytes", bytes);
+    snprintf(line, sizeof(line), "[status]: %d", bytes);
   }
   font_draw_string(10, 98, line);
 
@@ -475,6 +473,231 @@ void menu_draw_rectangle(void) {
   font_draw_string(112, 102, "Cut");
   font_draw_string(112, 114, "Copy");
   font_draw_string(112, 126, "Paste");
+}
+
+
+#include <math.h>
+
+/* ------------------------------------------------------------------ */
+/*  Demo-style splash screen                                          */
+/* ------------------------------------------------------------------ */
+
+#define SPLASH_NUM_STARS 60
+
+static struct { float x, y, z; } splash_stars[SPLASH_NUM_STARS];
+static int splash_stars_inited = 0;
+
+static unsigned int splash_rng_state = 12345;
+static unsigned int splash_rand(void) {
+  splash_rng_state ^= splash_rng_state << 13;
+  splash_rng_state ^= splash_rng_state >> 17;
+  splash_rng_state ^= splash_rng_state << 5;
+  return splash_rng_state;
+}
+
+static void splash_init_stars(void) {
+  int i;
+  for (i = 0; i < SPLASH_NUM_STARS; i++) {
+    splash_stars[i].x = (float)((int)(splash_rand() % 320) - 160);
+    splash_stars[i].y = (float)((int)(splash_rand() % 200) - 100);
+    splash_stars[i].z = (float)(splash_rand() % 256 + 1);
+  }
+  splash_stars_inited = 1;
+}
+
+void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
+  SDL_Rect r;
+  int i, sx, sy;
+  float t = frame * 0.02f;
+  int w = menu_width;
+  int h = menu_height;
+  Uint32 black = SDL_MapRGBA(menu_surface->format, 0, 0, 0, SDL_ALPHA_OPAQUE);
+
+  if (!splash_stars_inited) splash_init_stars();
+
+  /* Dark blue background */
+  {
+    Uint32 bg = SDL_MapRGBA(menu_surface->format, 0x08, 0x08, 0x30, SDL_ALPHA_OPAQUE);
+    SDL_FillRect(menu_surface, NULL, bg);
+  }
+
+  /* Raster bars */
+  SDL_LockSurface(menu_surface);
+  for (i = 0; i < h; i++) {
+    float wave = sinf(t * 3.0f + i * 0.04f) * 0.5f + 0.5f;
+    int rr = (int)(wave * 40);
+    int gg = (int)(wave * 20);
+    int bb = (int)(60 + wave * 40);
+    Uint32 col = SDL_MapRGBA(menu_surface->format, rr, gg, bb, SDL_ALPHA_OPAQUE);
+    r.x = 0; r.y = i; r.w = w; r.h = 1;
+    SDL_FillRect(menu_surface, &r, col);
+  }
+  SDL_UnlockSurface(menu_surface);
+
+  /* Starfield */
+  SDL_LockSurface(menu_surface);
+  for (i = 0; i < SPLASH_NUM_STARS; i++) {
+    int bright;
+    Uint32 scol;
+    splash_stars[i].z -= 1.2f;
+    if (splash_stars[i].z <= 0) {
+      splash_stars[i].x = (float)((int)(splash_rand() % 320) - 160);
+      splash_stars[i].y = (float)((int)(splash_rand() % 200) - 100);
+      splash_stars[i].z = 256.0f;
+    }
+    sx = (int)(splash_stars[i].x * 256.0f / splash_stars[i].z) + w / 2;
+    sy = (int)(splash_stars[i].y * 256.0f / splash_stars[i].z) + h / 2;
+    if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
+    bright = (int)(255 - splash_stars[i].z);
+    if (bright < 40) bright = 40;
+    if (bright > 255) bright = 255;
+    scol = SDL_MapRGBA(menu_surface->format, bright, bright, bright, SDL_ALPHA_OPAQUE);
+    drawpixel(sx, sy, scol);
+  }
+  SDL_UnlockSurface(menu_surface);
+
+  /* Rotating 3D wireframe cube */
+  {
+    static const float verts[8][3] = {
+      {-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},
+      {-1,-1, 1},{1,-1, 1},{1,1, 1},{-1,1, 1}
+    };
+    static const int edges[12][2] = {
+      {0,1},{1,2},{2,3},{3,0},
+      {4,5},{5,6},{6,7},{7,4},
+      {0,4},{1,5},{2,6},{3,7}
+    };
+    float ca = cosf(t), sa = sinf(t);
+    float cb = cosf(t*0.7f), sb = sinf(t*0.7f);
+    int px[8], py[8];
+    Uint32 cube_col = SDL_MapRGBA(menu_surface->format, 0x00, 0xff, 0x80, SDL_ALPHA_OPAQUE);
+
+    for (i = 0; i < 8; i++) {
+      float x = verts[i][0], y = verts[i][1], z = verts[i][2];
+      float x2 = x * ca - z * sa;
+      float z2 = x * sa + z * ca;
+      float y2 = y * cb - z2 * sb;
+      float z3 = y * sb + z2 * cb;
+      float scale = 40.0f / (z3 + 4.0f);
+      px[i] = (int)(x2 * scale) + w / 2;
+      py[i] = (int)(y2 * scale) + h / 2 - 10;
+    }
+    for (i = 0; i < 12; i++) {
+      menu_draw_line(px[edges[i][0]], py[edges[i][0]],
+                     px[edges[i][1]], py[edges[i][1]], cube_col);
+    }
+  }
+
+  /* "GENESIS PROJECT" — wavy rainbow text at top center */
+  {
+    const char *gp = "GENESIS PROJECT";
+    int gplen = (int)strlen(gp);
+    int gpx = w / 2 - gplen * 5;
+    char ch[2] = {0, 0};
+    SDL_Color saved_palette[2];
+
+    /* Save the original palette colors */
+    memcpy(&saved_palette[0], &menu_font[1]->surface->format->palette->colors[0], sizeof(SDL_Color));
+    memcpy(&saved_palette[1], &menu_font[1]->surface->format->palette->colors[1], sizeof(SDL_Color));
+
+    font_set_font(menu_font[1]);
+    for (i = 0; i < gplen; i++) {
+      float hue = fmodf(t * 1.2f + i * 0.12f, 1.0f);
+      int rr, gg, bb;
+      float h6 = hue * 6.0f;
+      float ff = h6 - (int)h6;
+      int qv = (int)(255 * (1.0f - ff));
+      int tv = (int)(255 * ff);
+      int cy = 10 + (int)(sinf(t * 2.5f + i * 0.4f) * 5.0f);
+      SDL_Color rainbow;
+
+      switch ((int)h6 % 6) {
+        case 0: rr=255; gg=tv;  bb=0;   break;
+        case 1: rr=qv;  gg=255; bb=0;   break;
+        case 2: rr=0;   gg=255; bb=tv;  break;
+        case 3: rr=0;   gg=qv;  bb=255; break;
+        case 4: rr=tv;  gg=0;   bb=255; break;
+        default:rr=255; gg=0;   bb=qv;  break;
+      }
+
+      /* Set palette entry 1 to rainbow color for this character */
+      rainbow.r = rr; rainbow.g = gg; rainbow.b = bb; rainbow.unused = 255;
+      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &rainbow, 1, 1);
+
+      ch[0] = gp[i];
+      font_draw_string(gpx + i * 10, cy, ch);
+    }
+
+    /* Restore original palette */
+    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &saved_palette[1], 1, 1);
+  }
+
+  /* "CGTerm 3.0 - SCENE EDiTiON" — centered below */
+  {
+    const char *title = "CGTerm 3.0 - SCENE EDiTiON";
+    int tlen = (int)strlen(title);
+    int tx = w / 2 - tlen * 5;
+    int ty = 30;
+    font_set_font(menu_font[1]);
+    font_draw_string(tx, ty, title);
+  }
+
+  /* Sine scroller — smooth sub-pixel scrolling */
+  {
+    static const char *scroll = "  Greetz to: TRIAD - FAIRLIGHT - CENSOR - ONSLAUGHT - CHORUS "
+                         "- SHARKS - F4CG - ROLE - CAMELOT - GENESIS PROJECT - EXCESS  "
+                         "... and everyone else keeping the scene alive!   ";
+    static int slen = 0;
+    int nchars;
+    float foffset;
+    int ioffset;
+    if (!slen) slen = (int)strlen(scroll);
+    /* Smooth scroll: 2 pixels per frame */
+    foffset = (float)(frame * 2);
+    ioffset = (int)foffset % (slen * 10);
+    nchars = w / 10 + 2;
+    font_set_font(menu_font[1]);
+    for (i = 0; i < nchars; i++) {
+      int ci = (ioffset / 10 + i) % slen;
+      int spx = i * 10 - (ioffset % 10);
+      float wave = sinf(t * 3.0f + (float)spx * 0.02f);
+      int spy = h - 80 + (int)(wave * 10.0f);
+      char ch[2];
+      ch[0] = scroll[ci];
+      ch[1] = 0;
+      if (spx >= 0 && spx < w && spy >= 40 && spy < h - 52)
+        font_draw_string(spx, spy, ch);
+    }
+  }
+
+  /* Bottom black bar — 50px tall for 3 lines */
+  r.x = 0; r.y = h - 50; r.w = w; r.h = 50;
+  SDL_FillRect(menu_surface, &r, black);
+
+  /* Yellow separator line */
+  menu_draw_line(0, h - 50, w - 1, h - 50,
+    SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0x00, 0xff));
+
+  /* Credits — two lines */
+  font_set_font(menu_font[0]);
+  {
+    const char *line1 = "Modification by m00p";
+    const char *line2 = "Original code by MagerValp";
+    font_draw_string(w / 2 - (int)strlen(line1) * 5, h - 46, line1);
+    font_draw_string(w / 2 - (int)strlen(line2) * 5, h - 34, line2);
+  }
+
+  /* ESC/X hint */
+  font_set_font(menu_font[1]);
+  font_draw_string(8, h - 16, "ESC");
+  font_set_font(menu_font[0]);
+  font_draw_string(42, h - 16, "continue");
+  font_set_font(menu_font[1]);
+  font_draw_string(w / 2 + 10, h - 16, "X");
+  font_set_font(menu_font[0]);
+  font_draw_string(w / 2 + 24, h - 16, "skip forever");
+
+  menu_dirty = SDL_TRUE;
 }
 
 
