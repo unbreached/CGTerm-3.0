@@ -132,18 +132,23 @@ static int rainbow_send_block(unsigned char blockno, const unsigned char *data, 
 
   for (retries = 0; retries < RB_MAX_RETRIES && !xfer_cancel; ++retries) {
     xfer_send_byte(RB_SOH);
-    c = xfer_recv_byte(RB_START_TIMEOUT);
-    if (c < 0) {
-      rainbow_send_status("Rainbow: waiting for ACK...");
-      continue;
-    }
-    if ((unsigned char)c == RB_CAN) {
-      rainbow_fail("Rainbow: cancelled by remote");
-      return 0;
-    }
-    if ((unsigned char)c != RB_ACK) {
-      rainbow_send_status("Rainbow: bad SOH handshake, retrying");
-      continue;
+    /* Scan for ACK — skip any stray status screen bytes */
+    {
+      int scan_count = 64;
+      int got_ack = 0;
+      while (scan_count-- > 0) {
+        c = xfer_recv_byte(RB_START_TIMEOUT);
+        if (c < 0) break;
+        if ((unsigned char)c == RB_ACK) { got_ack = 1; break; }
+        if ((unsigned char)c == RB_CAN) {
+          rainbow_fail("Rainbow: cancelled by remote");
+          return 0;
+        }
+      }
+      if (!got_ack) {
+        rainbow_send_status("Rainbow: waiting for ACK...");
+        continue;
+      }
     }
 
     xfer_send_byte(blockno);
@@ -445,29 +450,22 @@ int rainbow_send(const char *filename) {
    *    rainbow_send_block sends SOH and waits for ACK.
    *    When BBS gets SOH it sends ACK. Handshake complete.
    */
-  rainbow_send_status("Rainbow: waiting for receiver");
-  {
-    int silence_count = 0;
-
-    /* Phase 1: drain BBS status screen — read until 3 seconds of silence */
-    while (!xfer_cancel && silence_count < 3) {
-      c = xfer_recv_byte(1000);
-      if (c < 0) {
-        silence_count++;
-      } else {
-        silence_count = 0;
-      }
-    }
-
-    /* Phase 2: send wake-up byte for BBS _c49d drain loop */
-    if (!xfer_cancel) {
-      xfer_send_byte(0x00);  /* any byte works — BBS just needs to see traffic */
-      /* Small delay for BBS to timeout on drain and enter _c4b1 GOO loop */
-      xfer_recv_byte(2000);  /* wait 2s, discard any response */
-    }
-  }
-  /* Now proceed to send block#0 — rainbow_send_block sends SOH,
-   * BBS at _c4b1 receives SOH, sends ACK. Handshake is in the block send. */
+  /*
+   * Rainbow upload: the BBS receiver sends GOO (0x83) when ready.
+   * 0x83 also appears in PETSCII status screen output.
+   * The BBS sends GOO in a tight loop at _c4b1, waiting for SOH.
+   * We just need to get past the status screen to the GOO loop.
+   *
+   * Strategy: read bytes. When we see 0x83, immediately try sending
+   * SOH. If the BBS responds with ACK, we're in the protocol.
+   * If not (bad SOH handshake), the retry loop handles it.
+   * rainbow_send_block already retries SOH/ACK 10 times.
+   *
+   * No drain phase needed — just go straight to send_block.
+   * The send_block SOH/ACK retry will naturally sync with the
+   * BBS's GOO/SOH handshake.
+   */
+  rainbow_send_status("Rainbow: connecting to receiver");
 
   ext = strrchr(filename, '.');
   if (ext) {
