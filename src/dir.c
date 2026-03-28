@@ -213,10 +213,44 @@ struct dirent {
   }
 
  ReadDirDone:
+  /* Sort: directories first, then alphabetically */
+  if (dir && dir->numentries > 1) {
+    int swapped;
+    do {
+      DirEntry *a;
+      swapped = 0;
+      a = dir->firstentry;
+      while (a && a->next) {
+        DirEntry *b = a->next;
+        int doswap = 0;
+        if (a->type != T_DIR && b->type == T_DIR) {
+          doswap = 1;
+        } else if (a->type == T_DIR && b->type != T_DIR) {
+          doswap = 0;
+        } else if (a->name && b->name) {
+          doswap = (strcasecmp(a->name, b->name) > 0);
+        }
+        if (doswap) {
+          /* Swap data fields */
+          char *tn = a->name; a->name = b->name; b->name = tn;
+          unsigned char tr[16];
+          memcpy(tr, a->rawname, 16); memcpy(a->rawname, b->rawname, 16); memcpy(b->rawname, tr, 16);
+          unsigned int ts = a->size; a->size = b->size; b->size = ts;
+          int tt = a->type; a->type = b->type; b->type = tt;
+          tt = a->closed; a->closed = b->closed; b->closed = tt;
+          tt = a->locked; a->locked = b->locked; b->locked = tt;
+          tt = a->track; a->track = b->track; b->track = tt;
+          tt = a->sector; a->sector = b->sector; b->sector = tt;
+          tt = a->tagged; a->tagged = b->tagged; b->tagged = tt;
+          swapped = 1;
+        }
+        a = a->next;
+      }
+    } while (swapped);
+  }
+
   return(dir);
 }
-
-
 
 
 Dir *dir_read(char *path) {
