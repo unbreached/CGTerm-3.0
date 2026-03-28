@@ -335,6 +335,18 @@ void ui_select_disk_format(void) {
 }
 
 
+void select_load_seq(FileSelector *fs) {
+  char fullpath[256];
+  snprintf(fullpath, sizeof(fullpath), "%s%c%s", fs->path,
+#ifdef WINDOWS
+    '\\',
+#else
+    '/',
+#endif
+    fs->selectedfile->name);
+  kbd_loadseq(fullpath);
+}
+
 void select_send_file(FileSelector *fs) {
   xfer_send(fs->selectedfile->name);
   /* Force full redraw of completion message */
@@ -412,7 +424,7 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_l:
-    ui_inputcall(30, "Load SEQ file:", "screen.seq", &kbd_loadseq, FOCUS_TERM);
+    kbd_select_file(&select_load_seq, FOCUS_TERM);
     break;
 
   case SDLK_p:
