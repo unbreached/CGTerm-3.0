@@ -57,15 +57,15 @@ Dir *dir_read_image(DiskImage *di) {
 
   dir->title = make_name(di_title(di));
 
-  // add . (go back)
+  // add <- Back (go back)
   if ((dir->firstentry = malloc(sizeof(*(dir->firstentry)))) == NULL) {
     goto ReadDirDone;
   }
   entry = dir->firstentry;
   entry->prev = NULL;
   entry->next = NULL;
-  if ((entry->name = malloc(2))) {
-    strcpy(entry->name, ".");
+  if ((entry->name = malloc(8))) {
+    strcpy(entry->name, "<- Back");
   }
   memset(entry->rawname, 0xa0, 16);
   entry->rawname[0] = '.';
@@ -181,8 +181,8 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       dotdot->next = NULL;
       entry->next = dotdot;
       entry = dotdot;
-      if ((dotdot->name = malloc(3))) {
-        strcpy(dotdot->name, ".");
+      if ((dotdot->name = malloc(8))) {
+        strcpy(dotdot->name, "<- Back");
       }
       memset(dotdot->rawname, 0xa0, 16);
       dotdot->rawname[0] = '.';
@@ -280,9 +280,9 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       while (a && a->next) {
         DirEntry *b = a->next;
         int doswap = 0;
-        /* Never sort special entries ([ Use this folder ], ..) */
-        if ((a->name && (a->name[0] == '[' || a->name[0] == '.')) ||
-            (b->name && (b->name[0] == '[' || b->name[0] == '.'))) {
+        /* Never sort special entries ([ Use this folder ], <- Back) */
+        if ((a->name && (a->name[0] == '[' || a->name[0] == '<')) ||
+            (b->name && (b->name[0] == '[' || b->name[0] == '<'))) {
           a = a->next;
           continue;
         }

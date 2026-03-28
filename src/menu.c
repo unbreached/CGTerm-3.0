@@ -214,14 +214,29 @@ static void menu_draw_ascii_line(int x, int y, const char *text) {
 }
 
 static void menu_draw_item(int x, int y, const char *key, const char *text) {
-  char line[64];
   if (key[0]) {
-    snprintf(line, sizeof(line), "[%s] %s", key, text);
+    int klen = (int)strlen(key);
+    /* "[" in cyan */
+    font_set_font(menu_font[0]);
+    font_draw_string(x, y, "[");
+    /* Key letter in white */
+    {
+      SDL_Color white = {255, 255, 255, 255};
+      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
+      font_set_font(menu_font[1]);
+      font_draw_string(x + 10, y, key);
+      /* Restore white font to default */
+      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
+    }
+    /* "] text" in cyan */
+    font_set_font(menu_font[0]);
+    font_draw_string(x + 10 + klen * 10, y, "] ");
+    font_draw_string(x + 30 + klen * 10, y, text);
   } else {
-    snprintf(line, sizeof(line), "    %s", text);
+    font_set_font(menu_font[0]);
+    font_draw_string(x, y, "    ");
+    font_draw_string(x + 40, y, text);
   }
-  font_set_font(menu_font[0]);
-  font_draw_string(x, y, line);
 }
 
 static void menu_draw_section(int x, int y, const char *title) {

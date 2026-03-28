@@ -134,7 +134,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     if (select_mode == SEL_MULTIFILE) {
       if (fsel->selectedfile->type == T_DIR) {
 	/* Enter directory. "." means go up */
-	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
 	  cfg_change_dir(fsel->path, "..");
 	} else {
 	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
@@ -149,7 +149,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     } else {
       /* SEL_DIR and SEL_FILE: space enters directories */
       if (fsel->selectedfile->type == T_DIR) {
-	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
 	  cfg_change_dir(fsel->path, "..");
 	} else {
 	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
@@ -164,7 +164,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
   case SDLK_KP_ENTER:
     fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
     /* "." always goes back, even inside a D64/D81 */
-    if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+    if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
       cfg_change_dir(fsel->path, "..");
       fs_read_dir(fsel, fsel->path);
       fs_draw(fsel);
@@ -179,7 +179,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       fs_free(fsel);
     } else if (fsel->selectedfile->type == T_DIR) {
       /* Enter directory. "." means go up one level */
-      if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, ".") == 0) {
+      if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
         cfg_change_dir(fsel->path, "..");
       } else {
         cfg_change_dir(fsel->path, fsel->selectedfile->name);
