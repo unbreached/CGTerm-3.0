@@ -237,6 +237,28 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     }
     break;
 
+  case SDLK_LEFT:
+    /* Page up */
+    if (fsel->offset > 0) {
+      fsel->offset -= fsel->filesperpage;
+      if (fsel->offset < 0) fsel->offset = 0;
+      fsel->current = 0;
+      fs_draw(fsel);
+    } else {
+      fsel->current = 0;
+      fs_draw(fsel);
+    }
+    break;
+
+  case SDLK_RIGHT:
+    /* Page down */
+    if (fsel->offset + fsel->filesperpage < fsel->numentries) {
+      fsel->offset += fsel->filesperpage;
+      fsel->current = 0;
+      fs_draw(fsel);
+    }
+    break;
+
   default:
     break;
   }

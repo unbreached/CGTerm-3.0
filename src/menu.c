@@ -1177,10 +1177,10 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   /* Format name with type prefix */
   switch (entrytype) {
   case 1: /* directory */
-    snprintf(namebuf, sizeof(namebuf), "DIR: %s", text);
+    snprintf(namebuf, sizeof(namebuf), "%s", text);
     break;
   case 2: /* disk image */
-    snprintf(namebuf, sizeof(namebuf), "IMG: %s", text);
+    snprintf(namebuf, sizeof(namebuf), "%s", text);
     break;
   default:
     snprintf(namebuf, sizeof(namebuf), "%s", text);
@@ -1190,14 +1190,16 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   /* Draw name */
   switch (entrytype) {
   case 1:
-    /* Directories in neon green */
+    /* "DIR:" in cyan, name in neon green */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, namebuf, 0x00, 0xff, 0x66);
+    font_draw_string_color(x, y + 1, "DIR:", 0x00, 0xee, 0xff);
+    font_draw_string_color(x + 50, y + 1, text, 0x00, 0xff, 0x66);
     break;
   case 2:
-    /* Disk images in orange */
+    /* "IMG:" in cyan, name in orange */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, namebuf, 0xff, 0x88, 0x00);
+    font_draw_string_color(x, y + 1, "IMG:", 0x00, 0xee, 0xff);
+    font_draw_string_color(x + 50, y + 1, text, 0xff, 0x88, 0x00);
     break;
   case 3: {
     /* Special entries (Use this folder, <- Back) in white */
