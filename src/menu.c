@@ -113,11 +113,11 @@ int menu_init(int width, int height) {
   }
   transparent = SDL_MapRGBA(menu_surface->format, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
   bgcolor = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, 0xf0);
-  fgcolor = SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, SDL_ALPHA_OPAQUE);
+  fgcolor = SDL_MapRGBA(menu_surface->format, 0x40, 0x80, 0xff, SDL_ALPHA_OPAQUE);
   shadecolor = SDL_MapRGBA(menu_surface->format, 0x00, 0x00, 0x00, SDL_ALPHA_OPAQUE);
   hilitecolor = SDL_MapRGBA(menu_surface->format, 0xff, 0xff, 0xff, SDL_ALPHA_OPAQUE);
   inputbg = SDL_MapRGBA(menu_surface->format, 0x0e, 0x14, 0x28, 0xe0);
-  cursorcolor = SDL_MapRGB(menu_surface->format, 0x00, 0x66, 0x88);
+  cursorcolor = SDL_MapRGB(menu_surface->format, 0xc0, 0x80, 0xff);
   selectcolor = SDL_MapRGBA(menu_surface->format, 0x20, 0x60, 0xa0, 0xc0);
 
   font_init(menu_surface);
@@ -147,7 +147,7 @@ int menu_init(int width, int height) {
     font_free(menu_font[1]);
     return(1);
   }
-  SDL_FillRect(cursorsurface, NULL, SDL_MapRGB(cursorsurface->format, 0x00, 0xcc, 0xff));
+  SDL_FillRect(cursorsurface, NULL, SDL_MapRGB(cursorsurface->format, 0xc0, 0x80, 0xff));
   SDL_SetAlpha(cursorsurface, SDL_SRCALPHA|SDL_RLEACCEL, 0x80);
 
   return(0);
@@ -189,9 +189,9 @@ void menu_print_key(int line, char *key, char *text) {
   x = menu_width / 2 - 135;
 
   if (key[0] == 0 && text[0] == '-') {
-    /* Category header in light green */
+    /* Category header in hot pink */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x - 10, y, text, 0x40, 0xff, 0x80);
+    font_draw_string_color(x - 10, y, text, 0xff, 0x40, 0x80);
   } else if (key[0] != 0) {
     font_set_font(menu_font[1]);
     font_draw_string(x - strlen(key) * 5, y, key);
@@ -203,7 +203,7 @@ void menu_print_key(int line, char *key, char *text) {
 
 static void menu_draw_ascii_line(int x, int y, const char *text) {
   font_set_font(menu_font[1]);
-  font_draw_string(x, y, text);
+  font_draw_string_color(x, y, text, 0x00, 0xff, 0x66);
 }
 
 static void menu_draw_item(int x, int y, const char *key, const char *text) {
@@ -211,24 +211,25 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
     int klen = (int)strlen(key);
     /* "[" in cyan */
     font_set_font(menu_font[0]);
-    font_draw_string(x, y, "[");
+    font_draw_string_color(x, y, "[", 0x00, 0xee, 0xff);
     /* Key letter in white */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x + 10, y, key, 255, 255, 255);
-    /* "] text" in cyan */
+    font_draw_string_color(x + 10, y, key, 0xff, 0xff, 0xff);
+    /* "]" in cyan */
     font_set_font(menu_font[0]);
-    font_draw_string(x + 10 + klen * 10, y, "] ");
-    font_draw_string(x + 30 + klen * 10, y, text);
+    font_draw_string_color(x + 10 + klen * 10, y, "] ", 0x00, 0xee, 0xff);
+    /* text in light blue */
+    font_draw_string_color(x + 30 + klen * 10, y, text, 0x60, 0x80, 0xff);
   } else {
     font_set_font(menu_font[0]);
     font_draw_string(x, y, "    ");
-    font_draw_string(x + 40, y, text);
+    font_draw_string_color(x + 40, y, text, 0x60, 0x80, 0xff);
   }
 }
 
 static void menu_draw_section(int x, int y, const char *title) {
   font_set_font(menu_font[1]);
-  font_draw_string_color(x, y, title, 0x40, 0xff, 0x80);
+  font_draw_string_color(x, y, title, 0xff, 0x40, 0x80);
 }
 
 void menu_print_menu(struct menu *menu) {
@@ -252,7 +253,7 @@ void menu_print_menu(struct menu *menu) {
 
   /* Subtitle */
   font_set_font(menu_font[0]);
-  font_draw_string(lx + 60, ty + 54, "3.0 - SCENE EDiTiON");
+  font_draw_string_color(lx + 60, ty + 54, "3.0 - SCENE EDiTiON", 0x00, 0xee, 0xff);
 
   /* Horizontal divider */
   ty = ty + 72;
@@ -298,7 +299,7 @@ void menu_print_menu(struct menu *menu) {
 
   /* Border */
   menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
-    SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, SDL_ALPHA_OPAQUE));
+    SDL_MapRGBA(menu_surface->format, 0x40, 0x80, 0xff, SDL_ALPHA_OPAQUE));
 }
 
 
@@ -452,7 +453,7 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
 
   /* [FiLENAME]: */
   snprintf(line, sizeof(line), "[filename]: %.20s", xfer_disp_filename);
-  font_draw_string(10, 74, line);
+  font_draw_string_color(10, 74, line, 0x00, 0xee, 0xff);
 
   /* [block number]: */
   blocks = (bytes + 253) / 254;
@@ -462,7 +463,7 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   } else {
     snprintf(line, sizeof(line), "[block number]: %d", blocks);
   }
-  font_draw_string(10, 86, line);
+  font_draw_string_color(10, 86, line, 0x00, 0xee, 0xff);
 
   /* [status]: */
   if (total > 0 && speed_bps > 0) {
@@ -474,7 +475,7 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   } else {
     snprintf(line, sizeof(line), "[status]: %d", bytes);
   }
-  font_draw_string(10, 98, line);
+  font_draw_string_color(10, 98, line, 0x00, 0xee, 0xff);
 
   /* Progress bar */
   r.x = 10;
@@ -523,7 +524,7 @@ void menu_update_xfer_block_progress(const char *status, const char *protocol, i
 
   /* [FiLENAME]: */
   snprintf(line, sizeof(line), "[filename]: %.20s", xfer_disp_filename);
-  font_draw_string(10, 74, line);
+  font_draw_string_color(10, 74, line, 0x00, 0xee, 0xff);
 
   /* [block number]: */
   if (total_blocks > 0) {
@@ -531,11 +532,11 @@ void menu_update_xfer_block_progress(const char *status, const char *protocol, i
   } else {
     snprintf(line, sizeof(line), "[block number]: %d", current_blocks);
   }
-  font_draw_string(10, 86, line);
+  font_draw_string_color(10, 86, line, 0x00, 0xee, 0xff);
 
   /* [status]: */
   snprintf(line, sizeof(line), "[status]: %s", status);
-  font_draw_string(10, 98, line);
+  font_draw_string_color(10, 98, line, 0x00, 0xee, 0xff);
 
   /* Progress bar */
   r.x = 10;
@@ -980,13 +981,13 @@ void menu_print_bookmark(int slot, int col, char *text) {
   }
 
   font_set_font(menu_font[1]);
-  font_draw_string(x, y, label);
+  font_draw_string_color(x, y, label, 0x00, 0xff, 0x66);
   font_set_font(menu_font[0]);
   if (text && text[0]) {
-    font_draw_string(x + 20, y, text);
+    font_draw_string_color(x + 20, y, text, 0x60, 0x80, 0xff);
   } else {
     /* Empty slot */
-    font_draw_string_color(x + 20, y, "Add your BBS here", 0x30, 0x40, 0x60);
+    font_draw_string_color(x + 20, y, "Add your BBS here", 0x50, 0x40, 0x70);
   }
 }
 
@@ -1003,7 +1004,7 @@ void menu_draw_bookmarks_sel(int selected) {
   {
     const char *bm_title = "ELiTE BULLETiN BOARD SYSTEMS";
     font_set_font(menu_font[1]);
-    font_draw_string(cx - (int)strlen(bm_title) * 5, 12, bm_title);
+    font_draw_string_color(cx - (int)strlen(bm_title) * 5, 12, bm_title, 0xff, 0x40, 0x80);
   }
 
   /* Divider line */
@@ -1039,21 +1040,21 @@ void menu_draw_bookmarks_sel(int selected) {
     int hx = 15;
     int hy = menu_height - 20;
     font_set_font(menu_font[0]);
-    font_draw_string(hx, hy, "Enter/#=");
+    font_draw_string_color(hx, hy, "Enter/#=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 80, hy, "connect");
+    font_draw_string_color(hx + 80, hy, "connect", 0x00, 0xff, 0x66);
     font_set_font(menu_font[0]);
-    font_draw_string(hx + 155, hy, "A=");
+    font_draw_string_color(hx + 155, hy, "A=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 175, hy, "add");
+    font_draw_string_color(hx + 175, hy, "add", 0x00, 0xff, 0x66);
     font_set_font(menu_font[0]);
-    font_draw_string(hx + 210, hy, "E=");
+    font_draw_string_color(hx + 210, hy, "E=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 230, hy, "edit");
+    font_draw_string_color(hx + 230, hy, "edit", 0x00, 0xff, 0x66);
     font_set_font(menu_font[0]);
-    font_draw_string(hx + 275, hy, "D=");
+    font_draw_string_color(hx + 275, hy, "D=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 295, hy, "del");
+    font_draw_string_color(hx + 295, hy, "del", 0x00, 0xff, 0x66);
   }
 
   menu_dirty = SDL_TRUE;
@@ -1100,24 +1101,24 @@ void menu_fs_draw_path(const char *path) {
   }
 
   font_set_font(menu_font[0]);
-  font_draw_string_color(12, 26, truncpath, 0x00, 0xdd, 0xff);
+  font_draw_string_color(12, 26, truncpath, 0xc0, 0x80, 0xff);
 
-  /* Navigation hints — keys in cyan, actions in white */
+  /* Navigation hints — keys in cyan, actions in neon green */
   {
     int hx = 12;
     int hy = menu_height - 20;
     font_set_font(menu_font[0]);
-    font_draw_string(hx, hy, "Bksp=");
+    font_draw_string_color(hx, hy, "Bksp=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 50, hy, "up");
+    font_draw_string_color(hx + 50, hy, "up", 0x00, 0xff, 0x66);
     font_set_font(menu_font[0]);
-    font_draw_string(hx + 80, hy, "Space/Enter=");
+    font_draw_string_color(hx + 80, hy, "Space/Enter=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 200, hy, "open");
+    font_draw_string_color(hx + 200, hy, "open", 0x00, 0xff, 0x66);
     font_set_font(menu_font[0]);
-    font_draw_string(hx + 250, hy, "Esc=");
+    font_draw_string_color(hx + 250, hy, "Esc=", 0x00, 0xee, 0xff);
     font_set_font(menu_font[1]);
-    font_draw_string(hx + 290, hy, "cancel");
+    font_draw_string_color(hx + 290, hy, "cancel", 0x00, 0xff, 0x66);
   }
 
   menu_dirty = 1;
@@ -1189,14 +1190,14 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   /* Draw name */
   switch (entrytype) {
   case 1:
-    /* Directories in light green */
+    /* Directories in neon green */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, namebuf, 0x40, 0xff, 0x80);
+    font_draw_string_color(x, y + 1, namebuf, 0x00, 0xff, 0x66);
     break;
   case 2:
-    /* Disk images in light cyan */
+    /* Disk images in orange */
     font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, namebuf, 0x60, 0xc0, 0xff);
+    font_draw_string_color(x, y + 1, namebuf, 0xff, 0x88, 0x00);
     break;
   case 3: {
     /* Special entries (Use this folder, <- Back) in white */
@@ -1205,9 +1206,9 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
     break;
   }
   default:
-    /* Regular files */
+    /* Regular files in light blue */
     font_set_font(menu_font[0]);
-    font_draw_string(x, y + 1, namebuf);
+    font_draw_string_color(x, y + 1, namebuf, 0x60, 0x80, 0xff);
     break;
   }
 
@@ -1215,7 +1216,7 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   if (sizebuf[0]) {
     int sw = (int)strlen(sizebuf) * 10;
     font_set_font(menu_font[0]);
-    font_draw_string_color(menu_width - 16 - sw, y + 1, sizebuf, 0x60, 0x80, 0xa0);
+    font_draw_string_color(menu_width - 16 - sw, y + 1, sizebuf, 0x40, 0x80, 0x90);
   }
 
   menu_dirty = 1;
