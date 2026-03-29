@@ -189,16 +189,9 @@ void menu_print_key(int line, char *key, char *text) {
   x = menu_width / 2 - 135;
 
   if (key[0] == 0 && text[0] == '-') {
-    /* Category header — draw centered in cyan/light blue */
-    SDL_Color hdr_color = {0x40, 0xff, 0x80, 255};
-    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &hdr_color, 1, 1);
+    /* Category header in light green */
     font_set_font(menu_font[1]);
-    font_draw_string(x - 10, y, text);
-    /* Restore white */
-    {
-      SDL_Color white = {255, 255, 255, 255};
-      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-    }
+    font_draw_string_color(x - 10, y, text, 0x40, 0xff, 0x80);
   } else if (key[0] != 0) {
     font_set_font(menu_font[1]);
     font_draw_string(x - strlen(key) * 5, y, key);
@@ -220,14 +213,8 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
     font_set_font(menu_font[0]);
     font_draw_string(x, y, "[");
     /* Key letter in white */
-    {
-      SDL_Color white = {255, 255, 255, 255};
-      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-      font_set_font(menu_font[1]);
-      font_draw_string(x + 10, y, key);
-      /* Restore white font to default */
-      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-    }
+    font_set_font(menu_font[1]);
+    font_draw_string_color(x + 10, y, key, 255, 255, 255);
     /* "] text" in cyan */
     font_set_font(menu_font[0]);
     font_draw_string(x + 10 + klen * 10, y, "] ");
@@ -240,14 +227,8 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
 }
 
 static void menu_draw_section(int x, int y, const char *title) {
-  SDL_Color cyan = {0x40, 0xff, 0x80, 255};
-  SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &cyan, 1, 1);
   font_set_font(menu_font[1]);
-  font_draw_string(x, y, title);
-  {
-    SDL_Color white = {255, 255, 255, 255};
-    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-  }
+  font_draw_string_color(x, y, title, 0x40, 0xff, 0x80);
 }
 
 void menu_print_menu(struct menu *menu) {
@@ -1005,13 +986,7 @@ void menu_print_bookmark(int slot, int col, char *text) {
     font_draw_string(x + 20, y, text);
   } else {
     /* Empty slot */
-    SDL_Color dimcol = {0x30, 0x40, 0x60, 255};
-    SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &dimcol, 1, 1);
-    font_draw_string(x + 20, y, "Add your BBS here");
-    {
-      SDL_Color yellow = {0x00, 0xcc, 0xff, 255};
-      SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &yellow, 1, 1);
-    }
+    font_draw_string_color(x + 20, y, "Add your BBS here", 0x30, 0x40, 0x60);
   }
 }
 
@@ -1124,16 +1099,8 @@ void menu_fs_draw_path(const char *path) {
     }
   }
 
-  {
-    SDL_Color pathcol = {0x00, 0xdd, 0xff, 255};
-    SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &pathcol, 1, 1);
-    font_set_font(menu_font[0]);
-    font_draw_string(12, 26, truncpath);
-    {
-      SDL_Color yellow = {0x00, 0xcc, 0xff, 255};
-      SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &yellow, 1, 1);
-    }
-  }
+  font_set_font(menu_font[0]);
+  font_draw_string_color(12, 26, truncpath, 0x00, 0xdd, 0xff);
 
   /* Navigation hints — keys in cyan, actions in white */
   {
@@ -1221,30 +1188,16 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
 
   /* Draw name */
   switch (entrytype) {
-  case 1: {
+  case 1:
     /* Directories in light green */
-    SDL_Color dircol = {0x40, 0xff, 0x80, 255};
-    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &dircol, 1, 1);
     font_set_font(menu_font[1]);
-    font_draw_string(x, y + 1, namebuf);
-    {
-      SDL_Color white = {255, 255, 255, 255};
-      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-    }
+    font_draw_string_color(x, y + 1, namebuf, 0x40, 0xff, 0x80);
     break;
-  }
-  case 2: {
+  case 2:
     /* Disk images in light cyan */
-    SDL_Color imgcol = {0x60, 0xc0, 0xff, 255};
-    SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &imgcol, 1, 1);
     font_set_font(menu_font[1]);
-    font_draw_string(x, y + 1, namebuf);
-    {
-      SDL_Color white = {255, 255, 255, 255};
-      SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &white, 1, 1);
-    }
+    font_draw_string_color(x, y + 1, namebuf, 0x60, 0xc0, 0xff);
     break;
-  }
   case 3: {
     /* Special entries (Use this folder, <- Back) in white */
     font_set_font(menu_font[1]);
@@ -1261,14 +1214,8 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   /* Draw size on the right */
   if (sizebuf[0]) {
     int sw = (int)strlen(sizebuf) * 10;
-    SDL_Color dimcol = {0x60, 0x80, 0xa0, 255};
-    SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &dimcol, 1, 1);
     font_set_font(menu_font[0]);
-    font_draw_string(menu_width - 16 - sw, y + 1, sizebuf);
-    {
-      SDL_Color restore = {0x00, 0xcc, 0xff, 255};
-      SDL_SetPalette(menu_font[0]->surface, SDL_LOGPAL, &restore, 1, 1);
-    }
+    font_draw_string_color(menu_width - 16 - sw, y + 1, sizebuf, 0x60, 0x80, 0xa0);
   }
 
   menu_dirty = 1;

@@ -122,3 +122,21 @@ void font_draw_string(int x, int y, const char *text) {
     dest.x += src.w;
   }
 }
+
+
+void font_draw_string_color(int x, int y, const char *text, int r, int g, int b) {
+  SDL_Color save, col;
+
+  /* Save current palette color */
+  save = font_current->surface->format->palette->colors[1];
+
+  /* Set new color */
+  col.r = r; col.g = g; col.b = b;
+  SDL_SetPalette(font_current->surface, SDL_LOGPAL, &col, 1, 1);
+
+  /* Draw */
+  font_draw_string(x, y, text);
+
+  /* Restore */
+  SDL_SetPalette(font_current->surface, SDL_LOGPAL, &save, 1, 1);
+}
