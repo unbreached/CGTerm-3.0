@@ -793,25 +793,26 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
 
     font_set_font(menu_font[1]);
     for (i = 0; i < gplen; i++) {
-      float hue = fmodf(t * 1.2f + i * 0.12f, 1.0f);
       int rr, gg, bb;
-      float h6 = hue * 6.0f;
-      float ff = h6 - (int)h6;
-      int qv = (int)(255 * (1.0f - ff));
-      int tv = (int)(255 * ff);
       int cy = 10 + (int)(sinf(t * 2.5f + i * 0.4f) * 5.0f);
       SDL_Color rainbow;
 
-      switch ((int)h6 % 6) {
-        case 0: rr=255; gg=tv;  bb=0;   break;
-        case 1: rr=qv;  gg=255; bb=0;   break;
-        case 2: rr=0;   gg=255; bb=tv;  break;
-        case 3: rr=0;   gg=qv;  bb=255; break;
-        case 4: rr=tv;  gg=0;   bb=255; break;
-        default:rr=255; gg=0;   bb=qv;  break;
-      }
+      float px = (float)i * 0.8f + t * 2.0f;
+      float py = t * 1.5f;
+      float v1 = sinf(px * 0.5f);
+      float v2 = sinf(py * 0.7f + px * 0.3f);
+      float v3 = sinf((px + py) * 0.4f);
+      float plasma = (v1 + v2 + v3) / 3.0f * 0.5f + 0.5f;
 
-      /* Set palette entry 1 to rainbow color for this character */
+      rr = (int)(sinf(plasma * 6.28f) * 127 + 128);
+      gg = (int)(sinf(plasma * 6.28f + 2.09f) * 127 + 128);
+      bb = (int)(sinf(plasma * 6.28f + 4.19f) * 127 + 128);
+
+      if (rr < 0) rr = 0; else if (rr > 255) rr = 255;
+      if (gg < 0) gg = 0; else if (gg > 255) gg = 255;
+      if (bb < 0) bb = 0; else if (bb > 255) bb = 255;
+
+      /* Set palette entry 1 to plasma color for this character */
       rainbow.r = rr; rainbow.g = gg; rainbow.b = bb;
       SDL_SetPalette(menu_font[1]->surface, SDL_LOGPAL, &rainbow, 1, 1);
 
@@ -906,28 +907,29 @@ int menu_select_disk_format(void) {
     menu_draw_borderbox(cx - 160, cy - 50, cx + 160, cy + 50);
 
     font_set_font(menu_font[1]);
-    font_draw_string(cx - 100, cy - 44, "Select disk format:");
+    font_draw_string_color(cx - 100, cy - 44, "Select disk format:", 0xff, 0x40, 0x80);
 
     for (i = 0; i < 3; i++) {
       if (i == selection) {
         SDL_Rect r;
-        Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x00, 0x66, 0x88, 0x80);
+        Uint32 sel = SDL_MapRGBA(menu_surface->format, 0x30, 0x50, 0xa0, 0xc0);
         r.x = cx - 150; r.y = cy - 22 + i * 18; r.w = 300; r.h = 16;
         SDL_FillRect(menu_surface, &r, sel);
       }
       font_set_font(i == selection ? menu_font[1] : menu_font[0]);
-      font_draw_string(cx - 145, cy - 20 + i * 18, formats[i]);
+      if (i == selection)
+        font_draw_string_color(cx - 145, cy - 20 + i * 18, formats[i], 0xff, 0xff, 0xff);
+      else
+        font_draw_string_color(cx - 145, cy - 20 + i * 18, formats[i], 0x60, 0x80, 0xff);
     }
 
     font_set_font(menu_font[0]);
-    font_set_font(menu_font[0]);
-    font_draw_string(cx - 145, cy + 38, "Up/Down  Enter=");
-    font_set_font(menu_font[1]);
-    font_draw_string(cx - 145 + 150, cy + 38, "OK");
-    font_set_font(menu_font[0]);
-    font_draw_string(cx - 145 + 180, cy + 38, "Esc=");
-    font_set_font(menu_font[1]);
-    font_draw_string(cx - 145 + 220, cy + 38, "cancel");
+    font_draw_string_color(cx - 145, cy + 38, "Up/Down", 0x00, 0xee, 0xff);
+    font_draw_string_color(cx - 145 + 70, cy + 38, "select  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(cx - 145 + 150, cy + 38, "Enter", 0x00, 0xee, 0xff);
+    font_draw_string_color(cx - 145 + 200, cy + 38, "OK  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(cx - 145 + 240, cy + 38, "Esc", 0x00, 0xee, 0xff);
+    font_draw_string_color(cx - 145 + 270, cy + 38, "cancel", 0x00, 0xff, 0x66);
 
     menu_dirty = SDL_TRUE;
     menu_show();
@@ -984,7 +986,7 @@ void menu_print_bookmark(int slot, int col, char *text) {
   font_draw_string_color(x, y, label, 0x00, 0xff, 0x66);
   font_set_font(menu_font[0]);
   if (text && text[0]) {
-    font_draw_string_color(x + 20, y, text, 0x60, 0x80, 0xff);
+    font_draw_string_color(x + 20, y, text, 0x00, 0xee, 0xff);
   } else {
     /* Empty slot */
     font_draw_string_color(x + 20, y, "Add your BBS here", 0x50, 0x40, 0x70);
