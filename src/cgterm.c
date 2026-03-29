@@ -295,13 +295,6 @@ int main(int argc, char *argv[]) {
 	print("                    ");
       }
       print("           \x96pRESS\x9e eSC\x96 FOR MENU\x05\x0d\x0d");
-      print("\x96" "dOWNLOAD: \x05");
-      print_ascii((const unsigned char *)cfg_dldir);
-      ffd2(0x0d);
-      print("\x96" "uPLOAD:   \x05");
-      print_ascii((const unsigned char *)cfg_xferdir);
-      ffd2(0x0d);
-      ffd2(0x0d);
     }
 
   } else if (argc == 1 || argc == 2) {
