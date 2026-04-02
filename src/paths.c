@@ -4,6 +4,11 @@
 #include <limits.h>
 #include "paths.h"
 
+/* snprintf truncation is intentional and safe here — paths are best-effort */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
+
 #ifdef WINDOWS
 #include <windows.h>
 #define DIRCHAR '\\'
@@ -18,9 +23,10 @@
 #ifndef PATH_MAX
 #define PATH_MAX 1024
 #endif
+#define PATH_BUF (PATH_MAX + 256)
 
-static char g_asset_root[PATH_MAX] = ".";
-static char g_system_config_dir[PATH_MAX] = "/etc";
+static char g_asset_root[PATH_BUF] = ".";
+static char g_system_config_dir[PATH_BUF] = "/etc";
 
 static void dirname_inplace(char *path) {
   char *s1 = strrchr(path, '/');
@@ -53,7 +59,7 @@ static int file_exists(const char *path) {
 }
 
 static int dir_has_asset(const char *dir, const char *testfile) {
-  char tmp[PATH_MAX];
+  char tmp[PATH_BUF];
 #ifdef WINDOWS
   snprintf(tmp, sizeof(tmp), "%s\\%s", dir, testfile);
 #else
@@ -114,8 +120,8 @@ void path_build_asset(char *out, size_t outsz, const char *name) {
 }
 
 int path_init(const char *argv0) {
-  char exe_dir[PATH_MAX] = ".";
-  char candidate[PATH_MAX];
+  char exe_dir[PATH_BUF] = ".";
+  char candidate[PATH_BUF];
   const char *env = getenv("CGTERM_ASSET_DIR");
 
   if (env && *env) {
@@ -141,7 +147,7 @@ int path_init(const char *argv0) {
     return 1;
   }
   {
-    char parent[PATH_MAX];
+    char parent[PATH_BUF];
     snprintf(parent, sizeof(parent), "%s", exe_dir);
     dirname_inplace(parent);
     snprintf(candidate, sizeof(candidate), "%s\\assets", parent);
@@ -156,7 +162,7 @@ int path_init(const char *argv0) {
   return 1;
 #elif defined(__APPLE__)
   if (strstr(exe_dir, ".app/Contents/MacOS")) {
-    char contents_dir[PATH_MAX];
+    char contents_dir[PATH_BUF];
     snprintf(contents_dir, sizeof(contents_dir), "%s", exe_dir);
     dirname_inplace(contents_dir);
     snprintf(g_asset_root, sizeof(g_asset_root), "%s/Resources", contents_dir);
@@ -171,7 +177,7 @@ int path_init(const char *argv0) {
   }
   /* check parent directory (e.g. bin/ -> project root) */
   {
-    char parent[PATH_MAX];
+    char parent[PATH_BUF];
     snprintf(parent, sizeof(parent), "%s", exe_dir);
     dirname_inplace(parent);
     snprintf(candidate, sizeof(candidate), "%s/assets", parent);
@@ -193,7 +199,7 @@ int path_init(const char *argv0) {
   }
   /* check parent directory (e.g. bin/ -> project root) */
   {
-    char parent[PATH_MAX];
+    char parent[PATH_BUF];
     snprintf(parent, sizeof(parent), "%s", exe_dir);
     dirname_inplace(parent);
     snprintf(candidate, sizeof(candidate), "%s/assets", parent);

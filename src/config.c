@@ -47,6 +47,9 @@ char cfg_dldir[256];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
 int cfg_splash = 1;
+int cfg_modem = 0;
+int cfg_splashfont = 6;  /* C64 Pro Mono */
+int cfg_menufont = 8;  /* Edit Undo */
 #ifdef WINDOWS
 char cfg_bookmarkfile[256] = "cgterm-bookmarks.cfg";
 #else
@@ -151,12 +154,19 @@ void real_cfg_change_dir(char *dirbuffer, const char *newdir) {
     return;
   }
 #ifdef WINDOWS
+  /* Strip brackets from drive entries like [D:\] */
+  if (n > 2 && newdirbuf[0] == '[' && newdirbuf[n-1] == ']') {
+    memmove(newdirbuf, newdirbuf + 1, n - 2);
+    newdirbuf[n - 2] = 0;
+    n -= 2;
+    newdir = newdirbuf;
+  }
   if (n > 0 && newdir[n - 1] == DIRCHAR) {
     newdirbuf[n - 1] = 0;
     n--;
   }
   if (n > 1 && newdir[1] == ':' && isalpha((unsigned char)newdir[0])) {
-    snprintf(dirbuffer, 256, "%s", newdir);
+    snprintf(dirbuffer, 256, "%s\\", newdir);
     return;
   }
 #else
@@ -406,6 +416,21 @@ signed int cfg_readconfig(char *configfile) {
             return(-1);
         }
 
+    } else if (strcmp(key, "splashfont") == 0) {
+        cfg_splashfont = strtol(value, (char **)NULL, 10);
+        if (cfg_splashfont < 0 || cfg_splashfont > 20) cfg_splashfont = 0;
+
+    } else if (strcmp(key, "menufont") == 0) {
+        cfg_menufont = strtol(value, (char **)NULL, 10);
+        if (cfg_menufont < 0 || cfg_menufont > 20) cfg_menufont = 0;
+
+    } else if (strcmp(key, "modem") == 0) {
+        if (strcmp("yes", value) == 0) {
+            cfg_modem = 1;
+        } else if (strcmp("no", value) == 0) {
+            cfg_modem = 0;
+        }
+
 	} else if (strcmp(key, "zoom") == 0) {
 	  cfg_zoom = strtol(value, (char **)NULL, 10);
 	  if (cfg_zoom <= 0 || cfg_zoom > 8) {
@@ -487,7 +512,24 @@ void cfg_writeconfig(char **data, char *configfile) {
 }
 
 void cfg_disable_splash(void) {
+    FILE *cf;
+    char fname[512];
+
     cfg_splash = 0;
+
+    /* Write the setting to config file so it persists */
+#ifdef WINDOWS
+    snprintf(fname, sizeof(fname), "cgterm.cfg");
+#else
+    snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
+#endif
+
+    /* Append splash = no to the config file */
+    cf = fopen(fname, "a");
+    if (cf) {
+        fprintf(cf, "\nsplash = no\n");
+        fclose(cf);
+    }
 }
 
 void cfg_debug(const char *s){
@@ -539,6 +581,109 @@ void cfg_save_bookmark(char *alias, char *host, int port) {
     fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
     fclose(bf);
   }
+}
+
+
+/* ---- Bookmark notes ----
+ * Stored in ~/.cgterm-notes as:
+ *   [host:port]
+ *   line 1 of note
+ *   line 2 of note
+ *   [next_host:port]
+ *   ...
+ */
+
+static char notes_path[512];
+static int notes_path_inited = 0;
+
+static void cfg_notes_path(void) {
+  if (!notes_path_inited) {
+#ifdef WINDOWS
+    snprintf(notes_path, sizeof(notes_path), "cgterm-notes.cfg");
+#else
+    snprintf(notes_path, sizeof(notes_path), "%s/.cgterm-notes", cfg_homedir);
+#endif
+    notes_path_inited = 1;
+  }
+}
+
+/* Read note for a given host:port. Returns static buffer or "" if none. */
+static char note_buf[2048];
+
+const char *cfg_get_bookmark_note(const char *host, int port) {
+  FILE *f;
+  char key[256], line[256];
+  int found = 0;
+
+  cfg_notes_path();
+  note_buf[0] = 0;
+
+  snprintf(key, sizeof(key), "[%s:%d]", host, port);
+
+  if ((f = fopen(notes_path, "r")) == NULL) return note_buf;
+
+  while (fgets(line, sizeof(line), f)) {
+    /* Strip trailing newline */
+    int len = strlen(line);
+    while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
+
+    if (line[0] == '[') {
+      if (found) break;  /* hit next section, done */
+      if (strcmp(line, key) == 0) found = 1;
+    } else if (found) {
+      if (strlen(note_buf) + strlen(line) + 2 < sizeof(note_buf)) {
+        if (note_buf[0]) strcat(note_buf, "\n");
+        strcat(note_buf, line);
+      }
+    }
+  }
+  fclose(f);
+  return note_buf;
+}
+
+
+/* Save/overwrite note for a given host:port */
+void cfg_set_bookmark_note(const char *host, int port, const char *note) {
+  FILE *f, *tmp;
+  char key[256], line[256];
+  char tmppath[520];
+  int skipping = 0;
+
+  cfg_notes_path();
+  snprintf(key, sizeof(key), "[%s:%d]", host, port);
+  snprintf(tmppath, sizeof(tmppath), "%s.tmp", notes_path);
+
+  tmp = fopen(tmppath, "w");
+  if (!tmp) return;
+
+  /* Copy existing notes, skipping the one we're replacing */
+  f = fopen(notes_path, "r");
+  if (f) {
+    while (fgets(line, sizeof(line), f)) {
+      if (line[0] == '[') {
+        int len = strlen(line);
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
+        if (strcmp(line, key) == 0) {
+          skipping = 1;
+          continue;
+        } else {
+          skipping = 0;
+        }
+        fprintf(tmp, "%s\n", line);
+      } else if (!skipping) {
+        fputs(line, tmp);
+      }
+    }
+    fclose(f);
+  }
+
+  /* Append new note */
+  if (note && note[0]) {
+    fprintf(tmp, "%s\n%s\n", key, note);
+  }
+
+  fclose(tmp);
+  rename(tmppath, notes_path);
 }
 
 

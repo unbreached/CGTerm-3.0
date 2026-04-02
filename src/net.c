@@ -15,11 +15,14 @@
 #include <ctype.h>
 #include <errno.h>
 #include <time.h>
+#include <SDL.h>
 #include "net.h"
 #include "config.h"
+#include "gfx.h"
 
 #if defined(__WIN32__) || defined(WINDOWS)
 /* Windows */
+typedef int socklen_t;
 #define WOULDBLOCK() (WSAGetLastError() == WSAEWOULDBLOCK)
 #define CLOSESOCKET(s)  closesocket(s)
 #else
@@ -86,19 +89,84 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
 
   buflen = 0;
   bufptr = buffer;
+
   if (net_status) net_status(0, "Connecting...");
-  if (connect(conn, (struct sockaddr *)&address, sizeof(address)) == 0) {
+
+  /* Non-blocking connect with select() — allows ESC to cancel and
+   * keeps the UI responsive during connection attempts */
+  {
 #if defined(__WIN32__) || defined(WIN32) || defined(WINDOWS)
-    ioctlsocket(conn, FIONBIO, &nonblock);
+    u_long nb = 1;
+    ioctlsocket(conn, FIONBIO, &nb);
 #else
     fcntl(conn, F_SETFL, O_NONBLOCK);
 #endif
-    if (net_status) net_status(1, "Connected");
-    cfg_log_connection(host, port);
-    return(0);
-  } else {
-    if (net_status) net_status(2, strerror(errno));
-    return(1);
+
+    connect(conn, (struct sockaddr *)&address, sizeof(address));
+
+    /* Poll with select() — 10 second timeout, check ESC every 200ms */
+    {
+      fd_set wfds;
+      struct timeval tv;
+      int elapsed = 0;
+      int connected = 0;
+
+      while (elapsed < 10000) {
+        SDL_Event ev;
+
+        FD_ZERO(&wfds);
+        FD_SET(conn, &wfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 200000;  /* 200ms */
+
+        if (select((int)conn + 1, NULL, &wfds, NULL, &tv) > 0) {
+          /* Check if connect succeeded */
+          int err = 0;
+          socklen_t errlen = sizeof(err);
+          getsockopt(conn, SOL_SOCKET, SO_ERROR, (void *)&err, &errlen);
+          if (err == 0) {
+            connected = 1;
+            break;
+          } else {
+            /* Connect failed */
+            break;
+          }
+        }
+
+        elapsed += 200;
+
+        /* Pump SDL events — check for ESC to cancel */
+        while (SDL_PollEvent(&ev)) {
+          if (ev.type == SDL_QUIT) exit(0);
+          if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+            CLOSESOCKET(conn);
+            conn = INVALID_SOCKET;
+            if (net_status) net_status(2, "Cancelled");
+            return(1);
+          }
+        }
+
+        /* Update screen so it doesn't look frozen */
+        gfx_vbl();
+      }
+
+      if (connected) {
+        /* Keep non-blocking for recv */
+        if (net_status) net_status(1, "Connected");
+        cfg_log_connection(host, port);
+        {
+          char wintitle[128];
+          snprintf(wintitle, sizeof(wintitle), "CGTerm - %s:%d", host, port);
+          gfx_set_title(wintitle);
+        }
+        return(0);
+      } else {
+        CLOSESOCKET(conn);
+        conn = INVALID_SOCKET;
+        if (net_status) net_status(2, "Connection timed out");
+        return(1);
+      }
+    }
   }
 }
 
@@ -126,6 +194,13 @@ static signed int net_raw_byte(void) {
   }
   --buflen;
   return(*bufptr++);
+}
+
+
+/* Raw byte receive — no Telnet IAC filtering.
+ * Used by file transfer protocols that need all bytes including 0xFF. */
+signed int net_receive_raw(void) {
+  return net_raw_byte();
 }
 
 
@@ -167,7 +242,7 @@ signed int net_receive(void) {
 
 void net_send(unsigned char c) {
   if (ISCONNECTED()) {
-    send(conn, &c, 1, 0);
+    send(conn, (const char *)&c, 1, 0);
   }
 }
 
@@ -184,6 +259,7 @@ void net_disconnect(void) {
     CLOSESOCKET(conn);
     conn = INVALID_SOCKET;
     buflen = 0;
+    gfx_set_title("CGTerm");
   }
 }
 

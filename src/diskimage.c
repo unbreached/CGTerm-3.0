@@ -53,13 +53,16 @@ ErrorMessage error_msg[] = {
 };
 
 
-/* convert to rawname */
+/* convert to rawname (ASCII to PETSCII: lowercase→uppercase) */
 int di_rawname_from_name(unsigned char *rawname, char *name) {
   int i;
 
   memset(rawname, 0xa0, 16);
   for (i = 0; i < 16 && name[i]; ++i) {
-    rawname[i] = name[i];
+    unsigned char c = (unsigned char)name[i];
+    /* Convert lowercase ASCII to uppercase PETSCII */
+    if (c >= 'a' && c <= 'z') c -= 32;
+    rawname[i] = c;
   }
   return(i);
 }
@@ -1270,6 +1273,7 @@ int di_delete(DiskImage *di, const unsigned char *rawpattern, FileType type) {
     while ((rde = find_file_entry(di, rawpattern, type))) {
       free_chain(di, rde->startts);
       rde->type = 0;
+      di->modified = 1;
       ++delcount;
     }
     if (delcount) {
@@ -1292,6 +1296,7 @@ int di_rename(DiskImage *di, const unsigned char *oldrawname, const unsigned cha
 
   if ((rde = find_file_entry(di, oldrawname, type))) {
     memcpy(rde->rawname, newrawname, 16);
+    di->modified = 1;
     return(set_status(di, 0, 0, 0));
   } else {
     return(set_status(di, 62, 0, 0));

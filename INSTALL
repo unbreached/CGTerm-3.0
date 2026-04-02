@@ -1,0 +1,147 @@
+ ▄▄▄▄▄▄▄▄                                            ░                  ▄▄▄▄▄▄
+ █ ▄▄▄▄ ▓░    ░░▓▓▄▄▄▄▄▄    ░    ░          ▄▄▒▒   ░▄▓▀ ░░ ▄      ▄    ▄▀ ░░ █
+ █ ████  ▄▄▄▄   ▀▀ ▄▄▄ ▀▄   ▓    ▓ ▀▀▀▀▀▓▄▄▄▄ ▀▓▄░▒▓▀ ▄▄▓▓  █▄ ▄█▀   ▄▀ ▄▄▓▓ █
+ █ ████▄▄▄▄▄▄▀▄  ▄▀▄██▓▄ ▀▄  ▀▄  █ ▒▒▒ ▄▀▄████▄░▀▓▀ ▄█████   ██▀    ▀ ▄█████ █░
+ █ ████████████ ▀▄███████▄ ▀▄  ▀▄█ ███▀▄█████████ ▄███████ ▄█▀▀█▄   ▄███████ ▀▓
+▄▀▄████▒▒▀█████ ▓█████████▓▄ ▀▄    ▐█████  ▀▀▓███▄███▀████▀  ░░░▀▄ ▄████████░ █
+ ▐█████   ▀████░████▓ ▀▓█████▄ ▀▄  ▐█████    ░▀█████ █████▄██▓▓▓   ██▓  ████▓ ▓
+ ██████   ░████▓████░  ░██████▓▄ ▀▄ █████      ████  ██████████▌  ▄██░ ██████ ░
+ ██████▄▄▄▓█████████     ▓███████▄ ▀█████▌  ░ ▐███   ██▀▀▀▀████▌ ░██▌  ▓▓▓▀▀▀
+ ▓▓▓▓▓██████████████▄█▓▀ ░███▀█████▄ █████▄█▓▀▐███░  ▀▀▀▀▀ ████▌ ▓██▌  ▒▒▒▀▀▀░░
+ ░░░░░▀▀▀▀▀▀█████████▀░    ██▓ ▀███████████▀ ▄ ███▓▄▄▄▄▄   █████ ▐███▄▄  ▄███▓▓
+           ░███▓██▌▀    ░░████▓  ▀▓█████▌▀ ▄▀  ▀██████████▄▓████  ▓████████████
+   ▒▒▒▒▒  ░▓███░███▌  ░░▓▓█████░ ▀▄▀█████▌   ▄▄▄▄   ▀▀█████░████▌ ░  ▀▀▀█████
+   █████  ▓███▀ ███▌ ▄▓▓███████▓   ▀▄▀▓██▌ ▄█████    ▄████▀  ████░  ▄▀ ▄████▀█
+   ▀████  ███▀  ███▄▓████▀██ ███    ▓█▄██▄██████▀ ░▄█████▓ █  ███▓ ▀ ▄▓█████ ▓
+ ▄█ ████▒▒██▀▄▀ ███████▀▄▀██ ███    ░████▓▓███▀  ▄▓█████▀▄▀  ▄ ███ ▄██████▀▄▀░
+  █ ███████▓▀   ▓▓▓▀▀▄▄▀  ▓▓ ▀▓▓     ▀▀▀▀░░██████████▓▓▒▒    █ ████████▓▀▄▀
+  █ ██████▀░    ░░░       ░░  ░░     ▄██▀  ▀▀▓▓█████▀░░      ▀▀▀▀▀▀▀▀▒▒░▓  ▄▀
+  █ ▓▓▀▀                               ▄     ░░              ▄▄███▀     ▒    ▄
+░ █▄▄▄▓▓  G E N E S I S  P R O J E C T - C64 Scene MOD of CGterm        ░     ■
+▓▄▄   ░░ ■■                                                  ■■■
+
+
+
+//INSTALLATION GUIDE
+==================================================
+  CGTerm 3.0 - ULTiMATE C64 BBS WAREZ SCENE EDiTiON
+==================================================
+
+
+//REQUIREMENTS
+--------------------------------------------------
+- SDL 1.2         (required)
+- SDL_mixer 1.2   (optional, for XM/MOD music)
+- C compiler      (gcc or clang)
+- make
+
+
+//QUICK INSTALL (all platforms)
+--------------------------------------------------
+This is on your own, if you dont know what you are
+doing please use the installation scripts below:
+
+compile:>  make && sudo make install
+
+
+
+//LINUX
+--------------------------------------------------
+Using the install script (recommended):
+
+    ./scripts/install-linux.sh
+
+Or manually:
+
+    sudo apt install libsdl1.2-dev           # Debian/Ubuntu
+    sudo apt install libsdl-mixer1.2-dev     # optional, for music
+    make && sudo make install
+
+Installs to:
+
+    /usr/local/bin/cgterm
+    /usr/local/bin/cgchat
+    /usr/local/bin/cgedit
+    /usr/local/share/cgterm/assets/
+
+
+//macOS
+--------------------------------------------------
+Using the install script (recommended):
+
+    ./scripts/install-macos.sh
+
+This builds a native .app bundle and installs to /Applications.
+
+Dependencies (Homebrew):
+
+    brew install sdl
+
+For music support (optional):
+
+    Download SDL_mixer 1.2.12 source from libsdl.org
+    ./configure && make && make install
+
+The .app bundle is created at:
+
+    dist/CGTerm.app
+
+
+//WINDOWS
+--------------------------------------------------
+Pre-built binaries are provided in the zip file.
+Just unzip and run cgterm.exe.
+
+To cross-compile from macOS/Linux:
+
+    ./scripts/cross-compile-win.sh
+
+Output:
+
+    dist/win32/           (portable, unzip and run)
+    dist/CGTerm-3.0-win32.zip
+
+
+//KEYBOARD LAYOUTS
+--------------------------------------------------
+Select a keyboard layout matching your system:
+
+    cgterm -k assets/mac-se-c64.kbd
+    cgterm -k assets/mac-us-c64.kbd
+    cgterm -k assets/linux-se-c64.kbd
+    cgterm -k assets/linux-us-c64.kbd
+    cgterm -k assets/win-se-c64.kbd
+    cgterm -k assets/win-us-c64.kbd
+
+Or set it in your config file (~/.cgtermrc):
+
+    keyboard = mac-us-c64.kbd
+
+
+//CONFIG FILE
+--------------------------------------------------
+Linux/macOS:  ~/.cgtermrc
+Windows:      cgterm.cfg (same directory as exe)
+
+Example settings:
+
+    keyboard = mac-us-c64.kbd
+    columns = 40
+    zoom = 2
+    modem = yes
+    splashfont = 5
+    menufont = 7
+
+
+//PROGRAMS BUILT
+--------------------------------------------------
+cgterm    Main BBS terminal client
+cgchat    Chat utility
+cgedit    PETSCII editor
+
+
+//DEFAULT INSTALL PATHS
+--------------------------------------------------
+Linux:    /usr/local/bin, /usr/local/share/cgterm/assets
+macOS:    /Applications/CGTerm.app
+Windows:  Portable (run from any directory)

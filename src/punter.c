@@ -365,12 +365,10 @@ int punter_recv(void) {
 
   if (punter_handshake("S/B", "SYN")) {
     punter_handshake("SYN", "S/B");
-    menu_update_xfer_progress("Finished", xfer_saved_bytes, 0);
-    gfx_vbl();
-  } else {
-    menu_update_xfer_progress("Done, but handshake timed out", xfer_saved_bytes, 0);
-    gfx_vbl();
   }
+
+  menu_update_xfer_progress("Transfer complete", xfer_saved_bytes, 0);
+  gfx_vbl();
   return(1);
 }
 

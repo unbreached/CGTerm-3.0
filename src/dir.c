@@ -4,6 +4,9 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#ifdef WINDOWS
+#include <windows.h>
+#endif
 #include "diskimage.h"
 #include "dir.h"
 
@@ -49,6 +52,7 @@ Dir *dir_read_image(DiskImage *di) {
   dir->numentries = 0;
   dir->title = NULL;
   dir->firstentry = NULL;
+  dir->blocksfree = di->blocksfree;
 
   if (di_read(fh, buffer, 254) != 254) {
     printf("BAM read failed\n");
@@ -57,27 +61,54 @@ Dir *dir_read_image(DiskImage *di) {
 
   dir->title = make_name(di_title(di));
 
-  // add <- Back (go back)
-  if ((dir->firstentry = malloc(sizeof(*(dir->firstentry)))) == NULL) {
-    goto ReadDirDone;
+  /* Add "[ Use this image ]" to select the disk image as target */
+  {
+    DirEntry *use_entry;
+    if ((use_entry = malloc(sizeof(*use_entry))) != NULL) {
+      use_entry->prev = NULL;
+      use_entry->next = NULL;
+      if ((use_entry->name = malloc(20))) {
+        strcpy(use_entry->name, "[ Use this folder ]");
+      }
+      memset(use_entry->rawname, 0xa0, 16);
+      use_entry->type = T_SEQ;
+      use_entry->closed = 1;
+      use_entry->locked = 0;
+      use_entry->track = 0;
+      use_entry->sector = 0;
+      use_entry->size = 0;
+      use_entry->tagged = 0;
+      use_entry->mtime = 0;
+      dir->firstentry = use_entry;
+      entry = use_entry;
+      dir->numentries = 1;
+    }
   }
-  entry = dir->firstentry;
-  entry->prev = NULL;
-  entry->next = NULL;
-  if ((entry->name = malloc(8))) {
-    strcpy(entry->name, "<- Back");
+
+  /* Add <- Back (go back) */
+  {
+    DirEntry *back_entry;
+    if ((back_entry = malloc(sizeof(*back_entry))) != NULL) {
+      back_entry->prev = entry;
+      back_entry->next = NULL;
+      if (entry) entry->next = back_entry;
+      if ((back_entry->name = malloc(8))) {
+        strcpy(back_entry->name, "<- Back");
+      }
+      memset(back_entry->rawname, 0xa0, 16);
+      back_entry->rawname[0] = '.';
+      back_entry->type = T_DIR;
+      back_entry->closed = 1;
+      back_entry->locked = 0;
+      back_entry->track = 0;
+      back_entry->sector = 0;
+      back_entry->size = 0;
+      back_entry->tagged = 0;
+      back_entry->mtime = 0;
+      entry = back_entry;
+      dir->numentries = 2;
+    }
   }
-  memset(entry->rawname, 0xa0, 16);
-  entry->rawname[0] = '.';
-  entry->type = T_DIR;
-  entry->closed = 1;
-  entry->locked = 0;
-  entry->track = 0;
-  entry->sector = 0;
-  entry->size = 0;
-  entry->tagged = 0;
-  entry->mtime = 0;
-  dir->numentries = 1;
 
   while (di_read(fh, buffer, 254) == 254) {
     for (offset = -2; offset < 254; offset += 32) {
@@ -144,6 +175,7 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
   dir->numentries = 0;
   dir->title = NULL;
   dir->firstentry = NULL;
+  dir->blocksfree = -1;  /* not a disk image */
 
   if ((dir->title = malloc(strlen(path) + 1))) {
     strcpy(dir->title, path);
@@ -198,6 +230,45 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       dir->numentries = 2;
     }
   }
+
+#ifdef WINDOWS
+  /* Add available drive letters so users can switch drives */
+  {
+    DWORD drives = GetLogicalDrives();
+    int d;
+    for (d = 0; d < 26; d++) {
+      if (drives & (1 << d)) {
+        char drivename[8];
+        DirEntry *de;
+        snprintf(drivename, sizeof(drivename), "%c:\\", 'A' + d);
+        /* Skip if this is already the current drive */
+        if (path[0] && ((path[0] == 'A' + d) || (path[0] == 'a' + d)) && path[1] == ':')
+          continue;
+        de = malloc(sizeof(*de));
+        if (de) {
+          de->prev = entry;
+          de->next = NULL;
+          if (entry) entry->next = de;
+          if ((de->name = malloc(8))) {
+            snprintf(de->name, 8, "[%s]", drivename);
+          }
+          memset(de->rawname, 0xa0, 16);
+          de->rawname[0] = 'A' + d;
+          de->type = T_DIR;
+          de->closed = 1;
+          de->locked = 0;
+          de->track = 0;
+          de->sector = 0;
+          de->size = 0;
+          de->tagged = 0;
+          de->mtime = 0;
+          entry = de;
+          dir->numentries++;
+        }
+      }
+    }
+  }
+#endif
 
   while ((dirent = readdir(dirhandle))) {
     namelen = strlen(dirent->d_name);

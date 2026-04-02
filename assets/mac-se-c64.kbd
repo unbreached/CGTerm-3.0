@@ -1,8 +1,12 @@
 # macOS + Swedish host keyboard -> C64-style mapping
-# Best-effort profile based on the existing macOS key table plus the
-# original swedish.kbd intent. The alpha/numeric/f-key rows are stable;
-# the special symbol keys are the ones most likely to need live tweaking.
+#
+# Character-based mapping: each PC key sends the PETSCII character
+# that matches what's printed on the key, not positional C64 layout.
+#
+# Format: <c64_key_name> <SDL_keycode>
+# Use keyboard test mode (ESC -> K -> T) to find SDL codes.
 
+# Top row: numbers
 arrowleft	96
 one		49
 two		50
@@ -14,12 +18,16 @@ seven		55
 eight		56
 nine		57
 zero		48
+
+# Swedish Mac: +/? key is SDL 93 (right bracket position)
+# SDL 45 = minus key, SDL 61 = equals key
 plus		93
-minus		61
+minus		45
 pound		127
 home		278
 del		8
 
+# Letters (same on all layouts)
 q		113
 w		119
 e		101
@@ -44,11 +52,17 @@ h		104
 j		106
 k		107
 l		108
+
+# Swedish Mac: colon/semicolon and special symbols
+# SDL 59 = semicolon key position
+# SDL 47 = slash key position on Swedish Mac (/ key)
+# SDL 61 = equals key position
 colon		59
-semicolon	47
-equal		272
+semicolon	39
+equal		61
 return		13
 
+# Bottom row
 z		122
 x		120
 c		99
@@ -58,7 +72,7 @@ n		110
 m		109
 comma		44
 dot		46
-slash		45
+slash		47
 down		274
 right		275
 

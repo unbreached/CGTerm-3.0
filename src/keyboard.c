@@ -17,7 +17,7 @@ void (*focus_handler[10])(SDL_keysym *);
 Focus kbd_focus;
 static SDL_bool seqfile_open = SDL_FALSE;
 static FILE *seqfile;
-static unsigned char keytable[SDLK_LAST][5];
+unsigned char keytable[SDLK_LAST][5];
 
 typedef struct {
   const char *name;
@@ -176,7 +176,7 @@ static const SymbolicKeyMap symbolic_keys[] = {
   {"one",        0x31, 0x21, 0x81, 0x90},
   {"arrowleft",  0x5F, 0x5F, 0x5F, 0x06},
   {"*control*",  0x00, 0x00, 0x00, 0x00},
-  {"two",        0x32, 0x40, 0x95, 0x05},
+  {"two",        0x32, 0x22, 0x95, 0x05},
   {"space",      0x20, 0xA0, 0xA0, 0x00},
   {"*commodore*",0x00, 0x00, 0x00, 0x00},
   {"q",          0x51, 0xD1, 0xAB, 0x11},
@@ -203,6 +203,47 @@ static void apply_mapping(int value, unsigned char unshifted, unsigned char shif
   keytable[value][2] = cbm;
   keytable[value][3] = control;
 }
+
+/* Reload keyboard layout from file without reinitializing SDL/UI */
+int kbd_reload(char *keyboardcfg) {
+  char linebuf[256];
+  int value, unshifted, shifted, cbm, control;
+  char keyname[64];
+  const SymbolicKeyMap *map;
+  FILE *in;
+  int i;
+
+  memset(keytable, 0, sizeof(keytable));
+  for (i = 0; i < (int)(sizeof(DefaultKybdMapping) / sizeof(DefaultKybdMapping[0])); ++i) {
+    apply_mapping(DefaultKybdMapping[i][0],
+                  (unsigned char)DefaultKybdMapping[i][1],
+                  (unsigned char)DefaultKybdMapping[i][2],
+                  (unsigned char)DefaultKybdMapping[i][3],
+                  (unsigned char)DefaultKybdMapping[i][4]);
+  }
+
+  if ((in = fopen(keyboardcfg, "r")) == NULL) {
+    printf("Couldn't open %s\n", keyboardcfg);
+    return 1;
+  }
+  while (fgets(linebuf, sizeof(linebuf), in) != NULL) {
+    if (linebuf[0] == '#' || linebuf[0] == '\n' || linebuf[0] == '\r') {
+      continue;
+    }
+    if (sscanf(linebuf, "%d %d %d %d %d", &value, &unshifted, &shifted, &cbm, &control) == 5) {
+      apply_mapping(value, (unsigned char)unshifted, (unsigned char)shifted,
+                    (unsigned char)cbm, (unsigned char)control);
+    } else if (sscanf(linebuf, "%63s %d", keyname, &value) == 2) {
+      map = find_symbolic_key(keyname);
+      if (map != NULL) {
+        apply_mapping(value, map->unshifted, map->shifted, map->cbm, map->control);
+      }
+    }
+  }
+  fclose(in);
+  return 0;
+}
+
 
 int kbd_init(char *keyboardcfg) {
   char linebuf[256];
@@ -352,7 +393,11 @@ int kbd_getkey() {
             case SDL_KEYDOWN:
                 
                 if (kbd_focus == FOCUS_TERM) {
-                    if (event.key.keysym.mod & KMOD_META) {
+                    /* ESC always opens menu, regardless of modifiers */
+                    if (event.key.keysym.sym == SDLK_ESCAPE) {
+                        ui_menu();
+                        return 0;
+                    } else if (event.key.keysym.mod & KMOD_META) {
                         ui_metakey(&event.key.keysym);
                     } else if ((event.key.keysym.mod & KMOD_CTRL) && event.key.keysym.sym == SDLK_v) {
                         clipboard_paste();

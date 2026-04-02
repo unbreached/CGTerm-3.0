@@ -1,0 +1,150 @@
+
+CGTERM 3.0 ::: ULTiMATE C64 BBS WAREZ SCENE EDiTiON
+
+    scene code by...... m00p
+    music by........... Mr.Death
+    support by......... mermaid
+    ideas by........... Larry
+    tested by.......... hedning
+    original code by... MagerValp
+
+
+==================================================
+  ABOUT THiS RELEASE
+==================================================
+
+CGTerm is the legendary C64 BBS terminal originally written by
+MagerValp. For years it has been the one and only client for
+connecting to the elite Commodore 64 BBSes around the world.
+
+This release is a major overhaul by Genesis Project. We have
+listened to the sceners and this release is the result of
+feedback, ideas and experimentation from sysops, swappers
+and elites across the scene.
+
+The goal was simple: keep the soul of CGTerm, clean the code,
+modernize the foundation, and add the features the scene has
+been asking for.
+
+Oldschool terminal. Modern systems.
+
+
+==================================================
+  KEY FEATURES
+==================================================
+
+  DEMO SPLASH SCREEN
+  - Full demoscene-style intro with cycling effects
+  - Vectorballs, plasma, fire, rotozoom, wireframe morph
+  - Smooth-zooming "CGTERM" text with per-character wobble
+  - Genesis Project plasma title
+  - Sine wave scroller with scene greetings
+  - XM/MOD tracker music playback (SDL_mixer)
+  - CRT power-off effect when quitting
+
+  OLDSKOOL MODEM SiMULATiON
+  - Toggle on/off from the menu (M = Oldskool Mode)
+  - Simulates a real Hayes modem connection sequence
+  - Someone "types" ATZ, OK, ATDT with random delays and typos
+  - Authentic V.34 carrier sounds generated programmatically:
+    dial tone, DTMF digits, ringing, carrier screech
+  - Displays CONNECT 9600 before the real TCP connection
+  - Press ESC to abort (NO CARRIER)
+
+  TRANSFER PROTOCOLS
+  - Punter upload and download (verified against C*BASE 3.3.8)
+  - Multi Punter batch upload and download
+  - Rainbow protocol upload and download
+  - XMODEM, XMODEM-CRC, XMODEM-1K
+  - Filename conversion: .prg <-> ,p  .seq <-> ,s  .usr <-> ,u
+  - Upload files directly from D64/D71/D81 disk images
+  - Download files into D64/D71/D81 disk images
+  - Disk full detection with block count before writing
+  - Transfer progress UI with protocol, filename, block count
+
+  DiSK IMAGE SUPPORT
+  - Create new D64 (170K), D71 (340K), D81 (800K) images
+  - Browse and select files inside disk images
+  - Set disk images as upload/download target
+  - PETSCII-correct disk labels
+  - Disk space checking before download
+
+  FONT SYSTEM
+  - 10 header fonts and 9 menu body fonts included
+  - Font selector in settings (Z = Font settings)
+  - Fonts: Maesto, Blackentina 4F, Sportifity, Playful Boxes,
+    Youre Gone, PXFX Disco, Edit Undo, Ed Undot, Nano Pix,
+    Nihonium 113, Homespun, Welbut, Blrrpixs, Racquetball, PX10
+  - Custom fonts: convert any TTF/OTF with tools/make_font.py
+  - Colored text rendering for menus and file selector
+
+  BOOKMARK SYSTEM
+  - 40 bookmark slots in two columns
+  - Add, edit, delete bookmarks
+  - Notes per bookmark (N = notes) with free text editor
+  - Quick connect with number keys 0-9
+  - Separate bookmark file (~/.cgterm-bookmarks)
+
+  MENU & Ui
+  - Full overlay menu system with categorized sections
+  - Colored file selector: DIR: in cyan, IMG: in orange
+  - File browser with directory navigation and disk image support
+  - Tag-and-send file selector for Multi Punter uploads
+  - Timed auto-dismiss messages (5 second timeout)
+  - WAREZ DiR path display in main menu
+  - Merged upload/download path (J = Set path)
+
+  NETWORKiNG
+  - Telnet IAC filtering for clean terminal display
+  - Raw byte mode for transfer protocols (no IAC interference)
+  - Connection history logging
+  - Auto-reconnect support
+
+  KEYBOARD & INPUT
+  - C64 keyboard layout profiles (SE/US for Mac/Linux/Windows)
+  - Clipboard paste support (Cmd-V / Ctrl-V)
+  - Macro recording and playback
+
+  PLATFORM SUPPORT
+  - macOS (native .app bundle, arm64 + x86_64)
+  - Linux (make install, .deb-friendly paths)
+  - Windows (portable zip, just unzip and run)
+  - Cross-compilation from macOS using MinGW
+
+  CODE QUALTY
+  - Complete project restructure (src/, assets/, scripts/)
+  - Buffer overflow protection throughout
+  - Safe string handling (snprintf everywhere)
+  - Zero compiler warnings on GCC and Clang
+  - Debug logging for transfer troubleshooting
+
+
+==================================================
+  GREETZ
+==================================================
+
+Abyss Connection - Arsenic - Booze Design - Camelot - Cosine
+Crest - Danish Gold - Dutch Cracking Team - Dynamic Duo
+Eaglesoft - Eclipse - Electronic Arts Crackers - Elite Cracking Group
+Excess - Fairlight - Finnish Gold - FLT - German Cracking Service
+Hitmen - Hokuto Force - Ikari + Talent - Laxity - New Generation
+Nostalgia - Onslaught - Padua - Razor 1911 - Red Sector - Remember
+Software of Sweden - Success + The Ruling Company
+Swedish Cracking Crew - The Crackers - The Dreams - The Judges
+The Light Circle - The Movers - The Sharks - The Silents
+The Supply Team - Triad - TRSI - West Coast Crackers
+
+All elite BBS sysops, PETSCII artists, retro coders,
+and everyone still dialing in.
+
+
+==================================================
+  CONTACT
+==================================================
+
+Bugs, feature requests or random elite spam:
+
+    FRoZEN FLoPPY BBS
+    telnet://bbs.retrohack.se:64128
+
+See INSTALL file for installation instructions.

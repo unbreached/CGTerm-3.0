@@ -7,8 +7,8 @@
 #include "config.h"
 #include "paths.h"
 
-unsigned char gfx_0400_buffer[8000];
-unsigned char gfx_d800_buffer[8000];
+unsigned char gfx_0400_buffer[80000];
+unsigned char gfx_d800_buffer[80000];
 unsigned char *gfx_0400 = gfx_0400_buffer;
 unsigned char *gfx_d800 = gfx_d800_buffer;
 int gfx_offset;
@@ -375,28 +375,33 @@ void gfx_conv_screen_to_pet(unsigned char *chars, unsigned char *colors, unsigne
 
 
 void gfx_savescreen(char *filename) {
-  unsigned char converted[80 * 3 + 1]; // max 3 bytes per char
+  unsigned char converted[80 * 3 + 1];
   FILE *f_screen;
-    //Added RoxburySoftware - Defaults to user home dir
-    char fname [1024];//getenv("HOME");
   int row, lastcolor = 256, reverse = 0;
 
   resetcursor();
-    //Added RoxburySoftware
-    strncpy(fname, cfg_homedir, 1000);
-    //Defaults to /Users/Username/Downloads dir
-    strcat(fname, "/Downloads/");
-    strcat(fname, filename);
-    printf("Saving file: %s", fname);
-  //if ((f_screen = fopen(filename, "wb"))) {
-    if ((f_screen = fopen(fname, "wb"))) {
-    for (row = 0; row < 25; ++row) {
-      gfx_conv_screen_to_pet(gfx_0400_buffer + gfx_offset + row * cfg_columns, gfx_d800_buffer + gfx_offset + row * cfg_columns, converted, &lastcolor, &reverse, row == 24 ? 0 : 1, cfg_columns);
-      fputs((const char *)converted, f_screen);
+
+  /* If filename contains a path separator, use it as-is.
+   * Otherwise prepend home/Downloads. */
+  {
+    char fpath[1024];
+    if (strchr(filename, '/') || strchr(filename, '\\')) {
+      snprintf(fpath, sizeof(fpath), "%s", filename);
+    } else {
+      snprintf(fpath, sizeof(fpath), "%s/Downloads/%s", cfg_homedir, filename);
     }
-    fclose(f_screen);
-  } else {
-    printf("Couldn't open %s for writing\n", filename);
+
+    if ((f_screen = fopen(fpath, "wb"))) {
+      for (row = 0; row < 25; ++row) {
+        gfx_conv_screen_to_pet(gfx_0400_buffer + gfx_offset + row * cfg_columns,
+          gfx_d800_buffer + gfx_offset + row * cfg_columns,
+          converted, &lastcolor, &reverse, row == 24 ? 0 : 1, cfg_columns);
+        fputs((const char *)converted, f_screen);
+      }
+      fclose(f_screen);
+    } else {
+      printf("Couldn't open %s for writing\n", fpath);
+    }
   }
 }
 
@@ -583,6 +588,11 @@ void gfx_insert(void) {
 }
 
 
+void gfx_set_title(const char *title) {
+  SDL_WM_SetCaption(title, title);
+}
+
+
 void gfx_toggle_fullscreen(void) {
   //SDL_WM_ToggleFullScreen(gfx_screen);
   if (cfg_fullscreen) {
@@ -590,6 +600,8 @@ void gfx_toggle_fullscreen(void) {
       printf("Unable to open window: %s\n", SDL_GetError());
       exit(1);
     }
+    SDL_WM_GrabInput(SDL_GRAB_OFF);
+    SDL_ShowCursor(SDL_ENABLE);
     cfg_fullscreen = 0;
   } else {
     if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
@@ -655,4 +667,136 @@ int gfx_save_screenshot(const char *filename) {
     return 0;
   }
   return -1;
+}
+
+
+void gfx_crt_shutdown(void) {
+  /* Classic CRT power-off effect:
+   * 1. Screen squishes vertically to a horizontal line
+   * 2. Line shrinks to a dot
+   * 3. Dot glows briefly then fades */
+  int w = gfx_width;
+  int h = gfx_height;
+  int cx = w / 2;
+  int cy = h / 2;
+  SDL_Surface *snapshot;
+  Uint32 black;
+  int phase;
+
+  /* Capture current screen */
+  snapshot = SDL_CreateRGBSurface(SDL_SWSURFACE, w, h,
+    gfx_screen->format->BitsPerPixel,
+    gfx_screen->format->Rmask, gfx_screen->format->Gmask,
+    gfx_screen->format->Bmask, gfx_screen->format->Amask);
+  if (!snapshot) return;
+  SDL_BlitSurface(gfx_screen, NULL, snapshot, NULL);
+  black = SDL_MapRGB(gfx_screen->format, 0, 0, 0);
+
+  /* Phase 1: Vertical squeeze — screen collapses to a horizontal line (~0.4 sec) */
+  for (phase = 0; phase < 20; phase++) {
+    float progress = (float)phase / 20.0f;
+    /* Ease-in: accelerate */
+    float ease = progress * progress;
+    int squeeze_h = (int)(h * (1.0f - ease));
+    int top = cy - squeeze_h / 2;
+    if (squeeze_h < 2) squeeze_h = 2;
+    if (top < 0) top = 0;
+
+    SDL_FillRect(gfx_screen, NULL, black);
+    /* SDL 1.2 doesn't scale blits, so we sample rows */
+    {
+      int dy;
+      SDL_LockSurface(snapshot);
+      SDL_LockSurface(gfx_screen);
+      for (dy = 0; dy < squeeze_h; dy++) {
+        int src_y = dy * h / squeeze_h;
+        if (src_y >= h) src_y = h - 1;
+        memcpy(
+          (Uint8 *)gfx_screen->pixels + (top + dy) * gfx_screen->pitch,
+          (Uint8 *)snapshot->pixels + src_y * snapshot->pitch,
+          w * gfx_screen->format->BytesPerPixel);
+      }
+      SDL_UnlockSurface(gfx_screen);
+      SDL_UnlockSurface(snapshot);
+    }
+
+    /* Add slight brightness boost to the squeeze line */
+    if (squeeze_h < 20) {
+      SDL_Rect glow;
+      Uint32 white = SDL_MapRGB(gfx_screen->format, 200, 200, 200);
+      glow.x = 0; glow.y = cy - 1; glow.w = w; glow.h = 2;
+      SDL_FillRect(gfx_screen, &glow, white);
+    }
+
+    SDL_UpdateRect(gfx_screen, 0, 0, w, h);
+    SDL_Delay(20);
+  }
+
+  /* Phase 2: Horizontal line — bright white, full width (~0.15 sec) */
+  {
+    int lf;
+    for (lf = 0; lf < 8; lf++) {
+      Uint32 white = SDL_MapRGB(gfx_screen->format, 255, 255, 255);
+      SDL_Rect line_r;
+      SDL_FillRect(gfx_screen, NULL, black);
+      line_r.x = 0; line_r.y = cy - 1; line_r.w = w; line_r.h = 3;
+      SDL_FillRect(gfx_screen, &line_r, white);
+      SDL_UpdateRect(gfx_screen, 0, 0, w, h);
+      SDL_Delay(20);
+    }
+  }
+
+  /* Phase 3: Line shrinks to a dot (~0.3 sec) */
+  {
+    int sf;
+    for (sf = 0; sf < 15; sf++) {
+      float progress = (float)sf / 15.0f;
+      float ease = progress * progress;
+      int line_w = (int)(w * (1.0f - ease));
+      int bright = 255 - (int)(100 * progress);
+      Uint32 col;
+      SDL_Rect dot_r;
+
+      if (line_w < 4) line_w = 4;
+      if (bright < 100) bright = 100;
+      col = SDL_MapRGB(gfx_screen->format, bright, bright, bright);
+
+      SDL_FillRect(gfx_screen, NULL, black);
+      dot_r.x = cx - line_w / 2; dot_r.y = cy - 1;
+      dot_r.w = line_w; dot_r.h = 3;
+      SDL_FillRect(gfx_screen, &dot_r, col);
+      SDL_UpdateRect(gfx_screen, 0, 0, w, h);
+      SDL_Delay(20);
+    }
+  }
+
+  /* Phase 4: Glowing dot fades out (~0.5 sec) */
+  {
+    int df;
+    for (df = 0; df < 25; df++) {
+      float progress = (float)df / 25.0f;
+      int bright = (int)(180 * (1.0f - progress) * (1.0f - progress));
+      int dot_size = 6 - (int)(4 * progress);
+      Uint32 col;
+      SDL_Rect dot_r;
+
+      if (dot_size < 2) dot_size = 2;
+      if (bright < 0) bright = 0;
+      col = SDL_MapRGB(gfx_screen->format, bright, bright, bright + bright / 4);
+
+      SDL_FillRect(gfx_screen, NULL, black);
+      dot_r.x = cx - dot_size / 2; dot_r.y = cy - dot_size / 2;
+      dot_r.w = dot_size; dot_r.h = dot_size;
+      SDL_FillRect(gfx_screen, &dot_r, col);
+      SDL_UpdateRect(gfx_screen, 0, 0, w, h);
+      SDL_Delay(20);
+    }
+  }
+
+  /* Final black */
+  SDL_FillRect(gfx_screen, NULL, black);
+  SDL_UpdateRect(gfx_screen, 0, 0, w, h);
+  SDL_Delay(300);
+
+  SDL_FreeSurface(snapshot);
 }

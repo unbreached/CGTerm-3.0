@@ -94,7 +94,18 @@ void sound_free_sample(int sample) {
 }
 
 
+/* Optional hook for SDL_mixer-based SFX playback */
+static void (*sfx_play_hook)(int) = NULL;
+
+void sound_set_sfx_hook(void (*hook)(int)) {
+  sfx_play_hook = hook;
+}
+
 void sound_play_sample(int sample) {
+  if (sfx_play_hook) {
+    sfx_play_hook(sample);
+    return;
+  }
   if (sound_initok) {
     if (sound_buffer[sample] && !sound_control.playing) {
       SDL_LockAudio();
@@ -104,4 +115,35 @@ void sound_play_sample(int sample) {
       SDL_UnlockAudio();
     }
   }
+}
+
+
+signed int sound_register_buffer(Uint8 *buf, Uint32 len) {
+  int sample;
+  if (!sound_initok || sound_numsamples >= MAXSAMPLES) return -1;
+  for (sample = 0; sample < MAXSAMPLES && sound_buffer[sample]; ++sample);
+  if (sample >= MAXSAMPLES) return -1;
+  sound_buffer[sample] = buf;
+  sound_length[sample] = len;
+  ++sound_numsamples;
+  return sample;
+}
+
+
+void sound_free_buffer(int sample) {
+  if (sample >= 0 && sample < MAXSAMPLES && sound_buffer[sample]) {
+    SDL_LockAudio();
+    if (sound_control.current_sample == sample) {
+      sound_control.playing = 0;
+    }
+    SDL_UnlockAudio();
+    free(sound_buffer[sample]);
+    sound_buffer[sample] = NULL;
+    --sound_numsamples;
+  }
+}
+
+
+int sound_is_playing(void) {
+  return sound_control.playing;
 }

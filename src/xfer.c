@@ -24,6 +24,24 @@
 #include "dir.h"
 #include "fileselector.h"
 #include "config.h"
+#include "keyboard.h"
+
+#include <stdarg.h>
+
+/* Debug log file for transfer troubleshooting */
+static FILE *dbglog = NULL;
+static void dbg(const char *fmt, ...) {
+  va_list ap;
+  if (!dbglog) {
+    dbglog = fopen("/tmp/cgterm-debug.log", "a");
+    if (!dbglog) return;
+    fprintf(dbglog, "\n=== NEW SESSION ===\n");
+  }
+  va_start(ap, fmt);
+  vfprintf(dbglog, fmt, ap);
+  va_end(ap);
+  fflush(dbglog);
+}
 
 #define XFER_PATH_MAX 1024
 
@@ -36,6 +54,7 @@ FILE *xfer_sendfile, *xfer_recvfile;
 Direction xfer_direction;
 Protocol xfer_protocol;
 int xfer_cancel;
+unsigned int xfer_deferred_return_time = 0;  /* 0 = no pending send */
 int xfer_saved_bytes;
 int xfer_file_size;
 unsigned char xfer_buffer[4096];
@@ -190,6 +209,58 @@ static const char *multipunter_ext_from_type(int filetype) {
     return "";
   }
 }
+
+/* Convert a PC filename to C64 format for upload:
+ *   "filename.prg" → "filename,p"
+ *   "filename.seq" → "filename,s"
+ *   "filename.usr" → "filename,u"
+ *   "filename.rel" → "filename,r"
+ *   "filename.txt" → "filename"  (no type suffix, let BBS decide)
+ *   "filename"     → "filename"  (no change)
+ * Also uppercases the name since C64 filenames are uppercase. */
+static void pc_to_c64_filename(const char *pcname, char *c64name, size_t c64sz) {
+  char *dot;
+  size_t i;
+
+  snprintf(c64name, c64sz, "%s", pcname);
+
+  /* Find the last dot for extension */
+  dot = strrchr(c64name, '.');
+  if (dot && strlen(dot) >= 2) {
+    if (strcasecmp(dot, ".prg") == 0) {
+      *dot = ','; dot[1] = 'p'; dot[2] = 0;
+    } else if (strcasecmp(dot, ".seq") == 0) {
+      *dot = ','; dot[1] = 's'; dot[2] = 0;
+    } else if (strcasecmp(dot, ".usr") == 0) {
+      *dot = ','; dot[1] = 'u'; dot[2] = 0;
+    } else if (strcasecmp(dot, ".rel") == 0) {
+      *dot = ','; dot[1] = 'r'; dot[2] = 0;
+    }
+    /* Other extensions: leave as-is, BBS will handle */
+  }
+
+  /* Uppercase everything before the comma (C64 filenames are uppercase) */
+  for (i = 0; c64name[i] && c64name[i] != ','; i++) {
+    if (c64name[i] >= 'a' && c64name[i] <= 'z')
+      c64name[i] -= 32;
+  }
+
+  /* Truncate to 16 chars (C64 filename limit) plus type suffix */
+  {
+    char *comma = strchr(c64name, ',');
+    if (comma) {
+      /* Name part max 16 chars */
+      int namelen = (int)(comma - c64name);
+      if (namelen > 16) {
+        memmove(c64name + 16, comma, strlen(comma) + 1);
+      }
+    } else {
+      if (strlen(c64name) > 16)
+        c64name[16] = 0;
+    }
+  }
+}
+
 
 static void multipunter_sanitize_filename(const char *src, char *dst, size_t dstsz, int filetype, int fileno) {
   size_t di = 0;
@@ -392,6 +463,15 @@ static int multipunter_recv(void) {
   return 0;
 }
 
+/* Check if we need to send a deferred Return to the BBS */
+void xfer_check_deferred(void) {
+  if (xfer_deferred_return_time && timer_get_ticks() >= xfer_deferred_return_time) {
+    dbg(" xfer_check_deferred: sending Return now\n");
+    net_send(0x0d);
+    xfer_deferred_return_time = 0;
+  }
+}
+
 void xfer_check_kbd(void) {
   SDL_Event event;
 
@@ -402,7 +482,27 @@ void xfer_check_kbd(void) {
       break;
     case SDL_KEYDOWN:
       if (event.key.keysym.sym == SDLK_ESCAPE) {
-        xfer_cancel = 1;
+        /* Ask for confirmation before cancelling */
+        menu_draw_message("Cancel transfer? (Y/N)");
+        menu_show();
+        gfx_vbl();
+        {
+          SDL_Event confirm;
+          int waiting = 1;
+          while (waiting) {
+            if (SDL_PollEvent(&confirm)) {
+              if (confirm.type == SDL_KEYDOWN) {
+                if (confirm.key.keysym.sym == SDLK_y) {
+                  xfer_cancel = 1;
+                  waiting = 0;
+                } else {
+                  waiting = 0;  /* any other key = no */
+                }
+              }
+            }
+            SDL_Delay(10);
+          }
+        }
       }
       break;
     }
@@ -418,15 +518,22 @@ void xfer_send_byte(unsigned char c) {
     xfer_check_kbd();
   }
   net_send(c);
+  menu_xfer_feed_byte(c);
 }
+
+static int xfer_recv_debug_count = 0;
 
 signed int xfer_recv_byte(int timeout) {
   signed int c;
   unsigned int starttime;
 
+  xfer_recv_debug_count = 0;
   starttime = timer_get_ticks();
-  while ((c = net_receive()) == -1) {
+  while ((c = net_receive_raw()) == -1) {
     if (timer_get_ticks() > starttime + timeout) {
+      if (xfer_recv_debug_count == 0) {
+        dbg(" xfer_recv_byte: TIMEOUT after %dms (no data received yet)\n", timeout);
+      }
       return(-1);
     } else {
       timer_delay(1);
@@ -437,6 +544,11 @@ signed int xfer_recv_byte(int timeout) {
     }
   }
 
+  if (xfer_recv_debug_count < 5) {
+    dbg(" xfer_recv_byte: got 0x%02x (%d bytes so far)\n", c, xfer_recv_debug_count + 1);
+  }
+  xfer_recv_debug_count++;
+  menu_xfer_feed_byte((unsigned char)c);
   return(c);
 }
 
@@ -495,6 +607,10 @@ int xfer_load_data(unsigned char *data, int length) {
 int xfer_recv(void) {
   int status = 0;
 
+  dbg(" xfer_recv() entered: protocol=%d direction=%d\n", xfer_protocol, xfer_direction);
+  dbg(" dldir='%s' xferdir='%s'\n", cfg_dldir, cfg_xferdir);
+  dbg(" net_connected=%d\n", net_connected());
+
   xfer_filename[0] = 0;
   xfer_cancel = 0;
   xfer_saved_bytes = 0;
@@ -504,24 +620,34 @@ int xfer_recv(void) {
   gfx_vbl();
 
   if (xfer_protocol == PROT_MULTIPUNTER) {
+    dbg(" starting multipunter_recv\n");
     return multipunter_recv();
   }
 
   if (!xfer_open_temp_download()) {
+    dbg(" xfer_open_temp_download FAILED\n");
     return 0;
   }
+  dbg(" temp download opened OK\n");
 
   if (xfer_protocol == PROT_XMODEM) {
+    dbg(" starting xmodem_recv(checksum)\n");
     status = xmodem_recv(0);
   } else if (xfer_protocol == PROT_XMODEMCRC) {
+    dbg(" starting xmodem_recv(CRC)\n");
     status = xmodem_recv(1);
   } else if (xfer_protocol == PROT_XMODEM1K) {
+    dbg(" starting xmodem_recv(1K)\n");
     status = xmodem_recv(1);
   } else if (xfer_protocol == PROT_PUNTER) {
+    dbg(" starting punter_recv\n");
     status = punter_recv();
+    /* Flag that we need to send Ctrl-X after save dialog completes */
   } else if (xfer_protocol == PROT_RAINBOW) {
+    dbg(" starting rainbow_recv\n");
     status = rainbow_recv();
   }
+  dbg(" xfer_recv result: status=%d\n", status);
 
   if (xfer_recvfile != NULL) {
     fclose(xfer_recvfile);
@@ -542,19 +668,32 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
   FILE *outh;
   unsigned char buffer[4096];
   int l;
+  int total = 0;
+
+  dbg("D64-EXTRACT: image='%s' file='%s' dest='%s'\n", imgname, src, dest);
 
   if ((di = di_load_image(imgname)) == NULL) {
+    dbg("D64-EXTRACT: FAILED to load image '%s'\n", imgname);
     return(0);
   }
 
   di_rawname_from_name(rawname, src);
+  dbg("D64-EXTRACT: rawname=[%02x %02x %02x %02x ...]\n",
+      rawname[0], rawname[1], rawname[2], rawname[3]);
 
   if ((imgfile = di_open(di, rawname, T_PRG, "rb")) == NULL) {
-    di_free_image(di);
-    return(0);
+    dbg("D64-EXTRACT: FAILED to open '%s' as PRG in image\n", src);
+    /* Try as SEQ */
+    if ((imgfile = di_open(di, rawname, T_SEQ, "rb")) == NULL) {
+      dbg("D64-EXTRACT: FAILED to open '%s' as SEQ either\n", src);
+      di_free_image(di);
+      return(0);
+    }
+    dbg("D64-EXTRACT: opened as SEQ\n");
   }
 
   if ((outh = fopen(dest, "wb")) == NULL) {
+    dbg("D64-EXTRACT: FAILED to create temp file '%s'\n", dest);
     di_close(imgfile);
     di_free_image(di);
     return(-1);
@@ -562,13 +701,16 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
 
   while ((l = (int)di_read(imgfile, buffer, 4096))) {
     if ((int)fwrite(buffer, 1, l, outh) != l) {
+      dbg("D64-EXTRACT: write error at %d bytes\n", total);
       di_close(imgfile);
       di_free_image(di);
       fclose(outh);
       return(0);
     }
+    total += l;
   }
 
+  dbg("D64-EXTRACT: OK, extracted %d bytes\n", total);
   di_close(imgfile);
   di_free_image(di);
   fclose(outh);
@@ -576,7 +718,7 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
 }
 
 void xfer_send(char *filename) {
-  char name[256];
+  char name[1088];
   char *p;
   int deletetmp = 0;
 
@@ -632,6 +774,9 @@ void xfer_send(char *filename) {
       /* Multi Punter send is handled by xfer_send_multipunter() */
     }
     fclose(xfer_sendfile);
+
+    /* Show completion message with auto-dismiss */
+    menu_draw_message_timed("Upload complete!", 5000);
   } else {
     menu_draw_message("Couldn't open file!");
     menu_show();
@@ -653,6 +798,8 @@ void xfer_save_file_in_image(char *filename) {
   unsigned char rawname[16];
   FileType ftype = T_PRG;
   char cleanname[256];
+
+  dbg("D64-SAVE: filename='%s' dldir='%s' bytes=%d\n", filename, cfg_dldir, xfer_saved_bytes);
   char *comma;
 
   /* Copy filename and detect C64 filetype from ",X" suffix */
@@ -682,6 +829,24 @@ void xfer_save_file_in_image(char *filename) {
     menu_show();
     gfx_vbl();
     return;
+  }
+
+  /* Check disk space before writing */
+  {
+    int blocks_needed = (xfer_saved_bytes + 253) / 254;
+    dbg("D64-SAVE: image='%s' file='%s' ftype=%d bytes=%d blocks_needed=%d blocks_free=%d\n",
+        cfg_dldir, cleanname, ftype, xfer_saved_bytes, blocks_needed, di->blocksfree);
+    if (blocks_needed > di->blocksfree) {
+      char fullmsg[128];
+      snprintf(fullmsg, sizeof(fullmsg), "Disk full! Need %d blocks, %d free. Change path (J) and retry.",
+               blocks_needed, di->blocksfree);
+      di_free_image(di);
+      menu_draw_message(fullmsg);
+      menu_show();
+      gfx_vbl();
+      /* Don't remove temp file — user can change disk and retry save */
+      return;
+    }
   }
 
   if ((from = fopen(xfer_tempdlname, "rb")) == NULL) {
@@ -714,7 +879,8 @@ void xfer_save_file_in_image(char *filename) {
       goto done;
     }
     if (di_write(to, filebuf, l) != l) {
-      menu_draw_message("Write error!");
+      menu_draw_message("Disk full! Change path (J) and retry.");
+      /* Don't remove temp file */
       goto done;
     }
     bytesleft -= l;
@@ -723,8 +889,13 @@ void xfer_save_file_in_image(char *filename) {
   remove(xfer_tempdlname);
   xfer_tempdlname[0] = 0;
 
+  dbg("D64-SAVE: SUCCESS - saved '%s' (%d bytes) into '%s'\n", cleanname, xfer_saved_bytes, cfg_dldir);
   snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", cleanname);
-  menu_draw_message(msgbuf);
+  fclose(from);
+  di_close(to);
+  di_free_image(di);
+  menu_draw_message_timed(msgbuf, 5000);
+  return;
 
  done:
   menu_show();
@@ -764,7 +935,7 @@ static int xfer_ensure_dldir(void) {
 void xfer_save_file_in_dir(char *filename) {
   FILE *from, *to;
   char msgbuf[4096];
-  char name[256];
+  char name[1088];
 
   if (!xfer_ensure_dldir()) {
     menu_draw_message("No download directory!");
@@ -814,9 +985,7 @@ void xfer_save_file_in_dir(char *filename) {
   xfer_tempdlname[0] = 0;
 
   snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", filename);
-  menu_draw_message(msgbuf);
-  menu_show();
-  gfx_vbl();
+  menu_draw_message_timed(msgbuf, 5000);
 }
 
 /*
@@ -861,7 +1030,7 @@ void xfer_save_file(char *filename) {
         if (isdigit(p[2]) && isdigit(p[3])) {
           /* Save into D64 — use C64 name, don't apply PC extensions */
           xfer_save_file_in_image(filename);
-          return;
+          goto post_save;
         }
       }
     }
@@ -870,12 +1039,24 @@ void xfer_save_file(char *filename) {
   /* Save to filesystem — convert C64 filetype to PC extension */
   xfer_fix_filename(filename);
   xfer_save_file_in_dir(filename);
+
+post_save:
+  /* After single Punter download: schedule a Return to exit BBS transfer menu.
+   * Only for single Punter — Multi Punter handles its own batch flow.
+   * We set a deferred send so the main loop can process BBS data first. */
+  if (xfer_protocol == PROT_PUNTER && net_connected()) {
+    dbg(" xfer_save_file: scheduling deferred Return for BBS transfer exit\n");
+    xfer_deferred_return_time = timer_get_ticks() + 3000;
+  }
+
+  /* Return focus to terminal so the main loop processes BBS responses */
+  kbd_focus = FOCUS_TERM;
 }
 
 
 void xfer_send_multipunter(FileSelector *fs) {
   DirEntry *de;
-  char name[256];
+  char name[1088];
   char msg[256];
   int filecount = 0;
   int total_tagged = fs->numtagged;
@@ -893,49 +1074,74 @@ void xfer_send_multipunter(FileSelector *fs) {
       continue;
     }
 
-    /* Send file announcement: 0x09 + filename + \r */
-    snprintf(msg, sizeof(msg), "Multi Punter: %s (%d/%d)",
-             de->name, filecount + 1, total_tagged);
-    menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
-    menu_show();
-    gfx_vbl();
-
-    xfer_send_byte(0x09);
-    {
-      const char *s = de->name;
-      while (*s) {
-        xfer_send_byte(*s++);
-      }
-    }
-    xfer_send_byte('\r');
-
-    /* Open the file */
+    /* Determine if we're sending from a disk image or filesystem */
     deletetmp = 0;
-    if ((p = strrchr(cfg_xferdir, '.')) && strlen(p) == 4 &&
-        (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3])) {
-      if (xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
-        snprintf(name, sizeof(name), "%s", xfer_tempulname);
-        deletetmp = 1;
-      } else {
-        snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
-        menu_draw_message(msg);
-        menu_show();
-        gfx_vbl();
-        de = de->next;
-        continue;
-      }
-    } else {
-      snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
-#ifdef WINDOWS
-        '\\',
-#else
-        '/',
-#endif
-        de->name);
-    }
+    p = strrchr(cfg_xferdir, '.');
+    {
+      int from_image = (p && strlen(p) == 4 &&
+                        (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3]));
 
+      /* Send file announcement: 0x09 + filename + \r */
+      snprintf(msg, sizeof(msg), "Multi Punter: %s (%d/%d)",
+               de->name, filecount + 1, total_tagged);
+      menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
+      menu_show();
+      gfx_vbl();
+
+      /* Build the C64 filename for the announcement */
+      {
+        char c64name[256];
+        const char *s;
+
+        if (from_image) {
+          /* D64 filenames are already PETSCII — send as-is */
+          snprintf(c64name, sizeof(c64name), "%s", de->name);
+        } else {
+          /* PC filesystem: convert .prg→,p etc. */
+          pc_to_c64_filename(de->name, c64name, sizeof(c64name));
+        }
+
+        dbg("MP-SEND: announcing '%s' as C64 name '%s' (%d/%d) from_image=%d\n",
+            de->name, c64name, filecount + 1, total_tagged, from_image);
+        xfer_send_byte(0x09);
+        s = c64name;
+        while (*s) {
+          xfer_send_byte(*s++);
+        }
+      }
+      xfer_send_byte('\r');
+      dbg("MP-SEND: announcement sent, opening file\n");
+
+      /* Open the file */
+      dbg("MP-SEND: cfg_xferdir='%s'\n", cfg_xferdir);
+      if (from_image) {
+        dbg("MP-SEND: extracting '%s' from image '%s'\n", de->name, cfg_xferdir);
+        if (xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
+          snprintf(name, sizeof(name), "%s", xfer_tempulname);
+          deletetmp = 1;
+        } else {
+          snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
+          menu_draw_message(msg);
+          menu_show();
+          gfx_vbl();
+          de = de->next;
+          continue;
+        }
+      } else {
+        snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
+#ifdef WINDOWS
+          '\\',
+#else
+          '/',
+#endif
+          de->name);
+      }
+    } /* end from_image block */
+
+    dbg(" MP-SEND: opening file '%s'\n", name);
     if ((xfer_sendfile = fopen(name, "rb"))) {
       if (fseek(xfer_sendfile, 0, SEEK_END)) {
+        dbg(" MP-SEND: fseek failed!\n");
         fclose(xfer_sendfile);
         de = de->next;
         continue;
@@ -943,10 +1149,14 @@ void xfer_send_multipunter(FileSelector *fs) {
       xfer_file_size = (int)ftell(xfer_sendfile);
       fseek(xfer_sendfile, 0, SEEK_SET);
       xfer_saved_bytes = 0;
+      dbg(" MP-SEND: file size=%d, calling punter_send_no_presignal\n", xfer_file_size);
 
       /* Punter send without the GOO pre-signal — the BBS already started
        * initrecv2 after reading our filename announcement (bbs.bas line 3677) */
-      punter_send_no_presignal();
+      {
+        int send_result = punter_send_no_presignal();
+        dbg(" MP-SEND: punter_send_no_presignal returned %d\n", send_result);
+      }
 
       fclose(xfer_sendfile);
       filecount++;
@@ -954,10 +1164,19 @@ void xfer_send_multipunter(FileSelector *fs) {
       /* Wait for BBS to finish writing file and return to the
        * get#5 loop (bbs.bas line 3610-3620). Drain any stray
        * bytes from the Punter close-out before sending the
-       * next file announcement. */
-      timer_delay(2000);
-      while (net_receive() >= 0) { /* drain */ }
+       * next file announcement.
+       * Use multiple drain passes with delays — the BBS may still
+       * be writing to disk and sending status bytes. */
+      {
+        int drain_pass;
+        for (drain_pass = 0; drain_pass < 3; drain_pass++) {
+          timer_delay(1500);
+          while (net_receive_raw() >= 0) { /* drain */ }
+        }
+        dbg("MP-SEND: drain complete after file %d\n", filecount);
+      }
     } else {
+      dbg("MP-SEND: fopen FAILED for '%s'\n", name);
       snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
       menu_draw_message(msg);
       menu_show();
@@ -972,17 +1191,21 @@ void xfer_send_multipunter(FileSelector *fs) {
   }
 
   /* Send batch end: 0x09 + 0x04 (EOT) */
+  dbg("MP-SEND: sending batch end (0x09 0x04), files sent=%d\n", filecount);
   xfer_send_byte(0x09);
   xfer_send_byte(0x04);
+
+  /* Wait for BBS to process the batch end, then drain any remaining
+   * protocol bytes so they don't appear as garbage on the terminal */
+  timer_delay(2000);
+  while (net_receive_raw() >= 0) { /* drain */ }
 
   if (filecount > 0) {
     snprintf(msg, sizeof(msg), "Sent %d Multi Punter file%s",
              filecount, filecount == 1 ? "" : "s");
-    menu_draw_message(msg);
+    menu_draw_message_timed(msg, 5000);
   } else {
-    menu_draw_message("Multi Punter: no files sent");
+    menu_draw_message_timed("Multi Punter: no files sent", 5000);
   }
-  menu_show();
-  gfx_vbl();
 }
 

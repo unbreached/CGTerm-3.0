@@ -133,6 +133,13 @@ void fs_draw(FileSelector *fs) {
   menu_fs_draw(fs->title);
   menu_fs_draw_path(fs->path);
 
+  /* Show blocks free if inside a disk image */
+  if (fs->dir && fs->dir->blocksfree >= 0) {
+    char bfree[40];
+    snprintf(bfree, sizeof(bfree), "%d BLOCKS FREE", fs->dir->blocksfree);
+    menu_fs_draw_blocks_free(bfree);
+  }
+
   if (fs->numentries) {
     de = fs->dir->firstentry;
     l = fs->offset;
@@ -147,7 +154,7 @@ void fs_draw(FileSelector *fs) {
       } else {
         snprintf(display, sizeof(display), " %.29s", de->name);
       }
-      menu_fs_draw_line(l, display, (l == fs->current) || de->tagged, etype, de->size);
+      menu_fs_draw_line(l, display, (l == fs->current), etype, de->size);
       de = de->next;
       ++l;
     }

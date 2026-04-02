@@ -13,3 +13,5 @@ Font *font_set_font(Font *font);
 SDL_Surface *font_set_draw_surface(SDL_Surface *surface);
 void font_draw_string(int x, int y, const char *text);
 void font_draw_string_color(int x, int y, const char *text, int r, int g, int b);
+void font_draw_string_color_scaled(int x, int y, const char *text, int r, int g, int b, int scale);
+void font_draw_char_color_fscale(int ch_code, int x, int y, int r, int g, int b, float fscale);

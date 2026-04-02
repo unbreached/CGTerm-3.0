@@ -49,7 +49,7 @@ Font *font_load_font(const char *filename, int charw, int charh, int fontw, int 
     return(NULL);
   }
   SDL_SetPalette(tempsurface, SDL_LOGPAL|SDL_PHYSPAL, fontsurface->format->palette->colors, 0, fontsurface->format->palette->ncolors);
-  SDL_SetColorKey(tempsurface, SDL_SRCCOLORKEY|SDL_RLEACCEL, 0);
+  SDL_SetColorKey(tempsurface, SDL_SRCCOLORKEY, 0);
 
   c = 0;
   for (y = 0; y < fonth; ++y) {
@@ -125,18 +125,149 @@ void font_draw_string(int x, int y, const char *text) {
 
 
 void font_draw_string_color(int x, int y, const char *text, int r, int g, int b) {
-  SDL_Color save, col;
+  /* Direct pixel rendering — bypasses SDL's blit map cache entirely.
+   * Reads 8-bit source pixels, writes colored 32-bit pixels to dest. */
+  SDL_Surface *src = font_current->surface;
+  SDL_Surface *dst = font_draw_surface;
+  int cw = font_current->width;
+  int ch = font_current->height;
+  Uint32 col = SDL_MapRGB(dst->format, r, g, b);
+  int dx = x;
 
-  /* Save current palette color */
-  save = font_current->surface->format->palette->colors[1];
+  SDL_LockSurface(src);
+  SDL_LockSurface(dst);
 
-  /* Set new color */
-  col.r = r; col.g = g; col.b = b;
-  SDL_SetPalette(font_current->surface, SDL_LOGPAL, &col, 1, 1);
+  while (*text) {
+    int sx = (unsigned char)(*text) * cw;
+    int px, py;
 
-  /* Draw */
-  font_draw_string(x, y, text);
+    for (py = 0; py < ch; py++) {
+      int dsty = y + py;
+      if (dsty < 0 || dsty >= dst->h) continue;
 
-  /* Restore */
-  SDL_SetPalette(font_current->surface, SDL_LOGPAL, &save, 1, 1);
+      for (px = 0; px < cw; px++) {
+        int dstx = dx + px;
+        int srcx = sx + px;
+        Uint8 pixel;
+
+        if (dstx < 0 || dstx >= dst->w) continue;
+        if (srcx < 0 || srcx >= src->w) continue;
+
+        /* Read 8-bit palette index from font surface */
+        pixel = ((Uint8 *)src->pixels)[py * src->pitch + srcx];
+
+        /* Skip color-key (index 0 = transparent) */
+        if (pixel != 0) {
+          /* Write colored pixel to 32-bit destination */
+          memcpy((Uint8 *)dst->pixels + dsty * dst->pitch +
+                 dstx * dst->format->BytesPerPixel,
+                 &col, dst->format->BytesPerPixel);
+        }
+      }
+    }
+
+    ++text;
+    dx += cw;
+  }
+
+  SDL_UnlockSurface(dst);
+  SDL_UnlockSurface(src);
+}
+
+
+void font_draw_string_color_scaled(int x, int y, const char *text,
+                                   int r, int g, int b, int scale) {
+  SDL_Surface *src = font_current->surface;
+  SDL_Surface *dst = font_draw_surface;
+  int cw = font_current->width;
+  int ch = font_current->height;
+  Uint32 col = SDL_MapRGB(dst->format, r, g, b);
+  int bpp = dst->format->BytesPerPixel;
+  int dx = x;
+
+  if (scale < 1) scale = 1;
+
+  SDL_LockSurface(src);
+  SDL_LockSurface(dst);
+
+  while (*text) {
+    int sx = (unsigned char)(*text) * cw;
+    int px, py;
+
+    for (py = 0; py < ch; py++) {
+      for (px = 0; px < cw; px++) {
+        int srcx = sx + px;
+        Uint8 pixel;
+
+        if (srcx < 0 || srcx >= src->w) continue;
+        pixel = ((Uint8 *)src->pixels)[py * src->pitch + srcx];
+
+        if (pixel != 0) {
+          int sy, sxx;
+          for (sy = 0; sy < scale; sy++) {
+            int dsty = y + py * scale + sy;
+            if (dsty < 0 || dsty >= dst->h) continue;
+            for (sxx = 0; sxx < scale; sxx++) {
+              int dstx = dx + px * scale + sxx;
+              if (dstx < 0 || dstx >= dst->w) continue;
+              memcpy((Uint8 *)dst->pixels + dsty * dst->pitch + dstx * bpp,
+                     &col, bpp);
+            }
+          }
+        }
+      }
+    }
+
+    ++text;
+    dx += cw * scale;
+  }
+
+  SDL_UnlockSurface(dst);
+  SDL_UnlockSurface(src);
+}
+
+
+/* Float-scale single character rendering for smooth zoom effects */
+void font_draw_char_color_fscale(int ch_code, int x, int y,
+                                  int r, int g, int b, float fscale) {
+  SDL_Surface *src = font_current->surface;
+  SDL_Surface *dst = font_draw_surface;
+  int cw = font_current->width;
+  int chh = font_current->height;
+  Uint32 col = SDL_MapRGB(dst->format, r, g, b);
+  int bpp = dst->format->BytesPerPixel;
+  int sx_base = (ch_code & 0xFF) * cw;
+  int scaled_w = (int)(cw * fscale);
+  int scaled_h = (int)(chh * fscale);
+  int px, py;
+
+  if (fscale < 0.1f) return;
+
+  SDL_LockSurface(src);
+  SDL_LockSurface(dst);
+
+  for (py = 0; py < scaled_h; py++) {
+    int dsty = y + py;
+    int src_y = (int)((float)py / fscale);
+    if (dsty < 0 || dsty >= dst->h) continue;
+    if (src_y >= chh) src_y = chh - 1;
+
+    for (px = 0; px < scaled_w; px++) {
+      int dstx = x + px;
+      int src_x = (int)((float)px / fscale);
+      Uint8 pixel;
+
+      if (dstx < 0 || dstx >= dst->w) continue;
+      if (src_x >= cw) src_x = cw - 1;
+
+      pixel = ((Uint8 *)src->pixels)[src_y * src->pitch + sx_base + src_x];
+      if (pixel != 0) {
+        memcpy((Uint8 *)dst->pixels + dsty * dst->pitch + dstx * bpp,
+               &col, bpp);
+      }
+    }
+  }
+
+  SDL_UnlockSurface(dst);
+  SDL_UnlockSurface(src);
 }

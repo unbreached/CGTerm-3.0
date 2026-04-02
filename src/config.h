@@ -27,6 +27,9 @@ extern char cfg_dldir[];
 extern int cfg_editmode;
 extern int cfg_debugmode;
 extern int cfg_splash;
+extern int cfg_modem;
+extern int cfg_splashfont;
+extern int cfg_menufont;
 extern char cfg_bookmarkfile[];
 
 
@@ -42,3 +45,5 @@ void addhost(int num, char *alias, char *hostname, int port);
 void cfg_load_bookmarks(void);
 void cfg_save_bookmark(char *alias, char *host, int port);
 void cfg_log_connection(const char *host, int port);
+const char *cfg_get_bookmark_note(const char *host, int port);
+void cfg_set_bookmark_note(const char *host, int port, const char *note);

@@ -31,6 +31,27 @@ if [ ! -f "$SDL_DIR/include/SDL/SDL.h" ]; then
 fi
 echo "[+] Found SDL 1.2 at $SDL_DIR"
 
+# Check for SDL_mixer dev files (optional — music support)
+# Use the MinGW build which includes mikmod support built-in
+SDL_MIXER_DIR="/tmp/SDL_mixer-1.2.12"
+HAVE_SDL_MIXER=0
+if [ ! -f "$SDL_MIXER_DIR/include/SDL_mixer.h" ]; then
+    echo "[*] Downloading SDL_mixer 1.2.12 Windows dev files..."
+    cd /tmp
+    curl -L --connect-timeout 10 --max-time 30 -o SDL_mixer-devel-1.2.12-VC.zip \
+        "https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-devel-1.2.12-VC.zip" 2>/dev/null
+    if [ -f SDL_mixer-devel-1.2.12-VC.zip ]; then
+        unzip -o SDL_mixer-devel-1.2.12-VC.zip >/dev/null 2>&1
+        echo "[+] SDL_mixer 1.2.12 downloaded"
+    fi
+fi
+if [ -f "$SDL_MIXER_DIR/include/SDL_mixer.h" ]; then
+    HAVE_SDL_MIXER=1
+    echo "[+] Found SDL_mixer at $SDL_MIXER_DIR"
+else
+    echo "[*] SDL_mixer not found — music support disabled (optional)"
+fi
+
 # Clean
 echo "[*] Cleaning..."
 rm -rf "$ROOT_DIR/build/obj-win32"
@@ -40,13 +61,17 @@ mkdir -p "$DIST_DIR"
 
 CC="i686-w64-mingw32-gcc"
 CFLAGS="-O2 -Wall -DWINDOWS -I$SDL_DIR/include/SDL -I$ROOT_DIR/src"
-# Statically link compiler runtime so no extra DLLs are needed.
-# -mwindows hides the console window (GUI app).
-LDFLAGS="-static-libgcc -L$SDL_DIR/lib -lmingw32 -lSDL -lws2_32 -mwindows"
+LDFLAGS="-static-libgcc -L$SDL_DIR/lib -lmingw32 -lSDL -lws2_32 -lm -mwindows"
+
+# Add SDL_mixer if available (VC package: lib/x86/SDL_mixer.lib, include/SDL_mixer.h)
+if [ "$HAVE_SDL_MIXER" = "1" ]; then
+    CFLAGS="$CFLAGS -DHAVE_SDL_MIXER -I$SDL_MIXER_DIR/include"
+    LDFLAGS="-static-libgcc -L$SDL_DIR/lib -L$SDL_MIXER_DIR/lib/x86 -lmingw32 -lSDL -lSDL_mixer -lws2_32 -lm -mwindows"
+fi
 OBJDIR="$ROOT_DIR/build/obj-win32"
 SRCDIR="$ROOT_DIR/src"
 
-COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard"
+COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard modem music music_preload"
 TERM="xfer xmodem punter rainbow diskimage dir fileselector ui_term"
 
 # Compile common objects
@@ -101,8 +126,19 @@ echo "[+] Binaries compiled"
 # Copy SDL.dll and assets
 echo "[*] Copying runtime files..."
 cp "$SDL_DIR/bin/SDL.dll" "$DIST_DIR/"
-cp -r "$ROOT_DIR/assets" "$DIST_DIR/assets"
-cp "$ROOT_DIR/README.txt" "$DIST_DIR/"
+if [ "$HAVE_SDL_MIXER" = "1" ]; then
+    # Copy SDL_mixer.dll and any dependency DLLs
+    for p in "$SDL_MIXER_DIR/lib/x86/SDL_mixer.dll" \
+             "$SDL_MIXER_DIR/lib/x86/"*.dll; do
+        if [ -f "$p" ]; then
+            cp "$p" "$DIST_DIR/"
+            echo "[+] $(basename $p) copied"
+        fi
+    done
+fi
+rsync -a --exclude='._*' --exclude='.DS_Store' --exclude='*.ttf' --exclude='*.otf' --exclude='*.zip' "$ROOT_DIR/assets/" "$DIST_DIR/assets/"
+cp "$ROOT_DIR/README" "$DIST_DIR/"
+cp "$ROOT_DIR/INSTALL" "$DIST_DIR/"
 cp "$ROOT_DIR/scripts/cgterm-default.cfg" "$DIST_DIR/cgterm.cfg"
 
 # Strip binaries
@@ -111,50 +147,15 @@ i686-w64-mingw32-strip "$DIST_DIR/cgterm.exe"
 i686-w64-mingw32-strip "$DIST_DIR/cgchat.exe"
 i686-w64-mingw32-strip "$DIST_DIR/cgedit.exe"
 
-# Build NSIS installer if makensis is available
-if command -v makensis >/dev/null 2>&1; then
-    echo "[*] Building NSIS installer..."
-    makensis "$ROOT_DIR/scripts/cgterm-installer.nsi"
-    if [ $? -eq 0 ]; then
-        echo "[+] Installer built: $ROOT_DIR/dist/CGTerm-3.0-Setup.exe"
-    else
-        echo "[!] NSIS failed — installer not created"
-    fi
-else
-    echo "[*] makensis not found — skipping installer"
-    echo "    Install with: brew install makensis"
-fi
+# Clean macOS cruft from dist before zipping
+find "$DIST_DIR" -name "._*" -delete 2>/dev/null
+find "$DIST_DIR" -name ".DS_Store" -delete 2>/dev/null
 
-# Sign the installer if osslsigncode and cert are available
-if command -v osslsigncode >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/signing/cert.pem" ]; then
-    if [ -f "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe" ]; then
-        echo "[*] Signing installer..."
-        osslsigncode sign \
-            -certs "$ROOT_DIR/scripts/signing/cert.pem" \
-            -key "$ROOT_DIR/scripts/signing/key.pem" \
-            -n "CGTerm 3.0 - Scene Edition" \
-            -i "https://bbs.retrohack.se" \
-            -t http://timestamp.sectigo.com \
-            -in "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe" \
-            -out "$ROOT_DIR/dist/CGTerm-3.0-Setup-signed.exe" 2>&1
-        if [ $? -eq 0 ]; then
-            mv "$ROOT_DIR/dist/CGTerm-3.0-Setup-signed.exe" "$ROOT_DIR/dist/CGTerm-3.0-Setup.exe"
-            echo "[+] Installer signed"
-        else
-            echo "[!] Signing failed — using unsigned installer"
-        fi
-    fi
-fi
-
-# Create zip
+# Create portable zip (primary distribution — no SmartScreen warnings)
 echo "[*] Creating distribution zip..."
 cd "$ROOT_DIR/dist"
 rm -f CGTerm-3.0-win32.zip
-if [ -f CGTerm-3.0-Setup.exe ]; then
-    zip -r CGTerm-3.0-win32.zip win32/ CGTerm-3.0-Setup.exe
-else
-    zip -r CGTerm-3.0-win32.zip win32/
-fi
+zip -r CGTerm-3.0-win32.zip win32/ -x "*/._*" -x "*/.DS_Store"
 
 # Show result
 echo ""
@@ -162,9 +163,8 @@ echo " ============================================"
 echo "  Cross-compilation successful!"
 echo ""
 echo "  Output:"
-ls -lh "$ROOT_DIR/dist/"CGTerm-3.0-*
+ls -lh "$ROOT_DIR/dist/CGTerm-3.0-win32.zip"
 echo ""
-echo "  dist/win32/          — portable (unzip and run)"
-echo "  dist/CGTerm-3.0-Setup.exe — installer"
-echo "  dist/CGTerm-3.0-win32.zip — both in one zip"
+echo "  dist/win32/              — portable (unzip and run)"
+echo "  dist/CGTerm-3.0-win32.zip — zip for distribution"
 echo " ============================================"

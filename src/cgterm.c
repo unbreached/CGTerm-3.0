@@ -18,6 +18,9 @@
 #include "sound.h"
 #include "crc.h"
 #include "menu.h"
+#include "modem.h"
+#include "music.h"
+#include "xfer.h"
 
 
 int sendcrlf = 0;
@@ -64,9 +67,10 @@ char *default_cgterm_cfg[] = {
   "#xferdir = ",
   "#debug = no",
   "bookmark = FRoZEN FLoPPY BBS, bbs.retrohack.se, 64128",
+  "bookmark = OPTiCAL iLLUSiON, oi.ath.cx, 64128",
   "bookmark = ANTiDOTE, antidote.triad.se, 64128",
   "bookmark = Boar's Head Tavern, byob.hopto.org, 64128",
-  "bookmark = Dark Endless,darkendlessbbs.hopto.org, 6510",
+  "bookmark = Dark Endless, darkendlessbbs.hopto.org, 6510",
   "bookmark = Dead Zone, dzbbs.hopto.org, 64128",
   "bookmark = Fria Bad BBS, friabad.hopto.org, 64128",
   "bookmark = The Hidden, the-hidden.hopto.org, 64128",
@@ -222,13 +226,27 @@ int main(int argc, char *argv[]) {
   if (kernal_init()) {
     return(17);
   }
-  if (cfg_sound && sound_init()) {
-    printf("Sound init failed, sound disabled\n");
-  } else {
-    path_build_asset(fname, sizeof(fname), "bell.wav");
-    if ((sound_bell = sound_load_sample(fname)) < 0) {
-      printf("Couldn't load %s\n", fname);
-      return(19);
+  /* Initialize audio: try SDL_mixer first (supports XM music + WAV),
+   * fall back to raw SDL audio if SDL_mixer not available */
+  if (cfg_sound) {
+    music_preload_mikmod();
+    if (music_init() == 0) {
+      /* SDL_mixer handles audio — load bell as SFX chunk */
+      path_build_asset(fname, sizeof(fname), "bell.wav");
+      sound_bell = music_load_sfx(fname);
+      if (sound_bell < 0) {
+        printf("Couldn't load %s\n", fname);
+      }
+      /* Redirect sound_play_sample to use SDL_mixer */
+      sound_set_sfx_hook(&music_play_sfx);
+    } else if (sound_init() == 0) {
+      path_build_asset(fname, sizeof(fname), "bell.wav");
+      if ((sound_bell = sound_load_sample(fname)) < 0) {
+        printf("Couldn't load %s\n", fname);
+        return(19);
+      }
+    } else {
+      printf("Sound init failed, sound disabled\n");
     }
   }
 
@@ -242,6 +260,12 @@ int main(int argc, char *argv[]) {
     gfx_bgcolor(0);
     ffd2(147);  /* clear screen */
     gfx_setcursxy(-1, -1);  /* hide blinking cursor */
+
+    /* Play splash music */
+    {
+      path_build_asset(fname, sizeof(fname), "cgterm.xm");
+      music_play(fname);
+    }
 
     menu_show();
     while (!splash_done) {
@@ -265,6 +289,7 @@ int main(int argc, char *argv[]) {
       timer_delay(20);
       splash_frame++;
     }
+    music_stop();
     menu_hide();
     menu_cls();
     gfx_setcursxy(0, 0);
@@ -317,7 +342,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (cfg_host) {
-    if (net_connect(cfg_host, cfg_port, &print_net_status)) {
+    if (modem_connect(cfg_host, cfg_port, &print_net_status)) {
       print("\x96" "cONNECT FAILED.\x05\x0d");
       gfx_vbl();
     }
@@ -418,6 +443,9 @@ int main(int argc, char *argv[]) {
       timer_delay(1);
 
     }
+
+    /* Check for deferred sends (e.g. Return after Punter download) */
+    xfer_check_deferred();
 
   }
 

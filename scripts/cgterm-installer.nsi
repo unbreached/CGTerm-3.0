@@ -59,16 +59,23 @@ Section "CGTerm (required)" SecMain
   File /nonfatal "..\dist\win32\cgchat.exe"
   File /nonfatal "..\dist\win32\cgedit.exe"
 
-  ; SDL runtime DLL
+  ; SDL runtime DLLs
   File "..\dist\win32\SDL.dll"
+  File /nonfatal "..\dist\win32\SDL_mixer.dll"
 
   ; Assets
   SetOutPath "$INSTDIR\assets"
   File "..\assets\*.bmp"
   File "..\assets\*.kbd"
   File "..\assets\*.wav"
+  File /nonfatal "..\assets\*.xm"
+  File /nonfatal "..\assets\*.mod"
   File /nonfatal "..\assets\*.txt"
   File /nonfatal "..\assets\*.md"
+
+  ; Font grid bitmaps
+  SetOutPath "$INSTDIR\assets\fonts"
+  File "..\assets\fonts\*.bmp"
 
   ; Documentation
   SetOutPath "$INSTDIR"
@@ -124,13 +131,18 @@ Section "Uninstall"
   Delete "$INSTDIR\cgchat.exe"
   Delete "$INSTDIR\cgedit.exe"
   Delete "$INSTDIR\SDL.dll"
+  Delete "$INSTDIR\SDL_mixer.dll"
   Delete "$INSTDIR\README.txt"
   Delete "$INSTDIR\cgterm.cfg"
   Delete "$INSTDIR\uninstall.exe"
 
+  Delete "$INSTDIR\assets\fonts\*.bmp"
+  RMDir "$INSTDIR\assets\fonts"
   Delete "$INSTDIR\assets\*.bmp"
   Delete "$INSTDIR\assets\*.kbd"
   Delete "$INSTDIR\assets\*.wav"
+  Delete "$INSTDIR\assets\*.xm"
+  Delete "$INSTDIR\assets\*.mod"
   Delete "$INSTDIR\assets\*.txt"
   Delete "$INSTDIR\assets\*.md"
   RMDir "$INSTDIR\assets"

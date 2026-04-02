@@ -5,6 +5,7 @@
 #include "menu.h"
 #include "xfer.h"
 #include "crc.h"
+#include "timer.h"
 
 #define XM_SOH 0x01
 #define XM_STX 0x02
@@ -172,8 +173,8 @@ int xmodem_recv(int usecrc) {
 
   XMDBG("[XMODEM] recv start mode=%s initial_handshake=%s\n",
         usecrc ? "CRC" : "CHECKSUM", xm_name(nexthandshake));
-  xm_send_byte_dbg(nexthandshake);
 
+  xm_send_byte_dbg(nexthandshake);
   xfer_progress_status("Starting...", 0, 0);
 
   for (;;) {
@@ -185,6 +186,7 @@ int xmodem_recv(int usecrc) {
     errorcnt = 0;
     while ((c = xm_recv_byte_dbg(10000)) == -1 && errorcnt < 10) {
       XMDBG("[XMODEM] recv handshake timeout retry=%d resend=%s\n", errorcnt + 1, xm_name(nexthandshake));
+      xfer_progress_status("Waiting for data...", xfer_saved_bytes, 0);
       xm_send_byte_dbg(nexthandshake);
       ++errorcnt;
     }

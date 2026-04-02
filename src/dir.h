@@ -17,6 +17,7 @@ typedef struct dir {
   int numentries;
   char *title;
   DirEntry *firstentry;
+  int blocksfree;  /* -1 if not a disk image */
 } Dir;
 
 extern char *dir_type[];
