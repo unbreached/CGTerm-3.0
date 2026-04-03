@@ -534,25 +534,68 @@ void cfg_writeconfig(char **data, char *configfile) {
   fclose(cfg);
 }
 
-void cfg_disable_splash(void) {
-    FILE *cf;
-    char fname[512];
-
-    cfg_splash = 0;
-
-    /* Write the setting to config file so it persists */
+/* Get the config file path */
+static void cfg_get_config_path(char *out, size_t outsz) {
 #ifdef WINDOWS
-    snprintf(fname, sizeof(fname), "cgterm.cfg");
+  snprintf(out, outsz, "cgterm.cfg");
 #else
-    snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
+  snprintf(out, outsz, "%s/.cgtermrc", cfg_homedir);
 #endif
+}
 
-    /* Append splash = no to the config file */
-    cf = fopen(fname, "a");
-    if (cf) {
-        fprintf(cf, "\nsplash = no\n");
-        fclose(cf);
+
+/* Save a single setting to the config file.
+ * If the key already exists, update it in place.
+ * If not, append it at the end. */
+void cfg_save_setting(const char *key, const char *value) {
+  char fname[512];
+  char tmpname[512];
+  char linebuf[1024];
+  FILE *in, *out;
+  int found = 0;
+  int keylen = (int)strlen(key);
+
+  cfg_get_config_path(fname, sizeof(fname));
+  snprintf(tmpname, sizeof(tmpname), "%s.tmp", fname);
+
+  in = fopen(fname, "r");
+  out = fopen(tmpname, "w");
+  if (!out) return;
+
+  if (in) {
+    while (fgets(linebuf, sizeof(linebuf), in)) {
+      /* Check if this line has our key */
+      char *p = linebuf;
+      while (*p == ' ' || *p == '\t') p++;
+      if (*p != '#' && strncmp(p, key, keylen) == 0) {
+        char *eq = p + keylen;
+        while (*eq == ' ' || *eq == '\t') eq++;
+        if (*eq == '=') {
+          /* Found it — write updated value */
+          fprintf(out, "%s = %s\n", key, value);
+          found = 1;
+          continue;
+        }
+      }
+      fputs(linebuf, out);
     }
+    fclose(in);
+  }
+
+  if (!found) {
+    fprintf(out, "%s = %s\n", key, value);
+  }
+  fclose(out);
+
+  /* Replace original with temp */
+  remove(fname);
+  rename(tmpname, fname);
+}
+
+
+void cfg_disable_splash(void) {
+  cfg_splash = 0;
+  cfg_save_setting("splash", "no");
 }
 
 void cfg_debug(const char *s){

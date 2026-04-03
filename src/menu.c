@@ -386,44 +386,19 @@ void menu_print_menu(struct menu *menu) {
     int mid_y = menu_height / 2;
     menu_draw_line(lx, mid_y, menu_width - lx, mid_y, linecol);
 
-    /* Bottom half — SCREEN & MACROS (left) and SETTINGS (right) */
+    /* Bottom half — SCREEN (left) and SETTINGS (right) */
     ty = mid_y + 8;
-    menu_draw_section_centered(lx, cx, ty, "SCREEN & MACROS");
-    menu_draw_item(lx, ty + 28, "L", "Load seq file");
+    menu_draw_section_centered(lx, cx, ty, "SCREEN");
+    menu_draw_item(lx, ty + 28, "L", "Load SEQ file");
     menu_draw_item(lx, ty + 42, "P", "Post SEQ to BBS");
     menu_draw_item(lx, ty + 56, "S", "Save screen");
     menu_draw_item(lx, ty + 70, "I", "Screenshot");
-    menu_draw_item(lx, ty + 84, "C", "Record macro");
-    menu_draw_item(lx, ty + 98, "V", "Play macro");
-    menu_draw_item(lx, ty + 112, "A", "Abort");
-
-    menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
-    menu_draw_item(rx, ty + 28, "E", "Local echo");
-    menu_draw_item(rx, ty + 42, "F", "Fullscreen");
-    menu_draw_item(rx, ty + 56, "Z", "Font settings");
-
-    /* Oldschool modem toggle — ON in green, OFF in red */
-    {
-      int mx = rx;
-      int my = ty + 70;
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "M", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Oldskool Mode ", 0x00, 0xee, 0xff);
-      if (cfg_modem)
-        font_draw_string_color(mx + 200, my, "[ON]", 0x00, 0xff, 0x66);
-      else
-        font_draw_string_color(mx + 200, my, "[OFF]", 0xff, 0x40, 0x40);
-    }
-
-    menu_draw_item(rx, ty + 84, "K", "Keyboard layout");
-    menu_draw_item(rx, ty + 98, "W", "Toggle upper/lowercase");
+    menu_draw_item(lx, ty + 84, "Z", "Font settings");
+    menu_draw_item(lx, ty + 98, "W", "Upper/Lowercase");
 
     /* Terminal mode toggle — PETSCII/ANSI */
     {
-      int mx = rx;
+      int mx = lx;
       int my = ty + 112;
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
@@ -432,15 +407,20 @@ void menu_print_menu(struct menu *menu) {
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Terminal ", 0x00, 0xee, 0xff);
       if (cfg_termmode == 1)
-        font_draw_string_color(mx + 140, my, "[ANSI]", 0x00, 0xff, 0x66);
+        font_draw_string_color(mx + 130, my, "[ANSI]", 0x00, 0xff, 0x66);
       else
-        font_draw_string_color(mx + 140, my, "[PETSCII]", 0xff, 0x80, 0xff);
+        font_draw_string_color(mx + 130, my, "[PETSCII]", 0xff, 0x80, 0xff);
     }
 
-    /* Character set toggle */
+    menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
+    menu_draw_item(rx, ty + 28, "E", "Local echo");
+    menu_draw_item(rx, ty + 42, "F", "Fullscreen");
+    menu_draw_item(rx, ty + 56, "K", "Keyboard layout");
+
+    /* Charset toggle */
     {
       int mx = rx;
-      int my = ty + 126;
+      int my = ty + 70;
       const char *csname = "US/UK";
       if (cfg_charset == 1) csname = "Swedish";
       else if (cfg_charset == 2) csname = "German";
@@ -454,6 +434,26 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 130, my, csname, 0xff, 0xff, 0x54);
       font_draw_string_color(mx + 130 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
+
+    /* Oldschool modem toggle */
+    {
+      int mx = rx;
+      int my = ty + 84;
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(mx + 10, my, "M", 0xff, 0xff, 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx + 20, my, "] Oldskool Mode ", 0x00, 0xee, 0xff);
+      if (cfg_modem)
+        font_draw_string_color(mx + 200, my, "[ON]", 0x00, 0xff, 0x66);
+      else
+        font_draw_string_color(mx + 200, my, "[OFF]", 0xff, 0x40, 0x40);
+    }
+
+    menu_draw_item(rx, ty + 98, "C", "Record macro");
+    menu_draw_item(rx, ty + 112, "V", "Play macro");
+    menu_draw_item(rx, ty + 126, "A", "Abort");
 
     menu_draw_item(rx, ty + 154, "Q", "Quit CGTerm");
   }

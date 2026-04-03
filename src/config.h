@@ -44,6 +44,7 @@ void cfg_sethost(char *h);
 int cfg_change_dir(char *dirbuffer, const char *newdir);
 void cfg_writeconfig(char **data, char *configfile);
 void cfg_disable_splash(void);
+void cfg_save_setting(const char *key, const char *value);
 void cfg_debug(const char *s);
 void addhost(int num, char *alias, char *hostname, int port);
 void cfg_load_bookmarks(void);

@@ -29,35 +29,36 @@
 
 struct menu termmenu[] = {
   {1,  "",  "-- CONNECTION --"},
-  {2,  "B", "Open bookmarks"},
-  {3,  "D", "Connect/disconnect"},
+  {2,  "B", "Bookmarks"},
+  {3,  "D", "Connect/Disconnect"},
   {4,  "R", "Reconnect"},
   {5,  "",  ""},
   {6,  "",  "-- TRANSFERS & FiLES --"},
   {7,  "T", "Transfer file"},
   {9,  "J", "Set path"},
   {10, "U", "Unjoin disk image"},
-  {11, "N", "New disk image (D64/D71/D81)"},
+  {11, "N", "New disk image"},
   {12, "",  ""},
-  {13, "",  "-- SCREEN & MACROS --"},
-  {14, "L", "Load seq file"},
-  {15, "P", "Post SEQ to BBS (300bps)"},
-  {16, "S", "Save screen to seq file"},
-  {17, "I", "Screenshot (BMP)"},
-  {17, "C", "Start/stop recording macro"},
-  {18, "V", "Play macro"},
-  {19, "A", "Abort load or macro"},
+  {13, "",  "-- SCREEN --"},
+  {14, "L", "Load SEQ file"},
+  {15, "P", "Post SEQ to BBS"},
+  {16, "S", "Save screen"},
+  {17, "I", "Screenshot"},
+  {17, "Z", "Font settings"},
+  {18, "W", "Upper/Lowercase"},
+  {19, "G", "Terminal: PETSCII"},
   {20, "",  ""},
   {21, "",  "-- SETTINGS --"},
-  {22, "E", "Toggle local echo"},
-  {23, "F", "Toggle fullscreen mode"},
-  {24, "Z", "Font settings"},
-  {25, "K", "Keyboard layout"},
-  {26, "W", "Toggle upper/lowercase"},
-  {27, "G", "Terminal: PETSCII"},
-  {28, "M", "Oldskool Mode"},
-  {29, "",  ""},
-  {30, "Q", "Quit CGTerm"},
+  {22, "E", "Local echo"},
+  {23, "F", "Fullscreen"},
+  {24, "K", "Keyboard layout"},
+  {25, "H", "Charset"},
+  {26, "M", "Oldskool Mode"},
+  {27, "C", "Record macro"},
+  {28, "V", "Play macro"},
+  {29, "A", "Abort"},
+  {30, "",  ""},
+  {31, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
 
@@ -629,6 +630,7 @@ void select_set_dldir(FileSelector *fs) {
   /* Set both download and upload paths to the same location */
   snprintf(cfg_dldir, 256, "%s", fs->path);
   snprintf(cfg_xferdir, 256, "%s", fs->path);
+  cfg_save_setting("xferdir", cfg_dldir);
 }
 
 
@@ -796,16 +798,19 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_e:
     cfg_localecho ^= 1;
+    cfg_save_setting("localecho", cfg_localecho ? "yes" : "no");
     break;
 
   case SDLK_f:
     gfx_toggle_fullscreen();
+    cfg_save_setting("fullscreen", cfg_fullscreen ? "yes" : "no");
     break;
 
   case SDLK_h:
     /* Cycle charset: US/UK -> Swedish -> German -> US/UK */
     cfg_charset = (cfg_charset + 1) % 3;
     gfx_reload_charset();
+    cfg_save_setting("charset", cfg_charset == 1 ? "swedish" : cfg_charset == 2 ? "german" : "us");
     menu_print_menu(termmenu);
     menu_show();
     kbd_focus = FOCUS_MENU;
@@ -815,11 +820,11 @@ void ui_metakey(SDL_keysym *keysym) {
     cfg_termmode ^= 1;
     if (cfg_termmode == 1) {
       gfx_set_columns(80);
-      ansi_init();  /* sets font to CP437 (slot 2) */
+      ansi_init();
       termmenu[find_menu_key(termmenu, "G")].text = "Terminal: ANSI";
     } else {
       gfx_set_columns(40);
-      gfx_setfont(1);  /* restore C64 lowercase font */
+      gfx_setfont(1);
       termmenu[find_menu_key(termmenu, "G")].text = "Terminal: PETSCII";
     }
     menu_print_menu(termmenu);
@@ -829,6 +834,7 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_m:
     cfg_modem ^= 1;
+    cfg_save_setting("modem", cfg_modem ? "yes" : "no");
     menu_print_menu(termmenu);
     menu_show();
     kbd_focus = FOCUS_MENU;
@@ -848,6 +854,13 @@ void ui_metakey(SDL_keysym *keysym) {
   case SDLK_z:
     menu_select_menu_font();
     menu_select_splash_font();
+    {
+      char val[8];
+      snprintf(val, sizeof(val), "%d", cfg_menufont);
+      cfg_save_setting("menufont", val);
+      snprintf(val, sizeof(val), "%d", cfg_splashfont);
+      cfg_save_setting("splashfont", val);
+    }
     menu_print_menu(termmenu);
     menu_show();
     kbd_focus = FOCUS_MENU;
