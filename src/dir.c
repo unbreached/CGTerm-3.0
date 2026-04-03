@@ -68,7 +68,7 @@ Dir *dir_read_image(DiskImage *di) {
       use_entry->prev = NULL;
       use_entry->next = NULL;
       if ((use_entry->name = malloc(20))) {
-        strcpy(use_entry->name, "[ Use this folder ]");
+        strcpy(use_entry->name, "[ SELECT THIS PATH ]");
       }
       memset(use_entry->rawname, 0xa0, 16);
       use_entry->type = T_SEQ;
@@ -188,7 +188,7 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       use_entry->prev = NULL;
       use_entry->next = NULL;
       if ((use_entry->name = malloc(20))) {
-        strcpy(use_entry->name, "[ Use this folder ]");
+        strcpy(use_entry->name, "[ SELECT THIS PATH ]");
       }
       memset(use_entry->rawname, 0xa0, 16);
       use_entry->type = T_SEQ;  /* special type — not DIR, not PRG */

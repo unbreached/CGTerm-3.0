@@ -2917,9 +2917,20 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
     font_draw_string_color(x + 14, y + 1, text, 0xff, 0xaa, 0x44);
     break;
   case 3:
-    /* Special entries (Use this folder, <- Back) in white+cyan */
-    font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, namebuf, 0x00, 0xee, 0xff);
+    /* Special entries */
+    font_set_font(menu_font[0]);
+    if (strstr(namebuf, "SELECT")) {
+      /* SELECT THIS PATH — brackets cyan, text green */
+      font_draw_string_color(x, y + 1, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(x + 10, y + 1, " SELECT THIS PATH ", 0x00, 0xff, 0x66);
+      font_draw_string_color(x + 200, y + 1, "]", 0x00, 0xee, 0xff);
+    } else if (strstr(namebuf, "Back")) {
+      /* <- Back — arrow cyan, text light blue */
+      font_draw_string_color(x, y + 1, "<-", 0x00, 0xee, 0xff);
+      font_draw_string_color(x + 24, y + 1, "Back", 0x60, 0x80, 0xff);
+    } else {
+      font_draw_string_color(x, y + 1, namebuf, 0x00, 0xee, 0xff);
+    }
     break;
   default:
     /* Regular files in light blue */
