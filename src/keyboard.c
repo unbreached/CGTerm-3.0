@@ -491,6 +491,8 @@ int kbd_getkey() {
                         case SDLK_F6:  return 0x8B;
                         case SDLK_F7:  return shift ? 0x8C : 0x88;
                         case SDLK_F8:  return 0x8C;
+                        case SDLK_SPACE:
+                            return 0x20;
                         case SDLK_PAGEUP:
                             ui_pageup(); return 0;
                         case SDLK_PAGEDOWN:
