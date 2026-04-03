@@ -12,6 +12,7 @@ extern int gfx_cursdirection;
 int gfx_init(int fullscreen, char *appname);
 void gfx_setfont(int f);
 void gfx_toggle_font(void);
+int gfx_get_font(void);
 void gfx_bgcolor(int c);
 void gfx_fgcolor(int c);
 int gfx_get_fgcolor(void);

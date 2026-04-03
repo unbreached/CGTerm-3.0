@@ -341,6 +341,10 @@ void gfx_toggle_font(void) {
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 
+int gfx_get_font(void) {
+  return font;
+}
+
 
 void gfx_bgcolor(int c) {
   resetcursor();

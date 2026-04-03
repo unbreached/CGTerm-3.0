@@ -313,14 +313,14 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
   }
 }
 
-static void menu_draw_item_red(int x, int y, const char *key, const char *text) {
+static void menu_draw_item_redkey(int x, int y, const char *key, const char *text) {
   int klen = (int)strlen(key);
   font_set_font(menu_font[0]);
-  font_draw_string_color(x, y, "[", 0xff, 0x40, 0x40);
+  font_draw_string_color(x, y, "[", 0x00, 0xee, 0xff);
   font_set_font(menu_font[1]);
   font_draw_string_color(x + 10, y, key, 0xff, 0x40, 0x40);
   font_set_font(menu_font[0]);
-  font_draw_string_color(x + 10 + klen * 10, y, "] ", 0xff, 0x40, 0x40);
+  font_draw_string_color(x + 10 + klen * 10, y, "] ", 0x00, 0xee, 0xff);
   font_draw_string_color(x + 30 + klen * 10, y, text, 0x60, 0x80, 0xff);
 }
 
@@ -407,7 +407,21 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(lx, ty + 56, "S", "Save screen");
     menu_draw_item(lx, ty + 70, "I", "Screenshot");
     menu_draw_item(lx, ty + 84, "Z", "Font settings");
-    menu_draw_item(lx, ty + 98, "W", "Upper/Lowercase");
+    /* Upper/Lowercase toggle */
+    {
+      int mx = lx;
+      int my = ty + 98;
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(mx + 10, my, "W", 0xff, 0xff, 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx + 20, my, "] Case ", 0x00, 0xee, 0xff);
+      if (gfx_get_font() == 0)
+        font_draw_string_color(mx + 90, my, "[UPPER/GFX]", 0xff, 0xff, 0x54);
+      else
+        font_draw_string_color(mx + 90, my, "[lower/UPPER]", 0x00, 0xff, 0x66);
+    }
 
     /* Terminal mode toggle — PETSCII/ANSI */
     {
@@ -468,7 +482,7 @@ void menu_print_menu(struct menu *menu) {
         font_draw_string_color(mx + 200, my, "[OFF]", 0xff, 0x40, 0x40);
     }
 
-    menu_draw_item_red(rx, ty + 154, "Q", "Quit CGTerm");
+    menu_draw_item_redkey(rx, ty + 154, "Q", "Quit CGTerm");
   }
 
   /* Transfer path at bottom */
