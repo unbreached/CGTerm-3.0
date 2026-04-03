@@ -1992,12 +1992,15 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
             /* Space or any key toggles mode */
             break;
           }
-          if (ev.key.keysym.unicode >= 32 && ev.key.keysym.unicode < 127) {
-            if (len < maxlen[field]) {
+          {
+            int uc = ev.key.keysym.unicode;
+            if (uc == 0 && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+              uc = ev.key.keysym.sym;
+            if (uc >= 32 && uc < 127 && len < maxlen[field]) {
               memmove(bufs[field] + cursor[field] + 1,
                       bufs[field] + cursor[field],
                       len - cursor[field] + 1);
-              bufs[field][cursor[field]] = (char)ev.key.keysym.unicode;
+              bufs[field][cursor[field]] = (char)uc;
               cursor[field]++;
             }
           }
@@ -2488,9 +2491,12 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
             editbuf[editlen] = 0;
             break;
           default:
-            if (ev.key.keysym.unicode >= 32 && ev.key.keysym.unicode < 127) {
-              if (editlen < (int)sizeof(editbuf) - 2) {
-                editbuf[editlen++] = (char)ev.key.keysym.unicode;
+            {
+              int uc = ev.key.keysym.unicode;
+              if (uc == 0 && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+                uc = ev.key.keysym.sym;
+              if (uc >= 32 && uc < 127 && editlen < (int)sizeof(editbuf) - 2) {
+                editbuf[editlen++] = (char)uc;
                 editbuf[editlen] = 0;
               }
             }
