@@ -68,10 +68,14 @@ void ui_inputkey(SDL_keysym *keysym) {
   switch (keysym->sym) {
 
   default:
-    c = keysym->unicode;
-    /* Fallback: if unicode is 0 but sym is printable ASCII, use sym */
-    if (c == 0 && keysym->sym >= 32 && keysym->sym < 127) c = keysym->sym;
-    if (c >= 32 && c <= 126) {
+    if (keysym->unicode >= 32 && keysym->unicode <= 126) {
+      c = keysym->unicode;
+    } else if (keysym->sym >= 32 && keysym->sym < 127 && keysym->unicode == 0) {
+      c = keysym->sym;  /* Linux SDL fallback */
+    } else {
+      break;
+    }
+    {
       if (input_len < input_maxlen) {
 	++input_len;
 	memmove(input_buffer + input_pos + input_offset + 1,
