@@ -482,6 +482,7 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 210 + (int)strlen(mname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
+    menu_draw_item(rx, ty + 126, "?", "Help");
     menu_draw_item_redkey(rx, ty + 154, "Q", "Quit CGTerm");
   }
 
@@ -2699,6 +2700,104 @@ void menu_fs_draw_path(const char *path) {
   }
 
   menu_dirty = 1;
+}
+
+
+/* Scrollable text viewer for help file */
+void menu_show_help(const char *filename) {
+  FILE *f;
+  char lines[500][80];
+  int num_lines = 0;
+  int scroll = 0;
+  int visible;
+  SDL_Event ev;
+  int done = 0;
+
+  f = fopen(filename, "r");
+  if (!f) {
+    menu_draw_message("Help file not found!");
+    menu_show();
+    gfx_vbl();
+    SDL_Delay(2000);
+    return;
+  }
+
+  while (num_lines < 500 && fgets(lines[num_lines], 79, f)) {
+    /* Strip newline */
+    int len = (int)strlen(lines[num_lines]);
+    if (len > 0 && lines[num_lines][len-1] == '\n') lines[num_lines][len-1] = 0;
+    num_lines++;
+  }
+  fclose(f);
+
+  visible = (menu_height - 60) / 14;
+
+  while (!done) {
+    int i;
+    int lx = 20, ty = 30;
+    Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+
+    SDL_FillRect(menu_surface, NULL, solidbg);
+    menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
+      SDL_MapRGBA(menu_surface->format, 0x40, 0x80, 0xff, SDL_ALPHA_OPAQUE));
+
+    font_set_font(menu_font[0]);
+    font_draw_string_color(lx, 10, "[ ", 0x00, 0xee, 0xff);
+    font_draw_string_color(lx + 20, 10, "HELP", 0xff, 0x40, 0x80);
+    font_draw_string_color(lx + 60, 10, " ]", 0x00, 0xee, 0xff);
+
+    /* Scroll indicator */
+    {
+      char scrollinfo[32];
+      snprintf(scrollinfo, sizeof(scrollinfo), "%d/%d", scroll + 1, num_lines);
+      font_draw_string_color(menu_width - 100, 10, scrollinfo, 0x60, 0x80, 0xff);
+    }
+
+    /* Draw visible lines */
+    for (i = 0; i < visible && scroll + i < num_lines; i++) {
+      /* Color section headers differently */
+      char *line = lines[scroll + i];
+      if (strstr(line, "===") || strstr(line, "---")) {
+        font_draw_string_color(lx, ty + i * 14, line, 0x00, 0xee, 0xff);
+      } else if (line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strlen(line) > 3 &&
+                 (strstr(line, "CGTERM") || strstr(line, "KEYBOARD") || strstr(line, "MODIFIER") ||
+                  strstr(line, "FILE") || strstr(line, "C*BASE") || strstr(line, "ANSI") ||
+                  strstr(line, "TIPS"))) {
+        font_draw_string_color(lx, ty + i * 14, line, 0xff, 0x40, 0x80);
+      } else {
+        font_draw_string_color(lx, ty + i * 14, line, 0x60, 0x80, 0xff);
+      }
+    }
+
+    /* Hints at bottom */
+    font_draw_string_color(lx, menu_height - 18, "Up/Down ", 0x00, 0xee, 0xff);
+    font_draw_string_color(lx + 80, menu_height - 18, "scroll  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(lx + 160, menu_height - 18, "PgUp/PgDn ", 0x00, 0xee, 0xff);
+    font_draw_string_color(lx + 270, menu_height - 18, "page  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(lx + 320, menu_height - 18, "Esc ", 0x00, 0xee, 0xff);
+    font_draw_string_color(lx + 360, menu_height - 18, "back", 0x00, 0xff, 0x66);
+
+    menu_dirty = SDL_TRUE;
+    menu_show();
+    gfx_vbl();
+
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN) {
+        switch (ev.key.keysym.sym) {
+        case SDLK_ESCAPE: done = 1; break;
+        case SDLK_UP: if (scroll > 0) scroll--; break;
+        case SDLK_DOWN: if (scroll < num_lines - visible) scroll++; break;
+        case SDLK_PAGEUP: scroll -= visible; if (scroll < 0) scroll = 0; break;
+        case SDLK_PAGEDOWN: scroll += visible; if (scroll > num_lines - visible) scroll = num_lines - visible; break;
+        case SDLK_HOME: scroll = 0; break;
+        case SDLK_END: scroll = num_lines - visible; if (scroll < 0) scroll = 0; break;
+        default: break;
+        }
+      }
+    }
+    SDL_Delay(20);
+  }
 }
 
 

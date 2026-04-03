@@ -218,6 +218,7 @@ void ui_menukey(SDL_keysym *keysym) {
   case SDLK_p: case SDLK_q: case SDLK_r: case SDLK_s:
   case SDLK_t: case SDLK_u: case SDLK_v: case SDLK_w:
   case SDLK_z:
+  case SDLK_F1: case SDLK_QUESTION: case SDLK_SLASH:
   case SDLK_LALT: case SDLK_RALT:
     menu_hide();
     kbd_focus = FOCUS_TERM;

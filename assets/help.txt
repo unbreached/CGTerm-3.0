@@ -1,0 +1,90 @@
+
+  CGTERM 3.0 - HELP
+  =================
+
+  KEYBOARD SHORTCUTS
+  ------------------
+  ESC          Open/close menu
+  Alt+ESC      Send ESC to BBS (ANSI mode)
+  Ctrl+V       Paste from clipboard
+  PageUp/Down  Scroll through history
+
+  MODIFIER KEYS (PETSCII MODE)
+  ----------------------------
+  ALT (Option) = Commodore key
+    Hold ALT + letter for PETSCII graphics
+  CTRL = C64 Control key
+    Ctrl+1 Black    Ctrl+5 Green
+    Ctrl+2 White    Ctrl+6 Blue
+    Ctrl+3 Red      Ctrl+7 Yellow
+    Ctrl+4 Cyan     Ctrl+8 Orange
+
+  FILE TRANSFERS
+  --------------
+  Punter     Most common C64 BBS protocol
+  Multi-P    Batch download/upload (Punter)
+  XMODEM     Legacy protocol (CRC/1K variants)
+  Rainbow    Used on some BBSes
+
+  During transfer:
+    ESC = Cancel (with confirmation)
+
+  C*BASE BBS COMMANDS (USER)
+  --------------------------
+  S  Sub Boards      O  Oneliners
+  U  U/D Section     M  Mail
+  X  Library          F  Feedback
+  C  Chat Sysop      Z  Wallwriter
+  P  Play Games      N  Notices
+  L  List Users      Y  Your Status
+  B  BBS Lister      A  BBS Status
+  D  BBS Info        I  Exchange Terms
+  T  Top Users       E  Edit Userparams
+  G  Goodbye         Q  Quick Logout
+
+  In message areas:
+  R  Read messages    P  Post message
+  S  Scan titles      N  New messages
+  A  Read all         L  Last read
+
+  In U/D section:
+  D  Download file    U  Upload file
+  L  List files       V  View file info
+  $  Directory        @  Disk command
+
+  C*BASE BBS COMMANDS (SYSOP)
+  ---------------------------
+  Shift+S  Sysop menu
+  Shift+E  Edit user online
+  Shift+C  Chat with user
+  Shift+L  Lock/unlock user
+  Shift+V  View user status
+  Shift+D  Disconnect user
+  @        Send disk command
+
+  Sysop maintenance:
+  - Edit userparams to manage users
+  - Use Library for file management
+  - BBS Info shows system status
+  - Wallwriter for announcements
+
+  ANSI MODE
+  ---------
+  Toggle with [G] in menu.
+  Auto-switches to 80 columns.
+  Alt+ESC sends ESC byte to BBS.
+  Arrow keys send ANSI sequences.
+  Supports colors, cursor movement,
+  box-drawing, and 256 colors.
+
+  TIPS
+  ----
+  - Set charset to Swedish [H] to
+    display and type AAOoe correctly
+    on Swedish BBSes
+  - Settings are saved automatically
+  - Use [J] Set Path to choose your
+    warez download directory
+  - Bookmarks support ANSI/PETSCII
+    mode per BBS (edit with [E])
+

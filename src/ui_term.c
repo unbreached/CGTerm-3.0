@@ -796,6 +796,19 @@ void ui_metakey(SDL_keysym *keysym) {
     }
     break;
 
+  case SDLK_F1:
+  case SDLK_QUESTION:
+    /* Help viewer */
+    {
+      char fname[1024];
+      path_build_asset(fname, sizeof(fname), "help.txt");
+      menu_show_help(fname);
+    }
+    menu_print_menu(termmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
+    break;
+
   case SDLK_e:
     cfg_localecho ^= 1;
     cfg_save_setting("localecho", cfg_localecho ? "yes" : "no");
