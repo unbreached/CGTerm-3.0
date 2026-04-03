@@ -461,9 +461,9 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 10, my, "H", 0xff, 0xff, 0xff);
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Charset ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 120, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 130, my, csname, 0xff, 0xff, 0x54);
-      font_draw_string_color(mx + 130 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 210, my, csname, 0xff, 0xff, 0x54);
+      font_draw_string_color(mx + 210 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
     /* Oldschool modem toggle — same style as Charset */
