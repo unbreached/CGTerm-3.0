@@ -302,7 +302,8 @@ int main(int argc, char *argv[]) {
     char bgpath[1024];
     path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
     if (cfg_file_exists(bgpath)) {
-      gfx_vbl();  /* flush any pending draws first */
+      gfx_setcursxy(-1, -1);  /* hide cursor so it doesn't dirty line 0 */
+      gfx_vbl();
       gfx_show_background(bgpath);
     } else {
       if (cfg_columns == 40) {

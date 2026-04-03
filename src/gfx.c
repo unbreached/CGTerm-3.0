@@ -897,6 +897,8 @@ void gfx_show_background(const char *bmpfile) {
   }
   SDL_FreeSurface(bg);
   SDL_UpdateRect(gfx_screen, 0, 0, 0, 0);
+  /* Mark all lines clean so gfx_vbl doesn't overwrite */
+  memset(dirty, SDL_FALSE, sizeof(dirty));
 }
 
 
