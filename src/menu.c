@@ -416,7 +416,7 @@ void menu_print_menu(struct menu *menu) {
       font_set_font(menu_font[1]);
       font_draw_string_color(mx + 10, my, "W", 0xff, 0xff, 0xff);
       font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Case ", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 20, my, "] Graphics ", 0x00, 0xee, 0xff);
       if (gfx_get_font() == 0)
         font_draw_string_color(mx + 90, my, "[UPPER]", 0xff, 0xff, 0x54);
       else
