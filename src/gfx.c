@@ -878,6 +878,28 @@ int gfx_save_screenshot(const char *filename) {
 }
 
 
+void gfx_show_background(const char *bmpfile) {
+  SDL_Surface *bg = SDL_LoadBMP(bmpfile);
+  if (!bg) return;
+
+  /* Scale to screen if needed */
+  if (bg->w != gfx_width || bg->h != gfx_height) {
+    /* Simple nearest-neighbor scale by blitting to screen directly
+     * SDL 1.2 doesn't have scaling, so we just center/crop */
+    SDL_Rect dst;
+    dst.x = (gfx_width - bg->w) / 2;
+    dst.y = (gfx_height - bg->h) / 2;
+    if (dst.x < 0) dst.x = 0;
+    if (dst.y < 0) dst.y = 0;
+    SDL_BlitSurface(bg, NULL, gfx_screen, &dst);
+  } else {
+    SDL_BlitSurface(bg, NULL, gfx_screen, NULL);
+  }
+  SDL_FreeSurface(bg);
+  SDL_UpdateRect(gfx_screen, 0, 0, 0, 0);
+}
+
+
 void gfx_crt_shutdown(void) {
   /* Classic CRT power-off effect:
    * 1. Screen squishes vertically to a horizontal line

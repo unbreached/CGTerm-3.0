@@ -47,3 +47,4 @@ void gfx_clear_rect(int rect_x, int rect_y, int rect_w, int rect_h);
 void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned char *rect_0400, unsigned char *rect_d800);
 int gfx_save_screenshot(const char *filename);
 void gfx_crt_shutdown(void);
+void gfx_show_background(const char *bmpfile);
