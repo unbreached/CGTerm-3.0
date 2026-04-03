@@ -38,6 +38,7 @@ void gfx_conv_screen_to_pet(unsigned char *chars, unsigned char *colors, unsigne
 void gfx_savescreen(char *filename);
 void gfx_set_title(const char *title);
 void gfx_toggle_fullscreen(void);
+void gfx_reload_charset(void);
 void gfx_set_columns(int cols);
 void gfx_set_offset(int offset);
 void gfx_copy_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned char *rect_0400, unsigned char *rect_d800);

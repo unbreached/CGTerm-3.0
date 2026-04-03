@@ -437,7 +437,25 @@ void menu_print_menu(struct menu *menu) {
         font_draw_string_color(mx + 140, my, "[PETSCII]", 0xff, 0x80, 0xff);
     }
 
-    menu_draw_item(rx, ty + 140, "Q", "Quit CGTerm");
+    /* Character set toggle */
+    {
+      int mx = rx;
+      int my = ty + 126;
+      const char *csname = "US/UK";
+      if (cfg_charset == 1) csname = "Swedish";
+      else if (cfg_charset == 2) csname = "German";
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(mx + 10, my, "H", 0xff, 0xff, 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx + 20, my, "] Charset ", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 120, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 130, my, csname, 0xff, 0xff, 0x54);
+      font_draw_string_color(mx + 130 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
+    }
+
+    menu_draw_item(rx, ty + 154, "Q", "Quit CGTerm");
   }
 
   /* Transfer path at bottom */

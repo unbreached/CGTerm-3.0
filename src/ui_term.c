@@ -802,6 +802,15 @@ void ui_metakey(SDL_keysym *keysym) {
     gfx_toggle_fullscreen();
     break;
 
+  case SDLK_h:
+    /* Cycle charset: US/UK -> Swedish -> German -> US/UK */
+    cfg_charset = (cfg_charset + 1) % 3;
+    gfx_reload_charset();
+    menu_print_menu(termmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
+    break;
+
   case SDLK_g:
     cfg_termmode ^= 1;
     if (cfg_termmode == 1) {

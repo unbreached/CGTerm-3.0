@@ -257,15 +257,30 @@ int gfx_init(int fullscreen, char *appname) {
   SDL_WM_SetCaption(appname, appname);
   SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
 
-  path_build_asset(fname, sizeof(fname), "upper.bmp");
-  if ((rawfont[0] = gfx_loadfont(fname)) == NULL) {
-    printf("Error: %s", fname);
-    return(1);
-  }
-  path_build_asset(fname, sizeof(fname), "lower.bmp");
-  if ((rawfont[1] = gfx_loadfont(fname)) == NULL) {
-    printf("Error: %s", fname);
-    return(1);
+  /* Load C64 character ROM fonts based on charset setting */
+  {
+    const char *upper_name = "upper.bmp";
+    const char *lower_name = "lower.bmp";
+    if (cfg_charset == 1) {
+      upper_name = "upper-swedish.bmp";
+      lower_name = "lower-swedish.bmp";
+    } else if (cfg_charset == 2) {
+      upper_name = "upper-german.bmp";
+      lower_name = "lower-german.bmp";
+    }
+    path_build_asset(fname, sizeof(fname), upper_name);
+    if ((rawfont[0] = gfx_loadfont(fname)) == NULL) {
+      /* Fall back to standard */
+      path_build_asset(fname, sizeof(fname), "upper.bmp");
+      rawfont[0] = gfx_loadfont(fname);
+    }
+    if (rawfont[0] == NULL) { printf("Error: upper font\n"); return(1); }
+    path_build_asset(fname, sizeof(fname), lower_name);
+    if ((rawfont[1] = gfx_loadfont(fname)) == NULL) {
+      path_build_asset(fname, sizeof(fname), "lower.bmp");
+      rawfont[1] = gfx_loadfont(fname);
+    }
+    if (rawfont[1] == NULL) { printf("Error: lower font\n"); return(1); }
   }
   rawfont[2] = cp437_create_raw_font();
   if (
@@ -719,6 +734,39 @@ void gfx_toggle_fullscreen(void) {
     }
     cfg_fullscreen = 1;
   }
+  memset(dirty, SDL_TRUE, sizeof(dirty));
+}
+
+
+void gfx_reload_charset(void) {
+  char fname[1024];
+  const char *upper_name = "upper.bmp";
+  const char *lower_name = "lower.bmp";
+  if (cfg_charset == 1) {
+    upper_name = "upper-swedish.bmp";
+    lower_name = "lower-swedish.bmp";
+  } else if (cfg_charset == 2) {
+    upper_name = "upper-german.bmp";
+    lower_name = "lower-german.bmp";
+  }
+  path_build_asset(fname, sizeof(fname), upper_name);
+  if (rawfont[0]) SDL_FreeSurface(rawfont[0]);
+  rawfont[0] = gfx_loadfont(fname);
+  if (!rawfont[0]) {
+    path_build_asset(fname, sizeof(fname), "upper.bmp");
+    rawfont[0] = gfx_loadfont(fname);
+  }
+  path_build_asset(fname, sizeof(fname), lower_name);
+  if (rawfont[1]) SDL_FreeSurface(rawfont[1]);
+  rawfont[1] = gfx_loadfont(fname);
+  if (!rawfont[1]) {
+    path_build_asset(fname, sizeof(fname), "lower.bmp");
+    rawfont[1] = gfx_loadfont(fname);
+  }
+  gfx_destroyfont(fontlist[0]);
+  gfx_destroyfont(fontlist[1]);
+  fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom);
+  fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom);
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 

@@ -213,7 +213,7 @@ void ui_menukey(SDL_keysym *keysym) {
 
   /* Valid menu keys — hide menu and handle */
   case SDLK_a: case SDLK_b: case SDLK_c: case SDLK_d:
-  case SDLK_e: case SDLK_f: case SDLK_g: case SDLK_i: case SDLK_j:
+  case SDLK_e: case SDLK_f: case SDLK_g: case SDLK_h: case SDLK_i: case SDLK_j:
   case SDLK_k: case SDLK_l: case SDLK_m: case SDLK_n:
   case SDLK_p: case SDLK_q: case SDLK_r: case SDLK_s:
   case SDLK_t: case SDLK_u: case SDLK_v: case SDLK_w:

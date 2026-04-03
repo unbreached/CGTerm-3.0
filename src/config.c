@@ -46,6 +46,7 @@ char cfg_xferdir[256];
 char cfg_dldir[256];
 int cfg_termmode = 0;
 char cfg_connect_name[128] = "";
+int cfg_charset = 0;
 int cfg_bookmark_termmode[40];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
@@ -446,6 +447,15 @@ signed int cfg_readconfig(char *configfile) {
     } else if (strcmp(key, "menufont") == 0) {
         cfg_menufont = strtol(value, (char **)NULL, 10);
         if (cfg_menufont < 0 || cfg_menufont > 20) cfg_menufont = 0;
+
+    } else if (strcmp(key, "charset") == 0) {
+        if (strcmp("swedish", value) == 0 || strcmp("se", value) == 0) {
+            cfg_charset = 1;
+        } else if (strcmp("german", value) == 0 || strcmp("de", value) == 0) {
+            cfg_charset = 2;
+        } else {
+            cfg_charset = 0;
+        }
 
     } else if (strcmp(key, "modem") == 0) {
         if (strcmp("yes", value) == 0) {

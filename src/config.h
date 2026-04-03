@@ -34,6 +34,7 @@ extern char cfg_bookmarkfile[];
 extern int cfg_termmode;
 extern int cfg_bookmark_termmode[];
 extern char cfg_connect_name[];
+extern int cfg_charset;  /* 0=standard, 1=swedish, 2=german */
 
 
 int cfg_init(char *argv0);
