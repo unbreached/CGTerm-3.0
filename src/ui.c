@@ -13,6 +13,7 @@
 #include "macro.h"
 #include "ui.h"
 #include "ansi.h"
+#include "paths.h"
 
 
 int input_maxlen = 256;
@@ -216,6 +217,15 @@ void ui_menukey(SDL_keysym *keysym) {
   case SDLK_ESCAPE:
     menu_hide();
     kbd_focus = FOCUS_TERM;
+    /* Re-show background if not connected */
+    if (!net_connected()) {
+      char bgpath[1024];
+      path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
+      if (cfg_file_exists(bgpath)) {
+        gfx_vbl();
+        gfx_show_background(bgpath);
+      }
+    }
     break;
 
   /* Valid menu keys — hide menu and handle */
