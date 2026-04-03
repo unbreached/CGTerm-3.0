@@ -471,11 +471,34 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     break;
 
   case SDLK_d:
-    /* Delete highlighted bookmark */
+    /* Delete highlighted bookmark — with confirmation */
     if (bm_cursor >= 0 && bm_cursor < cfg_numbookmarks) {
-      bm_delete(bm_cursor);
-      if (bm_cursor >= cfg_numbookmarks && cfg_numbookmarks > 0) {
-        bm_cursor = cfg_numbookmarks - 1;
+      char confirm_msg[128];
+      snprintf(confirm_msg, sizeof(confirm_msg), "Delete \"%s\"? (Y/N)",
+        cfg_bookmark_alias[bm_cursor]);
+      menu_draw_message(confirm_msg);
+      menu_show();
+      gfx_vbl();
+      /* Wait for Y or N */
+      {
+        SDL_Event cev;
+        int answered = 0;
+        while (!answered) {
+          while (SDL_PollEvent(&cev)) {
+            if (cev.type == SDL_QUIT) exit(0);
+            if (cev.type == SDL_KEYDOWN) {
+              if (cev.key.keysym.sym == SDLK_y) {
+                bm_delete(bm_cursor);
+                if (bm_cursor >= cfg_numbookmarks && cfg_numbookmarks > 0)
+                  bm_cursor = cfg_numbookmarks - 1;
+                answered = 1;
+              } else {
+                answered = 1;  /* any other key = cancel */
+              }
+            }
+          }
+          SDL_Delay(20);
+        }
       }
       menu_draw_bookmarks_sel(bm_cursor);
       menu_show();
