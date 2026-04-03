@@ -302,13 +302,26 @@ static void menu_draw_item(int x, int y, const char *key, const char *text) {
     /* "]" in cyan */
     font_set_font(menu_font[0]);
     font_draw_string_color(x + 10 + klen * 10, y, "] ", 0x00, 0xee, 0xff);
-    /* text in light blue */
+    /* text in light blue (default) */
     font_draw_string_color(x + 30 + klen * 10, y, text, 0x60, 0x80, 0xff);
+  } else if (key[0] == '\0' && text[0] == '\0') {
+    /* empty spacer — do nothing */
   } else {
     font_set_font(menu_font[0]);
     font_draw_string(x, y, "    ");
     font_draw_string_color(x + 40, y, text, 0x60, 0x80, 0xff);
   }
+}
+
+static void menu_draw_item_red(int x, int y, const char *key, const char *text) {
+  int klen = (int)strlen(key);
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x, y, "[", 0xff, 0x40, 0x40);
+  font_set_font(menu_font[1]);
+  font_draw_string_color(x + 10, y, key, 0xff, 0x80, 0x80);
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x + 10 + klen * 10, y, "] ", 0xff, 0x40, 0x40);
+  font_draw_string_color(x + 30 + klen * 10, y, text, 0xff, 0x40, 0x40);
 }
 
 /* Draw section title centered within its quadrant, with colored brackets */
@@ -386,9 +399,9 @@ void menu_print_menu(struct menu *menu) {
     int mid_y = menu_height / 2;
     menu_draw_line(lx, mid_y, menu_width - lx, mid_y, linecol);
 
-    /* Bottom half — SCREEN (left) and SETTINGS (right) */
+    /* Bottom half — SCREEN & GFX (left) and SETTINGS (right) */
     ty = mid_y + 8;
-    menu_draw_section_centered(lx, cx, ty, "SCREEN");
+    menu_draw_section_centered(lx, cx, ty, "SCREEN & GFX");
     menu_draw_item(lx, ty + 28, "L", "Load SEQ file");
     menu_draw_item(lx, ty + 42, "P", "Post SEQ to BBS");
     menu_draw_item(lx, ty + 56, "S", "Save screen");
@@ -411,6 +424,10 @@ void menu_print_menu(struct menu *menu) {
       else
         font_draw_string_color(mx + 130, my, "[PETSCII]", 0xff, 0x80, 0xff);
     }
+
+    menu_draw_item(lx, ty + 126, "C", "Record macro");
+    menu_draw_item(lx, ty + 140, "V", "Play macro");
+    menu_draw_item(lx, ty + 154, "A", "Abort");
 
     menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
     menu_draw_item(rx, ty + 28, "E", "Local echo");
@@ -451,11 +468,7 @@ void menu_print_menu(struct menu *menu) {
         font_draw_string_color(mx + 200, my, "[OFF]", 0xff, 0x40, 0x40);
     }
 
-    menu_draw_item(rx, ty + 98, "C", "Record macro");
-    menu_draw_item(rx, ty + 112, "V", "Play macro");
-    menu_draw_item(rx, ty + 126, "A", "Abort");
-
-    menu_draw_item(rx, ty + 154, "Q", "Quit CGTerm");
+    menu_draw_item_red(rx, ty + 154, "Q", "Quit CGTerm");
   }
 
   /* Transfer path at bottom */
@@ -465,7 +478,9 @@ void menu_print_menu(struct menu *menu) {
     int maxchars = (menu_width - 140) / 10;
 
     font_set_font(menu_font[0]);
-    font_draw_string_color(lx, py, "WAREZ DiR:>", 0x00, 0xee, 0xff);
+    font_draw_string_color(lx, py, "WAREZ DiR", 0xff, 0x40, 0x80);
+    font_draw_string_color(lx + 90, py, ":>", 0x00, 0xff, 0x66);
+    font_draw_string_color(lx + 110, py, " ", 0x00, 0xee, 0xff);
     if ((int)strlen(cfg_dldir) > maxchars) {
       snprintf(truncpath, sizeof(truncpath), "...%s", cfg_dldir + strlen(cfg_dldir) - maxchars + 3);
     } else {
