@@ -2139,34 +2139,27 @@ void menu_keyboard_test(void) {
       font_draw_string_color(lx, ty + 24, "Press any key to see its C64 mapping.", 0x60, 0x80, 0xff);
       font_draw_string_color(lx, ty + 38, "Try with Shift, Ctrl, and C= (Alt).", 0x60, 0x80, 0xff);
 
-      /* Current layout */
-      font_draw_string_color(lx, ty + 62, "Layout:", 0x00, 0xee, 0xff);
-      font_draw_string_color(lx + 80, ty + 62, cfg_keyboard ? cfg_keyboard : "(default)", 0x00, 0xff, 0x66);
+      /* Current layout — show just the filename, not the full path */
+      {
+        const char *kbdname = cfg_keyboard ? cfg_keyboard : "(default)";
+        const char *slash = strrchr(kbdname, '/');
+        if (!slash) slash = strrchr(kbdname, '\\');
+        if (slash) kbdname = slash + 1;
+        font_draw_string_color(lx, ty + 62, "Layout:", 0x00, 0xee, 0xff);
+        font_draw_string_color(lx + 80, ty + 62, kbdname, 0x00, 0xff, 0x66);
+      }
 
       if (last_key_name[0]) {
         char buf[80];
-        const char *c64_mod_names[] = {"(none)", "SHiFT", "C= (COMMoDORE)", "CTRL"};
-        const char *pc_mod_names[] = {"(none)", "Shift", "Alt", "Ctrl"};
-        int rx = menu_width / 2 + 10;  /* right column start */
+        const char *pc_mod_names[] = {"(none)", "Shift", "Alt (C=)", "Ctrl"};
 
-        /* --- Left column: PC side --- */
-        font_draw_string_color(lx, ty + 72, "--- PC ---", 0xff, 0x40, 0x80);
-
-        font_draw_string_color(lx, ty + 90, "PC Key:", 0x00, 0xee, 0xff);
-        snprintf(buf, sizeof(buf), "%s  (SDL code: %d)", last_sdl_name, last_sym);
-        font_draw_string_color(lx + 80, ty + 90, buf, 0xff, 0xff, 0xff);
-
-        font_draw_string_color(lx, ty + 106, "PC Mod:", 0x00, 0xee, 0xff);
-        font_draw_string_color(lx + 80, ty + 106, pc_mod_names[last_mod], 0xff, 0xff, 0xff);
-
-        /* --- Right column: C64 side --- */
-        font_draw_string_color(rx, ty + 72, "--- C64 ---", 0xff, 0x40, 0x80);
-
-        font_draw_string_color(rx, ty + 90, "C64 Mod:", 0x00, 0xee, 0xff);
-        font_draw_string_color(rx + 100, ty + 90, c64_mod_names[last_mod], 0x00, 0xff, 0x66);
+        /* --- PC side --- */
+        font_draw_string_color(lx, ty + 80, "PC Key:", 0x00, 0xee, 0xff);
+        snprintf(buf, sizeof(buf), "%s  (SDL: %d  Mod: %s)", last_sdl_name, last_sym, pc_mod_names[last_mod]);
+        font_draw_string_color(lx + 80, ty + 80, buf, 0xff, 0xff, 0xff);
 
         snprintf(buf, sizeof(buf), "PETSCii: $%02X (%d)", last_actual, last_actual);
-        font_draw_string_color(rx, ty + 106, buf, 0x00, 0xff, 0x66);
+        font_draw_string_color(lx, ty + 96, buf, 0x00, 0xff, 0x66);
 
         /* Divider line */
         {
@@ -2283,6 +2276,20 @@ void menu_keyboard_test(void) {
               } else {
                 last_mod = 0;
                 last_actual = keytable[sym][0];
+              }
+
+              /* Unicode-first override: show what kbd_getkey() would actually send */
+              if (last_mod < 2) {  /* no Ctrl/Alt modifier */
+                unsigned int uc = ev.key.keysym.unicode;
+                if (uc >= 'a' && uc <= 'z') last_actual = uc - 32;
+                else if (uc >= 'A' && uc <= 'Z') last_actual = uc + 128;
+                else if (uc >= 32 && uc < 127) last_actual = (unsigned char)uc;
+                else if (uc == 0x00E5) last_actual = 0x5B;  /* å */
+                else if (uc == 0x00C5) last_actual = 0xDB;  /* Å */
+                else if (uc == 0x00F6) last_actual = 0x5C;  /* ö */
+                else if (uc == 0x00D6) last_actual = 0xDC;  /* Ö */
+                else if (uc == 0x00E4) last_actual = 0x5D;  /* ä */
+                else if (uc == 0x00C4) last_actual = 0xDD;  /* Ä */
               }
 
               last_sym = sym;
