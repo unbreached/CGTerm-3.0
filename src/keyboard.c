@@ -455,9 +455,100 @@ int kbd_getkey() {
                         }
                         return 0;
                     } else {
-                        key = translatekey(&event.key.keysym, &shift, &ctrl, &cbm);
-                        snprintf(_DebugMsg, sizeof(_DebugMsg), "Key: %d Mod: %d Shift: %d Ctrl: %d CBM: %d", event.key.keysym.sym,event.key.keysym.mod,shift,ctrl,cbm);
-                        cfg_debug(_DebugMsg);
+                        /* PETSCII mode: Unicode-first input.
+                         * ALT = Commodore key, CTRL = C64 Ctrl key.
+                         * Regular typing uses SDL unicode → PETSCII conversion.
+                         * Modifier combos fall through to keytable lookup. */
+                        shift = (event.key.keysym.mod & (KMOD_SHIFT | KMOD_CAPS)) ? 1 : 0;
+                        ctrl = (event.key.keysym.mod & KMOD_CTRL) ? 1 : 0;
+                        cbm = (event.key.keysym.mod & KMOD_ALT) ? 1 : 0;
+
+                        /* Special keys always use keytable */
+                        switch (event.key.keysym.sym) {
+                        case SDLK_RETURN: case SDLK_KP_ENTER:
+                            return shift ? 0x8D : 0x0D;
+                        case SDLK_BACKSPACE:
+                            return 0x14;  /* C64 DEL */
+                        case SDLK_DELETE:
+                            return 0x94;  /* C64 INSERT */
+                        case SDLK_HOME:
+                            return shift ? 0x93 : 0x13;
+                        case SDLK_UP:
+                            return 0x91;  /* cursor up */
+                        case SDLK_DOWN:
+                            return 0x11;  /* cursor down */
+                        case SDLK_LEFT:
+                            return 0x9D;  /* cursor left */
+                        case SDLK_RIGHT:
+                            return 0x1D;  /* cursor right */
+                        case SDLK_TAB:
+                            return 0x09;  /* RUN/STOP */
+                        case SDLK_F1:  return shift ? 0x89 : 0x85;
+                        case SDLK_F2:  return 0x89;
+                        case SDLK_F3:  return shift ? 0x8A : 0x86;
+                        case SDLK_F4:  return 0x8A;
+                        case SDLK_F5:  return shift ? 0x8B : 0x87;
+                        case SDLK_F6:  return 0x8B;
+                        case SDLK_F7:  return shift ? 0x8C : 0x88;
+                        case SDLK_F8:  return 0x8C;
+                        case SDLK_PAGEUP:
+                            ui_pageup(); return 0;
+                        case SDLK_PAGEDOWN:
+                            ui_pagedown(); return 0;
+                        default:
+                            break;
+                        }
+
+                        /* ALT (Commodore) + key: use keytable CBM column */
+                        if (cbm && keytable[event.key.keysym.sym][2]) {
+                            key = keytable[event.key.keysym.sym][2];
+                            goto petscii_done;
+                        }
+
+                        /* CTRL + key: use keytable Ctrl column (colors etc.) */
+                        if (ctrl && keytable[event.key.keysym.sym][3]) {
+                            key = keytable[event.key.keysym.sym][3];
+                            goto petscii_done;
+                        }
+
+                        /* Regular typing: use SDL unicode value → PETSCII */
+                        {
+                            unsigned int uc = event.key.keysym.unicode;
+
+                            /* Standard ASCII printable range */
+                            if (uc >= 32 && uc < 127) {
+                                /* PETSCII case swap: lowercase → uppercase PETSCII */
+                                if (uc >= 'a' && uc <= 'z') {
+                                    key = uc - 32;  /* a(97) → A(65) in PETSCII */
+                                } else if (uc >= 'A' && uc <= 'Z') {
+                                    key = uc + 128;  /* A(65) → shifted A(193) in PETSCII */
+                                } else {
+                                    key = (unsigned char)uc;  /* punctuation/numbers = same */
+                                }
+                                goto petscii_done;
+                            }
+
+                            /* Swedish/international characters → PETSCII */
+                            switch (uc) {
+                            case 0x00E5: key = 0x5B; goto petscii_done; /* å → [ position (Å in Swedish ROM) */
+                            case 0x00C5: key = 0xDB; goto petscii_done; /* Å → shifted [ */
+                            case 0x00F6: key = 0x5C; goto petscii_done; /* ö → £ position (Ö in Swedish ROM) */
+                            case 0x00D6: key = 0xDC; goto petscii_done; /* Ö → shifted £ */
+                            case 0x00E4: key = 0x5D; goto petscii_done; /* ä → ] position (Ä in Swedish ROM) */
+                            case 0x00C4: key = 0xDD; goto petscii_done; /* Ä → shifted ] */
+                            case 0x00FC: key = 0x5B; goto petscii_done; /* ü (German) */
+                            case 0x00DC: key = 0xDB; goto petscii_done; /* Ü */
+                            }
+                        }
+
+                        /* Fallback: use old keytable for anything not caught above */
+                        if (shift) {
+                            key = keytable[event.key.keysym.sym][1];
+                        } else {
+                            key = keytable[event.key.keysym.sym][0];
+                        }
+
+                    petscii_done:
                         if (macro_rec && key != 0) {
                             macrobuf_key[macro_len] = key;
                             macrobuf_shift[macro_len] = shift;
