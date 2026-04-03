@@ -318,10 +318,10 @@ static void menu_draw_item_red(int x, int y, const char *key, const char *text) 
   font_set_font(menu_font[0]);
   font_draw_string_color(x, y, "[", 0xff, 0x40, 0x40);
   font_set_font(menu_font[1]);
-  font_draw_string_color(x + 10, y, key, 0xff, 0x80, 0x80);
+  font_draw_string_color(x + 10, y, key, 0xff, 0x40, 0x40);
   font_set_font(menu_font[0]);
   font_draw_string_color(x + 10 + klen * 10, y, "] ", 0xff, 0x40, 0x40);
-  font_draw_string_color(x + 30 + klen * 10, y, text, 0xff, 0x40, 0x40);
+  font_draw_string_color(x + 30 + klen * 10, y, text, 0x60, 0x80, 0xff);
 }
 
 /* Draw section title centered within its quadrant, with colored brackets */
