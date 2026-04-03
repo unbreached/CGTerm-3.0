@@ -1956,8 +1956,10 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
         case SDLK_SPACE:
           if (field == 3) {
             bm_mode ^= 1;
+            break;
           }
-          break;
+          /* For text fields, fall through to default to type space */
+          goto bm_default_key;
         case SDLK_BACKSPACE:
           if (field < 3 && cursor[field] > 0) {
             memmove(bufs[field] + cursor[field] - 1,
@@ -1989,9 +1991,9 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
           break;
         default:
           if (field == 3) {
-            /* Space or any key toggles mode */
             break;
           }
+        bm_default_key:
           {
             int uc = ev.key.keysym.unicode;
             if (uc == 0 && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
