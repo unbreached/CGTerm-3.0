@@ -406,11 +406,10 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(lx, ty + 42, "P", "Post SEQ to BBS");
     menu_draw_item(lx, ty + 56, "S", "Save screen");
     menu_draw_item(lx, ty + 70, "I", "Screenshot");
-    menu_draw_item(lx, ty + 84, "Z", "Font settings");
     /* Upper/Lowercase toggle — same style as Charset */
     {
       int mx = lx;
-      int my = ty + 98;
+      int my = ty + 84;
       const char *gname = gfx_get_font() == 0 ? "UPPER" : "lower";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
@@ -426,7 +425,7 @@ void menu_print_menu(struct menu *menu) {
     /* Terminal mode toggle — same style as Charset */
     {
       int mx = lx;
-      int my = ty + 112;
+      int my = ty + 98;
       const char *tname = cfg_termmode == 1 ? "ANSI" : "PETSCII";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
@@ -439,19 +438,20 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 150 + (int)strlen(tname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
-    menu_draw_item(lx, ty + 126, "C", "Record macro");
-    menu_draw_item(lx, ty + 140, "V", "Play macro");
-    menu_draw_item(lx, ty + 154, "A", "Abort");
+    menu_draw_item(lx, ty + 112, "C", "Record macro");
+    menu_draw_item(lx, ty + 126, "V", "Play macro");
+    menu_draw_item(lx, ty + 140, "A", "Abort");
 
     menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
     menu_draw_item(rx, ty + 28, "E", "Local echo");
     menu_draw_item(rx, ty + 42, "F", "Fullscreen");
-    menu_draw_item(rx, ty + 56, "K", "Keyboard layout");
+    menu_draw_item(rx, ty + 56, "Z", "Font settings");
+    menu_draw_item(rx, ty + 70, "K", "Keyboard layout");
 
     /* Charset toggle */
     {
       int mx = rx;
-      int my = ty + 70;
+      int my = ty + 84;
       const char *csname = "US/UK";
       if (cfg_charset == 1) csname = "Swedish";
       else if (cfg_charset == 2) csname = "German";
@@ -469,7 +469,7 @@ void menu_print_menu(struct menu *menu) {
     /* Oldschool modem toggle — same style as Charset */
     {
       int mx = rx;
-      int my = ty + 84;
+      int my = ty + 98;
       const char *mname = cfg_modem ? "ON" : "OFF";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
