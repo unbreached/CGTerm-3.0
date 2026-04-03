@@ -53,12 +53,12 @@ j		106
 k		107
 l		108
 
-# Swedish Mac: colon/semicolon and special symbols
-# SDL 59 = semicolon key position
-# SDL 47 = slash key position on Swedish Mac (/ key)
-# SDL 61 = equals key position
-colon		59
-semicolon	39
+# Swedish Mac: Ö is at SDL 59 (US semicolon position)
+#              Ä is at SDL 39 (US quote position)
+# Map these to the C64 keys that produce ÅÖÄ screencodes
+# when using the Swedish character ROM.
+se_oe		59
+se_ae		39
 equal		61
 return		13
 
