@@ -418,9 +418,9 @@ void menu_print_menu(struct menu *menu) {
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Graphics ", 0x00, 0xee, 0xff);
       if (gfx_get_font() == 0)
-        font_draw_string_color(mx + 90, my, "[UPPER]", 0xff, 0xff, 0x54);
+        font_draw_string_color(mx + 140, my, "[UPPER]", 0xff, 0xff, 0x54);
       else
-        font_draw_string_color(mx + 90, my, "[lower]", 0x00, 0xff, 0x66);
+        font_draw_string_color(mx + 140, my, "[lower]", 0x00, 0xff, 0x66);
     }
 
     /* Terminal mode toggle — PETSCII/ANSI */
