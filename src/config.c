@@ -69,24 +69,10 @@ FILE *fh = NULL;
 
 
 static const char *cfg_default_keyboard_profile(void) {
-  const char *lang = getenv("LC_ALL");
-  if (lang == NULL || !*lang) lang = getenv("LC_CTYPE");
-  if (lang == NULL || !*lang) lang = getenv("LANG");
-
-  int swedish = 0;
-  if (lang != NULL) {
-    if (strncasecmp(lang, "sv", 2) == 0 || strstr(lang, "_SE") != NULL || strstr(lang, "-SE") != NULL) {
-      swedish = 1;
-    }
-  }
-
-#ifdef WINDOWS
-  return swedish ? "win-se-c64.kbd" : "win-us-c64.kbd";
-#elif defined(__APPLE__)
-  return swedish ? "mac-se-c64.kbd" : "mac-us-c64.kbd";
-#else
-  return swedish ? "linux-se-c64.kbd" : "linux-us-c64.kbd";
-#endif
+  /* With unicode-first input, one keyboard file works for all
+   * platforms and languages. Language is handled by charset ROM
+   * selection and SDL unicode input. */
+  return "default.kbd";
 }
 
 int cfg_init(char *argv0) {
@@ -104,6 +90,19 @@ int cfg_init(char *argv0) {
   cfg_prefix = prefix;
   path_build_asset(keyboard, sizeof(keyboard), cfg_default_keyboard_profile());
   cfg_keyboard = keyboard;
+
+  /* Auto-detect charset from locale */
+  {
+    const char *lang = getenv("LC_ALL");
+    if (!lang || !*lang) lang = getenv("LC_CTYPE");
+    if (!lang || !*lang) lang = getenv("LANG");
+    if (lang) {
+      if (strncasecmp(lang, "sv", 2) == 0 || strstr(lang, "_SE") != NULL)
+        cfg_charset = 1;  /* Swedish */
+      else if (strncasecmp(lang, "de", 2) == 0 || strstr(lang, "_DE") != NULL || strstr(lang, "_AT") != NULL)
+        cfg_charset = 2;  /* German */
+    }
+  }
 
   /* Upload default: home directory */
 #ifdef WINDOWS
