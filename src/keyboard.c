@@ -386,7 +386,6 @@ unsigned char translatekey(SDL_keysym *keysym, unsigned char *shift, unsigned ch
 int kbd_getkey() {
     SDL_Event event;
     int c, f;
-    char _DebugMsg[256];
     unsigned char key = 0;
     
     unsigned char shift, ctrl, cbm;
@@ -551,11 +550,18 @@ int kbd_getkey() {
                             }
                         }
 
-                        /* Fallback: use old keytable for anything not caught above */
+                        /* Fallback: use keytable, then raw sym for ASCII range */
                         if (shift) {
                             key = keytable[event.key.keysym.sym][1];
                         } else {
                             key = keytable[event.key.keysym.sym][0];
+                        }
+                        /* If keytable returned 0, try using sym directly for ASCII keys */
+                        if (key == 0 && event.key.keysym.sym >= 32 && event.key.keysym.sym < 127) {
+                            unsigned char sc = (unsigned char)event.key.keysym.sym;
+                            if (sc >= 'a' && sc <= 'z') key = sc - 32;
+                            else if (sc >= 'A' && sc <= 'Z') key = sc + 128;
+                            else key = sc;
                         }
 
                     petscii_done:
