@@ -7,6 +7,7 @@
 #include "config.h"
 #include "paths.h"
 #include "cp437font.h"
+#include "kernal.h"
 
 unsigned char gfx_0400_buffer[80000];
 unsigned char gfx_d800_buffer[80000];
@@ -875,6 +876,68 @@ int gfx_save_screenshot(const char *filename) {
     return 0;
   }
   return -1;
+}
+
+
+void gfx_show_startup_bg(void) {
+  char path[1024];
+  FILE *f;
+
+  if (cfg_termmode == 1) {
+    /* ANSI mode: try background.ans first */
+    path_build_asset(path, sizeof(path), "background.ans");
+    f = fopen(path, "rb");
+    if (f) {
+      int c;
+      extern void ansi_out(unsigned char byte);
+      while ((c = fgetc(f)) != EOF)
+        ansi_out((unsigned char)c);
+      fclose(f);
+      gfx_vbl();
+      return;
+    }
+    /* Fall back to background_80.bmp */
+    path_build_asset(path, sizeof(path), "background_80.bmp");
+    if (cfg_file_exists(path)) {
+      gfx_setcursxy(-1, -1);
+      gfx_vbl();
+      gfx_show_background(path);
+      return;
+    }
+    gfx_vbl();
+  } else {
+    /* PETSCII mode: try background.seq first */
+    path_build_asset(path, sizeof(path), "background.seq");
+    f = fopen(path, "rb");
+    if (f) {
+      int c;
+      ffd2(147);  /* clear screen */
+      while ((c = fgetc(f)) != EOF)
+        ffd2((unsigned char)c);
+      fclose(f);
+      gfx_vbl();
+      return;
+    }
+    /* Fall back to background_40.bmp */
+    path_build_asset(path, sizeof(path), "background_40.bmp");
+    if (cfg_file_exists(path)) {
+      gfx_setcursxy(-1, -1);
+      gfx_vbl();
+      gfx_show_background(path);
+      return;
+    }
+    /* Built-in PETSCII banner */
+    if (cfg_columns == 40) {
+      extern void print(const char *s);
+      print("\x12\x1f            \x9a\xac\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x9a\xbb\x1f            ");
+      print("\x12\x1f            \x92                \x12            ");
+      print("\x12\x1f            \x92\x9e  cg\x96tERM \x05" "3.0    \x12\x1f            ");
+      print("\x12\x1f            \x92                \x12            ");
+      print("\x12\x1f            \x9a\xbc\x92\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x12\x9a\xbe\x1f            ");
+      print("\x92\x05\x0d");
+    }
+    gfx_vbl();
+  }
 }
 
 

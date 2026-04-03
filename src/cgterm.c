@@ -297,33 +297,10 @@ int main(int argc, char *argv[]) {
     ffd2(147);  /* clear screen for normal use */
   }
 
-  /* Show background image if available, otherwise PETSCII banner */
-  {
-    char bgpath[1024];
-    path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
-    if (cfg_file_exists(bgpath)) {
-      gfx_setcursxy(-1, -1);  /* hide cursor so it doesn't dirty line 0 */
-      gfx_vbl();
-      gfx_show_background(bgpath);
-    } else {
-      if (cfg_columns == 40) {
-        print("\x12\x1f            \x9a\xac\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x9a\xbb\x1f            ");
-        print("\x12\x1f            \x92                \x12            ");
-        print("\x12\x1f            \x92\x9e  cg\x96tERM \x05" "3.0    \x12\x1f            ");
-        print("\x12\x1f            \x92                \x12            ");
-        print("\x12\x1f            \x9a\xbc\x92\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x12\x9a\xbe\x1f            ");
-        print("\x92\x05\x0d");
-      } else {
-        print("                    \x12\x1f            \x9a\xac\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x9a\xbb\x1f            \x0d");
-        print("                    \x12\x1f            \x92                \x12            \x0d");
-        print("                    \x12\x1f            \x92\x9e  cg\x96tERM \x05" "3.0    \x12\x1f            \x0d");
-        print("                    \x12\x1f            \x92                \x12            \x0d");
-        print("                    \x12\x1f            \x9a\xbc\x92\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x12\x9a\xbe\x1f            \x0d");
-        print("\x92\x05\x0d");
-      }
-      gfx_vbl();
-    }
-  }
+  /* Show startup background:
+   * PETSCII: background.seq → background_40.bmp → built-in banner
+   * ANSI:    background.ans → background_80.bmp → black */
+  gfx_show_startup_bg();
 
   if (argc == 0) {
 

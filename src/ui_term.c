@@ -838,12 +838,7 @@ void ui_metakey(SDL_keysym *keysym) {
       termmenu[find_menu_key(termmenu, "G")].text = "Terminal: PETSCII";
       /* Re-show background if not connected */
       if (!net_connected()) {
-        char bgpath[1024];
-        path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
-        if (cfg_file_exists(bgpath)) {
-          gfx_setcursxy(-1, -1);
-          gfx_show_background(bgpath);
-        }
+        gfx_show_startup_bg();
       }
     }
     menu_print_menu(termmenu);
