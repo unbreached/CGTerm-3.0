@@ -45,6 +45,7 @@ int cfg_bookmark_port[40];
 char cfg_xferdir[256];
 char cfg_dldir[256];
 int cfg_termmode = 0;
+char cfg_connect_name[128] = "";
 int cfg_bookmark_termmode[40];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;

@@ -33,6 +33,7 @@ extern int cfg_menufont;
 extern char cfg_bookmarkfile[];
 extern int cfg_termmode;
 extern int cfg_bookmark_termmode[];
+extern char cfg_connect_name[];
 
 
 int cfg_init(char *argv0);

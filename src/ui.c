@@ -398,6 +398,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       kbd_focus = FOCUS_TERM;
       cfg_sethost(cfg_bookmark_host[b]);
       cfg_port = cfg_bookmark_port[b];
+      snprintf(cfg_connect_name, 128, "%s", cfg_bookmark_alias[b]);
       cfg_termmode = cfg_bookmark_termmode[b];
       if (cfg_termmode == 1) {
         gfx_set_columns(80);
