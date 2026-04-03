@@ -1493,9 +1493,13 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
 
   /* Sine scroller — smooth sub-pixel scrolling */
   {
-    static const char *scroll = "  Greetz to: TRIAD - FAIRLIGHT - CENSOR - ONSLAUGHT - CHORUS "
-                         "- SHARKS - F4CG - ROLE - CAMELOT - GENESIS PROJECT - EXCESS  "
-                         "... and everyone else keeping the scene alive!   ";
+    static const char *scroll = "  "
+      "GREETZ FLY OUT TO ALL ELiTE BBS SYSOPS, PETSCII ARTiSTS AND RETRO HACKERS WORLDWIDE! "
+      "--- TRIAD - FAiRLiGHT - CENSOR - ONSLAUGHT - SHARKS - F4CG - ROLE - CAMELOT - EXCESS "
+      "- GENESIS*PROJECT - BOOZE DESiGN - CREST - HOKUTO FORCE - LAXITY - NOSTALGIA - REMEMBER --- "
+      "CALL SLiME CiTY BBS! THE OLDEST AND GOOZiEST BBS ON THE PLANET! "
+      "CALL FROZEN FLOPPY BBS! YOUR FRiENDLY NEiGHBOURHOOD WAREZ BOARD! "
+      "--- SUPPORT YOUR LOCAL BBS - KEEP THE SCENE ALiVE - SPREAD THE WAREZ ---    ";
     static int slen = 0;
     int nchars;
     float foffset;
