@@ -302,6 +302,7 @@ int main(int argc, char *argv[]) {
     char bgpath[1024];
     path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
     if (cfg_file_exists(bgpath)) {
+      gfx_vbl();  /* flush any pending draws first */
       gfx_show_background(bgpath);
     } else {
       if (cfg_columns == 40) {
@@ -319,9 +320,9 @@ int main(int argc, char *argv[]) {
         print("                    \x12\x1f            \x9a\xbc\x92\x9f\xa2\xa2\x99\xa2\xa2\x9e\xa2\xa2\x05\xa2\xa2\x9e\xa2\xa2\x99\xa2\xa2\x9f\xa2\xa2\x12\x9a\xbe\x1f            \x0d");
         print("\x92\x05\x0d");
       }
+      gfx_vbl();
     }
   }
-  gfx_vbl();
 
   if (argc == 0) {
 
@@ -329,7 +330,7 @@ int main(int argc, char *argv[]) {
       if (cfg_columns == 80) {
 	print("                    ");
       }
-      print("           \x96pRESS\x9e eSC\x96 FOR MENU\x05\x0d\x0d");
+      /* print("           \x96pRESS\x9e eSC\x96 FOR MENU\x05\x0d\x0d"); */
     }
 
   } else if (argc == 1 || argc == 2) {
