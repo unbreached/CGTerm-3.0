@@ -91,18 +91,9 @@ int cfg_init(char *argv0) {
   path_build_asset(keyboard, sizeof(keyboard), cfg_default_keyboard_profile());
   cfg_keyboard = keyboard;
 
-  /* Auto-detect charset from locale */
-  {
-    const char *lang = getenv("LC_ALL");
-    if (!lang || !*lang) lang = getenv("LC_CTYPE");
-    if (!lang || !*lang) lang = getenv("LANG");
-    if (lang) {
-      if (strncasecmp(lang, "sv", 2) == 0 || strstr(lang, "_SE") != NULL)
-        cfg_charset = 1;  /* Swedish */
-      else if (strncasecmp(lang, "de", 2) == 0 || strstr(lang, "_DE") != NULL || strstr(lang, "_AT") != NULL)
-        cfg_charset = 2;  /* German */
-    }
-  }
+  /* Charset defaults to US/UK (0). Swedish/German ROMs replace PETSCII
+   * graphics chars with ÅÖÄ/ÄÖÜ which breaks PETSCII art on most BBSes.
+   * Users can switch charset via menu (H) or config: charset = swedish */
 
   /* Upload default: home directory */
 #ifdef WINDOWS
