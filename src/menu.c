@@ -2631,12 +2631,18 @@ void menu_draw_bookmarks(void) {
 
 
 void menu_fs_draw(const char *title) {
-  /* Fill entire surface with solid dark background — no bleed-through */
   Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
   SDL_FillRect(menu_surface, NULL, solidbg);
-  menu_draw_borderbox(7, 7, menu_width - 8, menu_height - 8);
-  font_set_font(menu_font[1]);
-  font_draw_string(12, 12, title);
+
+  /* Border */
+  menu_draw_box(5, 5, menu_width - 6, menu_height - 6,
+    SDL_MapRGBA(menu_surface->format, 0x40, 0x80, 0xff, SDL_ALPHA_OPAQUE));
+
+  /* Title with brackets */
+  font_set_font(menu_font[0]);
+  font_draw_string_color(12, 10, "[ ", 0x00, 0xee, 0xff);
+  font_draw_string_color(32, 10, title, 0xff, 0x40, 0x80);
+  font_draw_string_color(32 + (int)strlen(title) * 10, 10, " ]", 0x00, 0xee, 0xff);
 }
 
 
@@ -2666,7 +2672,22 @@ void menu_fs_draw_path(const char *path) {
   }
 
   font_set_font(menu_font[0]);
-  font_draw_string_color(12, 26, truncpath, 0xc0, 0x80, 0xff);
+  font_draw_string_color(12, 26, "PATH", 0xff, 0x40, 0x80);
+  font_draw_string_color(52, 26, ":>", 0x00, 0xff, 0x66);
+  font_draw_string_color(72, 26, " ", 0x00, 0xee, 0xff);
+  font_draw_string_color(82, 26, truncpath, 0xc0, 0x80, 0xff);
+
+  /* Divider line below path */
+  {
+    Uint32 divcol = SDL_MapRGBA(menu_surface->format, 0x20, 0x40, 0x60, SDL_ALPHA_OPAQUE);
+    menu_draw_line(12, 39, menu_width - 12, 39, divcol);
+  }
+
+  /* Divider above hints */
+  {
+    Uint32 divcol = SDL_MapRGBA(menu_surface->format, 0x20, 0x40, 0x60, SDL_ALPHA_OPAQUE);
+    menu_draw_line(12, menu_height - 32, menu_width - 12, menu_height - 32, divcol);
+  }
 
   /* Navigation hints — bracketed keys, consistent with main menu */
   {
@@ -2883,28 +2904,25 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   }
 
   /* Draw name */
+  font_set_font(menu_font[0]);
   switch (entrytype) {
   case 1:
-    /* "DIR:" in cyan, name in neon green */
-    font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, "DIR:", 0x00, 0xee, 0xff);
-    font_draw_string_color(x + 50, y + 1, text, 0x00, 0xff, 0x66);
+    /* Directory: folder arrow + name in green */
+    font_draw_string_color(x, y + 1, ">", 0x00, 0xee, 0xff);
+    font_draw_string_color(x + 14, y + 1, text, 0x00, 0xff, 0x66);
     break;
   case 2:
-    /* "IMG:" in cyan, name in orange */
-    font_set_font(menu_font[1]);
-    font_draw_string_color(x, y + 1, "IMG:", 0x00, 0xee, 0xff);
-    font_draw_string_color(x + 50, y + 1, text, 0xff, 0x88, 0x00);
+    /* Disk image: disk icon + name in orange */
+    font_draw_string_color(x, y + 1, "*", 0xff, 0x88, 0x00);
+    font_draw_string_color(x + 14, y + 1, text, 0xff, 0xaa, 0x44);
     break;
-  case 3: {
-    /* Special entries (Use this folder, <- Back) in white */
+  case 3:
+    /* Special entries (Use this folder, <- Back) in white+cyan */
     font_set_font(menu_font[1]);
-    font_draw_string(x, y + 1, namebuf);
+    font_draw_string_color(x, y + 1, namebuf, 0x00, 0xee, 0xff);
     break;
-  }
   default:
     /* Regular files in light blue */
-    font_set_font(menu_font[0]);
     font_draw_string_color(x, y + 1, namebuf, 0x60, 0x80, 0xff);
     break;
   }
