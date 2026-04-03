@@ -70,8 +70,8 @@ void ui_inputkey(SDL_keysym *keysym) {
   default:
     if (keysym->unicode >= 32 && keysym->unicode <= 126) {
       c = keysym->unicode;
-    } else if (keysym->sym >= 32 && keysym->sym < 127 && keysym->unicode == 0) {
-      c = keysym->sym;  /* Linux SDL fallback */
+    } else if (keysym->sym >= 32 && keysym->sym < 127) {
+      c = keysym->sym;  /* Fallback: Linux/Windows SDL unicode missing */
     } else {
       break;
     }

@@ -1996,7 +1996,8 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
         bm_default_key:
           {
             int uc = ev.key.keysym.unicode;
-            if (uc == 0 && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+            /* Fallback: if unicode is missing or out of range, try sym */
+            if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
               uc = ev.key.keysym.sym;
             if (uc >= 32 && uc < 127 && len < maxlen[field]) {
               memmove(bufs[field] + cursor[field] + 1,
@@ -2495,7 +2496,7 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
           default:
             {
               int uc = ev.key.keysym.unicode;
-              if (uc == 0 && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+              if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
                 uc = ev.key.keysym.sym;
               if (uc >= 32 && uc < 127 && editlen < (int)sizeof(editbuf) - 2) {
                 editbuf[editlen++] = (char)uc;
