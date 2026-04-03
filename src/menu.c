@@ -2667,21 +2667,35 @@ void menu_fs_draw_path(const char *path) {
   font_set_font(menu_font[0]);
   font_draw_string_color(12, 26, truncpath, 0xc0, 0x80, 0xff);
 
-  /* Navigation hints — keys in cyan, actions in neon green */
+  /* Navigation hints — bracketed keys, consistent with main menu */
   {
     int hx = 12;
     int hy = menu_height - 20;
     font_set_font(menu_font[0]);
-    font_draw_string_color(hx, hy, "C ", 0x00, 0xee, 0xff);
-    font_draw_string_color(hx + 20, hy, "mkdir ", 0x00, 0xff, 0x66);
-    font_draw_string_color(hx + 70, hy, "R ", 0x00, 0xee, 0xff);
-    font_draw_string_color(hx + 90, hy, "ren ", 0x00, 0xff, 0x66);
-    font_draw_string_color(hx + 130, hy, "X ", 0x00, 0xee, 0xff);
-    font_draw_string_color(hx + 150, hy, "del ", 0x00, 0xff, 0x66);
-    font_draw_string_color(hx + 190, hy, "F2 ", 0x00, 0xee, 0xff);
-    font_draw_string_color(hx + 220, hy, "save path ", 0x00, 0xff, 0x66);
-    font_draw_string_color(hx + 320, hy, "Esc ", 0x00, 0xee, 0xff);
-    font_draw_string_color(hx + 360, hy, "cancel", 0x00, 0xff, 0x66);
+    font_draw_string_color(hx, hy, "[", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 10, hy, "C", 0xff, 0xff, 0xff);
+    font_draw_string_color(hx + 20, hy, "]", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 30, hy, "Create ", 0x60, 0x80, 0xff);
+
+    font_draw_string_color(hx + 100, hy, "[", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 110, hy, "R", 0xff, 0xff, 0xff);
+    font_draw_string_color(hx + 120, hy, "]", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 130, hy, "Rename ", 0x60, 0x80, 0xff);
+
+    font_draw_string_color(hx + 200, hy, "[", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 210, hy, "D", 0xff, 0xff, 0xff);
+    font_draw_string_color(hx + 220, hy, "]", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 230, hy, "Delete ", 0x60, 0x80, 0xff);
+
+    font_draw_string_color(hx + 300, hy, "[", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 310, hy, "F2", 0xff, 0xff, 0xff);
+    font_draw_string_color(hx + 330, hy, "]", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 340, hy, "Save ", 0x60, 0x80, 0xff);
+
+    font_draw_string_color(hx + 390, hy, "[", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 400, hy, "Esc", 0xff, 0xff, 0xff);
+    font_draw_string_color(hx + 430, hy, "]", 0x00, 0xee, 0xff);
+    font_draw_string_color(hx + 440, hy, "Back", 0x60, 0x80, 0xff);
   }
 
   menu_dirty = 1;

@@ -328,7 +328,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     }
     break;
 
-  case SDLK_x:
+  case SDLK_d:
     /* Delete selected file or directory */
     if (fsel->selectedfile == NULL)
       fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
