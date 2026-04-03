@@ -2058,19 +2058,11 @@ void menu_keyboard_test(void) {
   /* Scan for C64 keyboard profiles (the ones with -c64 in the name) */
   {
     const char *profiles[] = {
-      "mac-se-c64.kbd", "mac-us-c64.kbd",
-      "linux-se-c64.kbd", "linux-us-c64.kbd",
-      "win-se-c64.kbd", "win-us-c64.kbd",
-      "us.kbd", "swedish.kbd", "german.kbd",
-      "Mac.kbd", "windows.kbd",
+      "default.kbd",
       NULL
     };
     const char *names[] = {
-      "macOS Swedish C64", "macOS US C64",
-      "Linux Swedish C64", "Linux US C64",
-      "Windows Swedish C64", "Windows US C64",
-      "US Standard", "Swedish Standard", "German Standard",
-      "Mac Legacy", "Windows Legacy",
+      "Default (Unicode)",
       NULL
     };
     int pi;
