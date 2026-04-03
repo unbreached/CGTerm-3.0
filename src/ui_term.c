@@ -849,6 +849,9 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_w:
     gfx_toggle_font();
+    menu_print_menu(termmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
     break;
 
   case SDLK_z:
