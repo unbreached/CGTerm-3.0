@@ -2284,12 +2284,12 @@ void menu_keyboard_test(void) {
                 if (uc >= 'a' && uc <= 'z') last_actual = uc - 32;
                 else if (uc >= 'A' && uc <= 'Z') last_actual = uc + 128;
                 else if (uc >= 32 && uc < 127) last_actual = (unsigned char)uc;
-                else if (uc == 0x00E5) last_actual = 0x5B;  /* å */
-                else if (uc == 0x00C5) last_actual = 0xDB;  /* Å */
+                else if (uc == 0x00E5) last_actual = 0x5D;  /* å → sc29 = Å */
+                else if (uc == 0x00C5) last_actual = 0xDD;  /* Å shifted */
                 else if (uc == 0x00F6) last_actual = 0x5C;  /* ö */
                 else if (uc == 0x00D6) last_actual = 0xDC;  /* Ö */
-                else if (uc == 0x00E4) last_actual = 0x5D;  /* ä */
-                else if (uc == 0x00C4) last_actual = 0xDD;  /* Ä */
+                else if (uc == 0x00E4) last_actual = 0x5B;  /* ä → sc27 = Ä */
+                else if (uc == 0x00C4) last_actual = 0xDB;  /* Ä shifted */
               }
 
               last_sym = sym;

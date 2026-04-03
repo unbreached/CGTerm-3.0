@@ -530,12 +530,12 @@ int kbd_getkey() {
 
                             /* Swedish/international characters → PETSCII */
                             switch (uc) {
-                            case 0x00E5: key = 0x5B; goto petscii_done; /* å → [ position (Å in Swedish ROM) */
-                            case 0x00C5: key = 0xDB; goto petscii_done; /* Å → shifted [ */
+                            case 0x00E5: key = 0x5D; goto petscii_done; /* å → ] position (Å in Swedish ROM sc29) */
+                            case 0x00C5: key = 0xDD; goto petscii_done; /* Å → shifted ] */
                             case 0x00F6: key = 0x5C; goto petscii_done; /* ö → £ position (Ö in Swedish ROM) */
                             case 0x00D6: key = 0xDC; goto petscii_done; /* Ö → shifted £ */
-                            case 0x00E4: key = 0x5D; goto petscii_done; /* ä → ] position (Ä in Swedish ROM) */
-                            case 0x00C4: key = 0xDD; goto petscii_done; /* Ä → shifted ] */
+                            case 0x00E4: key = 0x5B; goto petscii_done; /* ä → [ position (Ä in Swedish ROM sc27) */
+                            case 0x00C4: key = 0xDB; goto petscii_done; /* Ä → shifted [ */
                             case 0x00FC: key = 0x5B; goto petscii_done; /* ü (German) */
                             case 0x00DC: key = 0xDB; goto petscii_done; /* Ü */
                             }
