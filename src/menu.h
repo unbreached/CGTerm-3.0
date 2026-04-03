@@ -42,4 +42,4 @@ int menu_select_menu_font(void);
 const char *menu_get_splash_font_name(int idx);
 void menu_keyboard_test(void);
 int menu_select_post_speed(void);
-int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *port, int portsz);
+int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *port, int portsz, int *mode);

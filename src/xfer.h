@@ -32,7 +32,6 @@ void xfer_send(char *filename);
 void xfer_send_multipunter(struct fileselector *fs);
 void xfer_save_file(char *filename);
 
-void xfer_check_deferred(void);
 void xfer_send_byte(unsigned char c);
 signed int xfer_recv_byte(int timeout);
 signed int xfer_recv_byte_error(int timeout, int errorcnt);

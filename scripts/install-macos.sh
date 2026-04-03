@@ -137,6 +137,7 @@ cat > "${CONTENTS_DIR}/Info.plist" <<'EOF'
 <key>CFBundleIdentifier</key><string>com.cgterm.app</string>
 <key>CFBundleVersion</key><string>3.0</string>
 <key>CFBundleShortVersionString</key><string>3.0</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

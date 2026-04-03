@@ -6,11 +6,14 @@
 #include "menu.h"
 #include "config.h"
 #include "paths.h"
+#include "cp437font.h"
 
 unsigned char gfx_0400_buffer[80000];
 unsigned char gfx_d800_buffer[80000];
+unsigned char gfx_bg_buffer[80000];   /* per-cell background color (ANSI mode) */
 unsigned char *gfx_0400 = gfx_0400_buffer;
 unsigned char *gfx_d800 = gfx_d800_buffer;
+unsigned char *gfx_bg = gfx_bg_buffer;
 int gfx_offset;
 int gfx_maxoffset;
 signed int gfx_cursx, gfx_cursy;
@@ -34,8 +37,8 @@ static SDL_bool cursorvis;
 static SDL_bool dirty[25];
 static Uint8 fgcolor = 1, bgcolor = 0;
 static int font;
-static SDL_Surface *fontlist[2];
-static SDL_Surface *rawfont[2];
+static SDL_Surface *fontlist[3];
+static SDL_Surface *rawfont[3];
 static SDL_Color palette[] = {
   {0x00, 0x00, 0x00},
   {0xFF, 0xFF, 0xFF},
@@ -54,6 +57,29 @@ static SDL_Color palette[] = {
   {0x6C, 0x5E, 0xB5},
   {0x95, 0x95, 0x95}
 };
+/* VGA/ANSI palette — same index order as C64 (BLACK=0, WHITE=1, RED=2, etc.)
+ * but with standard VGA RGB values for proper ANSI color rendering */
+/* VGA palette at C64 index positions — SyncTERM-matching RGB values.
+ * Indices 8 and 12 repurposed for light magenta and light cyan
+ * since ANSI needs those but C64 orange/gray are unused in ANSI mode. */
+static SDL_Color vga_palette[] = {
+  {0x00, 0x00, 0x00},  /* 0: BLACK */
+  {0xFF, 0xFF, 0xFF},  /* 1: WHITE */
+  {0xA8, 0x00, 0x00},  /* 2: RED */
+  {0x00, 0xA8, 0xA8},  /* 3: CYAN */
+  {0xA8, 0x00, 0xA8},  /* 4: MAGENTA */
+  {0x00, 0xA8, 0x00},  /* 5: GREEN */
+  {0x00, 0x00, 0xA8},  /* 6: BLUE */
+  {0xFF, 0xFF, 0x54},  /* 7: YELLOW */
+  {0xFF, 0x54, 0xFF},  /* 8: LIGHT MAGENTA (repurposed from orange) */
+  {0xA8, 0x54, 0x00},  /* 9: BROWN */
+  {0xFF, 0x54, 0x54},  /* 10: LIGHT RED */
+  {0x54, 0x54, 0x54},  /* 11: DARK GRAY */
+  {0x54, 0xFF, 0xFF},  /* 12: LIGHT CYAN (repurposed from gray) */
+  {0x54, 0xFF, 0x54},  /* 13: LIGHT GREEN */
+  {0x54, 0x54, 0xFF},  /* 14: LIGHT BLUE */
+  {0xA8, 0xA8, 0xA8},  /* 15: LIGHT GRAY */
+};
 static unsigned char color_to_petscii[] = {
   0x90, 0x05, 0x1c, 0x9f,
   0x9c, 0x1e, 0x1f, 0x9e,
@@ -66,7 +92,7 @@ static unsigned char color_to_petscii[] = {
   memcpy(((Uint8 *) surface->pixels) + surface->pitch*(Y) + surface->format->BytesPerPixel*(X), \
 	 &(C), surface->format->BytesPerPixel)
 
-SDL_Surface *gfx_createfont(SDL_Surface *srcsurface, int zoom) {
+SDL_Surface *gfx_createfont_pal(SDL_Surface *srcsurface, int zoom, SDL_Color *pal) {
   SDL_Surface *tempsurface;
   SDL_Surface *surface;
   Uint8 *sp;
@@ -81,7 +107,7 @@ SDL_Surface *gfx_createfont(SDL_Surface *srcsurface, int zoom) {
   if (surface == NULL) {
     return(NULL);
   }
-  SDL_SetPalette(surface, SDL_LOGPAL|SDL_PHYSPAL, palette, 0, 16);
+  SDL_SetPalette(surface, SDL_LOGPAL|SDL_PHYSPAL, pal, 0, 16);
 
   if (cfg_columns == 40) {
     hzoom = zoom;
@@ -89,9 +115,9 @@ SDL_Surface *gfx_createfont(SDL_Surface *srcsurface, int zoom) {
     hzoom = zoom / 2;
   }
 
-  bg = SDL_MapRGB(surface->format, palette[bgcolor].r, palette[bgcolor].g, palette[bgcolor].b);
+  bg = SDL_MapRGB(surface->format, pal[bgcolor].r, pal[bgcolor].g, pal[bgcolor].b);
   for (col = 0; col < 16; ++col) {
-    fg = SDL_MapRGB(surface->format, palette[col].r, palette[col].g, palette[col].b);
+    fg = SDL_MapRGB(surface->format, pal[col].r, pal[col].g, pal[col].b);
     for (c = 0; c < 256; ++c) {
       for (y = 0; y < 8; ++y) {
 	for (z1 = 0; z1 < zoom; ++z1) {
@@ -114,6 +140,63 @@ SDL_Surface *gfx_createfont(SDL_Surface *srcsurface, int zoom) {
   }
 
   return(surface);
+}
+
+/* ANSI font: uses magenta key color as transparent background.
+ * This allows per-cell BG colors by filling the cell first,
+ * then blitting the character with colorkey transparency. */
+SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *pal) {
+  SDL_Surface *tempsurface;
+  SDL_Surface *surface;
+  Uint8 *sp;
+  int c, x, y, z1, z2, col, hzoom;
+  Uint32 fg, keycol;
+
+  if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256 * charwidth, 16 * charheight, 8, 0, 0, 0, 0)) == NULL) {
+    return(NULL);
+  }
+  surface = SDL_DisplayFormat(tempsurface);
+  SDL_FreeSurface(tempsurface);
+  if (surface == NULL) {
+    return(NULL);
+  }
+
+  if (cfg_columns == 40) {
+    hzoom = zoom;
+  } else {
+    hzoom = zoom / 2;
+  }
+
+  /* Use bright magenta as transparent key color (not in VGA palette) */
+  keycol = SDL_MapRGB(surface->format, 0xFF, 0x00, 0xFF);
+  SDL_FillRect(surface, NULL, keycol);
+
+  for (col = 0; col < 16; ++col) {
+    fg = SDL_MapRGB(surface->format, pal[col].r, pal[col].g, pal[col].b);
+    for (c = 0; c < 256; ++c) {
+      for (y = 0; y < 8; ++y) {
+	for (z1 = 0; z1 < zoom; ++z1) {
+	  sp = (Uint8 *)srcsurface->pixels + (c & 0x1f) * 8 + ((c / 32) * 8 + y) * srcsurface->pitch;
+	  for (x = 0; x < 8; ++x) {
+	    if (*sp) {
+	      for (z2 = 0; z2 < hzoom; ++z2) {
+		drawpixel(c * charwidth + x * hzoom + z2, col * charheight + y * zoom + z1, fg);
+	      }
+	    }
+	    /* else: leave as keycol (transparent) */
+	    ++sp;
+	  }
+	}
+      }
+    }
+  }
+
+  SDL_SetColorKey(surface, SDL_SRCCOLORKEY, keycol);
+  return(surface);
+}
+
+SDL_Surface *gfx_createfont(SDL_Surface *srcsurface, int zoom) {
+  return gfx_createfont_pal(srcsurface, zoom, palette);
 }
 
 
@@ -156,6 +239,7 @@ int gfx_init(int fullscreen, char *appname) {
   gfx_offset = gfx_maxoffset = sizeof(gfx_0400_buffer) - cfg_columns * 25;
   gfx_0400 = gfx_0400_buffer + gfx_maxoffset;
   gfx_d800 = gfx_d800_buffer + gfx_maxoffset;
+  gfx_bg = gfx_bg_buffer + gfx_maxoffset;
 
   if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_NOPARACHUTE) < 0) {
     printf("Unable to init SDL: %s\n", SDL_GetError());
@@ -183,11 +267,14 @@ int gfx_init(int fullscreen, char *appname) {
     printf("Error: %s", fname);
     return(1);
   }
+  rawfont[2] = cp437_create_raw_font();
   if (
       (fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom)) == NULL ||
-      (fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom)) == NULL
+      (fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom)) == NULL ||
+      rawfont[2] == NULL ||
+      (fontlist[2] = gfx_createfont_ansi(rawfont[2], cfg_zoom, vga_palette)) == NULL
       ) {
-        printf("gfx_createfont Error");
+        printf("gfx_createfont Error\n");
     return(1);
   }
   font = 1;
@@ -247,8 +334,10 @@ void gfx_bgcolor(int c) {
     bgcolor = c;
     gfx_destroyfont(fontlist[0]);
     gfx_destroyfont(fontlist[1]);
+    gfx_destroyfont(fontlist[2]);
     fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom);
     fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom);
+    fontlist[2] = gfx_createfont_ansi(rawfont[2], cfg_zoom, vga_palette);
   }
 }
 
@@ -258,11 +347,22 @@ void gfx_fgcolor(int c) {
   fgcolor = c;
 }
 
+int gfx_get_fgcolor(void) {
+  return fgcolor;
+}
+
+static Uint8 ansi_cell_bg = 0;  /* per-cell BG color for ANSI mode */
+
+void gfx_set_cell_bg(int c) {
+  ansi_cell_bg = c;
+}
+
 
 void gfx_draw_char(int c) {
   resetcursor();
   gfx_0400[gfx_cursy * cfg_columns + gfx_cursx] = c;
   gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = fgcolor;
+  gfx_bg[gfx_cursy * cfg_columns + gfx_cursx] = ansi_cell_bg;
   dirty[gfx_cursy] = SDL_TRUE;
 }
 
@@ -288,6 +388,7 @@ void gfx_clear_line(int line, int color) {
   offset = cfg_columns * line;
   memset(gfx_0400 + offset, ' ', cfg_columns);
   memset(gfx_d800 + offset, color, cfg_columns);
+  memset(gfx_bg + offset, 0, cfg_columns);
 }
 
 
@@ -312,6 +413,7 @@ void gfx_copy_line(unsigned char *chars, unsigned char *colors, int line) {
 void gfx_cls(void) {
   memset(gfx_0400, 32, cfg_columns * 25);
   memset(gfx_d800, fgcolor, cfg_columns * 25);
+  memset(gfx_bg, 0, cfg_columns * 25);
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 
@@ -319,6 +421,7 @@ void gfx_cls(void) {
 void gfx_scrollup(void) {
   memmove(gfx_0400_buffer, gfx_0400_buffer + cfg_columns, sizeof(gfx_0400_buffer) - (26 - cfg_rows) * cfg_columns);
   memmove(gfx_d800_buffer, gfx_d800_buffer + cfg_columns, sizeof(gfx_d800_buffer) - (26 - cfg_rows) * cfg_columns);
+  memmove(gfx_bg_buffer, gfx_bg_buffer + cfg_columns, sizeof(gfx_bg_buffer) - (26 - cfg_rows) * cfg_columns);
   memset(gfx_0400 + (cfg_rows - 1) * cfg_columns, 32, cfg_columns);
   memset(gfx_d800 + (cfg_rows - 1) * cfg_columns, fgcolor, cfg_columns);
   memset(dirty, SDL_TRUE, sizeof(dirty));
@@ -419,6 +522,12 @@ void gfx_draw_line(int ypos) {
     src.y = gfx_d800_buffer[gfx_offset + ypos * cfg_columns + xpos] * charheight;
     dest.x = xpos * charwidth;
     dest.y = ypos * charheight;
+    /* ANSI mode (font 2): fill cell with per-cell BG color first */
+    if (font == 2) {
+      unsigned char bgc = gfx_bg_buffer[gfx_offset + ypos * cfg_columns + xpos];
+      SDL_FillRect(gfx_screen, &dest, SDL_MapRGB(gfx_screen->format,
+        vga_palette[bgc].r, vga_palette[bgc].g, vga_palette[bgc].b));
+    }
     SDL_BlitSurface(fontlist[font], &src, gfx_screen, &dest);
   }
   if (menu_visible && ypos >= gfx_menu_firstline && ypos <= gfx_menu_lastline) {
@@ -610,6 +719,53 @@ void gfx_toggle_fullscreen(void) {
     }
     cfg_fullscreen = 1;
   }
+  memset(dirty, SDL_TRUE, sizeof(dirty));
+}
+
+
+void gfx_set_columns(int cols) {
+  if (cols != 40 && cols != 80) return;
+  if (cols == cfg_columns) return;
+
+  cfg_columns = cols;
+  if (cfg_columns == 40) {
+    charwidth = 8 * cfg_zoom;
+  } else {
+    if (cfg_zoom == 1 || cfg_zoom == 3) cfg_zoom = 2;
+    charwidth = 4 * cfg_zoom;
+  }
+  gfx_width = cfg_zoom * GFX_WIDTH;
+  gfx_height = cfg_zoom * GFX_HEIGHT;
+
+  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp,
+      (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+    printf("Unable to resize window: %s\n", SDL_GetError());
+    return;
+  }
+
+  /* Regenerate fonts for new charwidth */
+  gfx_destroyfont(fontlist[0]);
+  gfx_destroyfont(fontlist[1]);
+  gfx_destroyfont(fontlist[2]);
+  fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom);
+  fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom);
+  fontlist[2] = gfx_createfont_ansi(rawfont[2], cfg_zoom, vga_palette);
+
+  /* Reset buffer pointers */
+  gfx_offset = gfx_maxoffset = sizeof(gfx_0400_buffer) - cfg_columns * 25;
+  gfx_0400 = gfx_0400_buffer + gfx_maxoffset;
+  gfx_d800 = gfx_d800_buffer + gfx_maxoffset;
+  gfx_bg = gfx_bg_buffer + gfx_maxoffset;
+
+  /* Resize menu overlay */
+  menu_init(gfx_width, gfx_height);
+  gfx_menu_width = gfx_width;
+  gfx_menu_height = gfx_height;
+  gfx_menu_lastline = (gfx_height - 1) / charheight;
+
+  /* Clear and redraw */
+  gfx_setcursxy(0, 0);
+  gfx_cls();
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 

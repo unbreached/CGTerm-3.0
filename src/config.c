@@ -44,6 +44,8 @@ char *cfg_bookmark_host[40];
 int cfg_bookmark_port[40];
 char cfg_xferdir[256];
 char cfg_dldir[256];
+int cfg_termmode = 0;
+int cfg_bookmark_termmode[40];
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
 int cfg_splash = 1;
@@ -290,6 +292,26 @@ int addbookmark(char *line) {
   }
 
   addhost(cfg_numbookmarks, alias, hostname, port);
+
+  /* Check for optional mode field: "bookmark = alias, host, port, ansi" */
+  cfg_bookmark_termmode[cfg_numbookmarks] = 0;  /* default: PETSCII */
+  {
+    char *p = line;
+    int commas = 0;
+    while (*p) {
+      if (*p == ',') commas++;
+      if (commas == 3) {
+        p++;
+        while (*p == ' ') p++;
+        if (strncmp(p, "ansi", 4) == 0) {
+          cfg_bookmark_termmode[cfg_numbookmarks] = 1;
+        }
+        break;
+      }
+      p++;
+    }
+  }
+
   ++cfg_numbookmarks;
   return(1);
 }
@@ -578,7 +600,11 @@ void cfg_save_bookmark(char *alias, char *host, int port) {
   cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
 
   if ((bf = fopen(resolved, "a")) != NULL) {
-    fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
+    if (cfg_termmode == 1) {
+      fprintf(bf, "bookmark = %s, %s, %d, ansi\n", alias, host, port);
+    } else {
+      fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
+    }
     fclose(bf);
   }
 }

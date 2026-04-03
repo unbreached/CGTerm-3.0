@@ -14,6 +14,8 @@ void gfx_setfont(int f);
 void gfx_toggle_font(void);
 void gfx_bgcolor(int c);
 void gfx_fgcolor(int c);
+int gfx_get_fgcolor(void);
+void gfx_set_cell_bg(int c);
 void gfx_draw_char(int c);
 void gfx_clear_line(int line, int color);
 void gfx_copy_line(unsigned char *line, unsigned char *color, int y);
@@ -36,6 +38,7 @@ void gfx_conv_screen_to_pet(unsigned char *chars, unsigned char *colors, unsigne
 void gfx_savescreen(char *filename);
 void gfx_set_title(const char *title);
 void gfx_toggle_fullscreen(void);
+void gfx_set_columns(int cols);
 void gfx_set_offset(int offset);
 void gfx_copy_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned char *rect_0400, unsigned char *rect_d800);
 void gfx_clear_rect(int rect_x, int rect_y, int rect_w, int rect_h);

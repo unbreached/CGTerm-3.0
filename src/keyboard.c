@@ -8,6 +8,7 @@
 #include "macro.h"
 #include "ui.h"
 #include "clipboard.h"
+#include "net.h"
 
 
 int focus_count = 0;
@@ -393,7 +394,12 @@ int kbd_getkey() {
             case SDL_KEYDOWN:
                 
                 if (kbd_focus == FOCUS_TERM) {
-                    /* ESC always opens menu, regardless of modifiers */
+                    /* Ctrl+ESC or Alt+ESC sends ESC byte to BBS (for ANSI mode) */
+                    if (event.key.keysym.sym == SDLK_ESCAPE &&
+                        ((event.key.keysym.mod & KMOD_CTRL) || (event.key.keysym.mod & KMOD_ALT))) {
+                        return 27;  /* ESC byte */
+                    }
+                    /* ESC alone opens menu */
                     if (event.key.keysym.sym == SDLK_ESCAPE) {
                         ui_menu();
                         return 0;
@@ -401,6 +407,44 @@ int kbd_getkey() {
                         ui_metakey(&event.key.keysym);
                     } else if ((event.key.keysym.mod & KMOD_CTRL) && event.key.keysym.sym == SDLK_v) {
                         clipboard_paste();
+                        return 0;
+                    } else if (cfg_termmode == 1) {
+                        /* ANSI mode: send ASCII/escape sequences for special keys */
+                        switch (event.key.keysym.sym) {
+                        case SDLK_UP:    net_send_string((const unsigned char *)"\033[A"); return 0;
+                        case SDLK_DOWN:  net_send_string((const unsigned char *)"\033[B"); return 0;
+                        case SDLK_RIGHT: net_send_string((const unsigned char *)"\033[C"); return 0;
+                        case SDLK_LEFT:  net_send_string((const unsigned char *)"\033[D"); return 0;
+                        case SDLK_HOME:  net_send_string((const unsigned char *)"\033[H"); return 0;
+                        case SDLK_END:   net_send_string((const unsigned char *)"\033[F"); return 0;
+                        case SDLK_BACKSPACE: return 8;
+                        case SDLK_DELETE:    return 127;
+                        case SDLK_RETURN:
+                        case SDLK_KP_ENTER: return 13;
+                        default:
+                            /* For printable ASCII, use unicode value directly */
+                            if (event.key.keysym.unicode >= 32 && event.key.keysym.unicode < 127) {
+                                return (unsigned char)event.key.keysym.unicode;
+                            }
+                            /* Unicode to CP437 for common extended chars */
+                            switch (event.key.keysym.unicode) {
+                            case 0x00C4: return 142;  /* Ä */
+                            case 0x00C5: return 143;  /* Å */
+                            case 0x00D6: return 153;  /* Ö */
+                            case 0x00E4: return 132;  /* ä */
+                            case 0x00E5: return 134;  /* å */
+                            case 0x00F6: return 148;  /* ö */
+                            case 0x00FC: return 129;  /* ü */
+                            case 0x00DC: return 154;  /* Ü */
+                            case 0x00E9: return 130;  /* é */
+                            case 0x00C9: return 144;  /* É */
+                            case 0x00F1: return 164;  /* ñ */
+                            case 0x00D1: return 165;  /* Ñ */
+                            case 0x00DF: return 225;  /* ß */
+                            case 0x00A3: return 156;  /* £ */
+                            }
+                            break;
+                        }
                         return 0;
                     } else {
                         key = translatekey(&event.key.keysym, &shift, &ctrl, &cbm);

@@ -21,6 +21,7 @@
 #include "modem.h"
 #include "music.h"
 #include "xfer.h"
+#include "ansi.h"
 
 
 int sendcrlf = 0;
@@ -432,7 +433,11 @@ int main(int argc, char *argv[]) {
       }
 
       if (c >= 0) {
-	ffd2(c);
+	if (cfg_termmode == 1) {
+	  ansi_out(c);
+	} else {
+	  ffd2(c);
+	}
 	if (logh) {
 	  log_write_byte(c, logh);
 	}
@@ -444,8 +449,6 @@ int main(int argc, char *argv[]) {
 
     }
 
-    /* Check for deferred sends (e.g. Return after Punter download) */
-    xfer_check_deferred();
 
   }
 

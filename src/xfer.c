@@ -32,6 +32,7 @@
 static FILE *dbglog = NULL;
 static void dbg(const char *fmt, ...) {
   va_list ap;
+  if (!cfg_debugmode) return;
   if (!dbglog) {
     dbglog = fopen("/tmp/cgterm-debug.log", "a");
     if (!dbglog) return;
@@ -54,7 +55,6 @@ FILE *xfer_sendfile, *xfer_recvfile;
 Direction xfer_direction;
 Protocol xfer_protocol;
 int xfer_cancel;
-unsigned int xfer_deferred_return_time = 0;  /* 0 = no pending send */
 int xfer_saved_bytes;
 int xfer_file_size;
 unsigned char xfer_buffer[4096];
@@ -463,14 +463,6 @@ static int multipunter_recv(void) {
   return 0;
 }
 
-/* Check if we need to send a deferred Return to the BBS */
-void xfer_check_deferred(void) {
-  if (xfer_deferred_return_time && timer_get_ticks() >= xfer_deferred_return_time) {
-    dbg(" xfer_check_deferred: sending Return now\n");
-    net_send(0x0d);
-    xfer_deferred_return_time = 0;
-  }
-}
 
 void xfer_check_kbd(void) {
   SDL_Event event;
@@ -1041,14 +1033,6 @@ void xfer_save_file(char *filename) {
   xfer_save_file_in_dir(filename);
 
 post_save:
-  /* After single Punter download: schedule a Return to exit BBS transfer menu.
-   * Only for single Punter — Multi Punter handles its own batch flow.
-   * We set a deferred send so the main loop can process BBS data first. */
-  if (xfer_protocol == PROT_PUNTER && net_connected()) {
-    dbg(" xfer_save_file: scheduling deferred Return for BBS transfer exit\n");
-    xfer_deferred_return_time = timer_get_ticks() + 3000;
-  }
-
   /* Return focus to terminal so the main loop processes BBS responses */
   kbd_focus = FOCUS_TERM;
 }

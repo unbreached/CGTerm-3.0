@@ -50,6 +50,8 @@ COMMON_SRCS := \
 	modem.c \
 	music.c \
 	music_preload.c \
+	ansi.c \
+	cp437font.c \
 	ui.c
 
 TERM_SRCS := \

@@ -17,6 +17,7 @@
 
 
 extern unsigned char screencode[];
+extern unsigned char rvson;
 
 
 int kernal_init(void);

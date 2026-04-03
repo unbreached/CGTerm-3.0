@@ -156,7 +156,7 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
         cfg_log_connection(host, port);
         {
           char wintitle[128];
-          snprintf(wintitle, sizeof(wintitle), "CGTerm - %s:%d", host, port);
+          snprintf(wintitle, sizeof(wintitle), "CGTerm - %s:%d [CONNECTED]", host, port);
           gfx_set_title(wintitle);
         }
         return(0);
@@ -259,7 +259,7 @@ void net_disconnect(void) {
     CLOSESOCKET(conn);
     conn = INVALID_SOCKET;
     buflen = 0;
-    gfx_set_title("CGTerm");
+    gfx_set_title("CGTerm [DISCONNECTED]");
   }
 }
 

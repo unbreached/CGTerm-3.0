@@ -12,6 +12,7 @@
 #include "xfer.h"
 #include "macro.h"
 #include "ui.h"
+#include "ansi.h"
 
 
 int input_maxlen = 256;
@@ -212,7 +213,7 @@ void ui_menukey(SDL_keysym *keysym) {
 
   /* Valid menu keys — hide menu and handle */
   case SDLK_a: case SDLK_b: case SDLK_c: case SDLK_d:
-  case SDLK_e: case SDLK_f: case SDLK_i: case SDLK_j:
+  case SDLK_e: case SDLK_f: case SDLK_g: case SDLK_i: case SDLK_j:
   case SDLK_k: case SDLK_l: case SDLK_m: case SDLK_n:
   case SDLK_p: case SDLK_q: case SDLK_r: case SDLK_s:
   case SDLK_t: case SDLK_u: case SDLK_v: case SDLK_w:
@@ -264,8 +265,13 @@ static void bm_rewrite_all(void) {
 #endif
   if ((cfg = fopen(fname, "w")) != NULL) {
     for (i = 0; i < cfg_numbookmarks; i++) {
-      fprintf(cfg, "bookmark = %s, %s, %d\n",
-        cfg_bookmark_alias[i], cfg_bookmark_host[i], cfg_bookmark_port[i]);
+      if (cfg_bookmark_termmode[i] == 1) {
+        fprintf(cfg, "bookmark = %s, %s, %d, ansi\n",
+          cfg_bookmark_alias[i], cfg_bookmark_host[i], cfg_bookmark_port[i]);
+      } else {
+        fprintf(cfg, "bookmark = %s, %s, %d\n",
+          cfg_bookmark_alias[i], cfg_bookmark_host[i], cfg_bookmark_port[i]);
+      }
     }
     fclose(cfg);
   }
@@ -392,6 +398,13 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       kbd_focus = FOCUS_TERM;
       cfg_sethost(cfg_bookmark_host[b]);
       cfg_port = cfg_bookmark_port[b];
+      cfg_termmode = cfg_bookmark_termmode[b];
+      if (cfg_termmode == 1) {
+        gfx_set_columns(80);
+        ansi_init();
+      } else {
+        gfx_set_columns(40);
+      }
       snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
       cfg_debug(_DebugMsg);
       ffd2(147);  /* clear screen */
@@ -407,11 +420,13 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     /* Add new bookmark — use multi-field editor */
     {
       char nm[64] = "", ht[256] = "", pt[8] = "6400";
-      if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt))) {
+      int bm_mode = 0;
+      if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt), &bm_mode)) {
         int port = atoi(pt);
         if (port <= 0 || port > 65535) port = 6400;
         if (nm[0] && ht[0] && cfg_numbookmarks < 40) {
           addhost(cfg_numbookmarks, nm, ht, port);
+          cfg_bookmark_termmode[cfg_numbookmarks] = bm_mode;
           ++cfg_numbookmarks;
           cfg_save_bookmark(nm, ht, port);
         }
@@ -425,15 +440,17 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     /* Edit highlighted bookmark — multi-field editor */
     if (bm_cursor >= 0 && bm_cursor < cfg_numbookmarks) {
       char nm[64], ht[256], pt[8];
+      int bm_mode = cfg_bookmark_termmode[bm_cursor];
       snprintf(nm, sizeof(nm), "%s", cfg_bookmark_alias[bm_cursor]);
       snprintf(ht, sizeof(ht), "%s", cfg_bookmark_host[bm_cursor]);
       snprintf(pt, sizeof(pt), "%d", cfg_bookmark_port[bm_cursor]);
-      if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt))) {
+      if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt), &bm_mode)) {
         int port = atoi(pt);
         if (port <= 0 || port > 65535) port = 6400;
         if (cfg_bookmark_alias[bm_cursor]) free(cfg_bookmark_alias[bm_cursor]);
         if (cfg_bookmark_host[bm_cursor]) free(cfg_bookmark_host[bm_cursor]);
         addhost(bm_cursor, nm, ht, port);
+        cfg_bookmark_termmode[bm_cursor] = bm_mode;
         bm_rewrite_all();
       }
       menu_draw_bookmarks_sel(bm_cursor);

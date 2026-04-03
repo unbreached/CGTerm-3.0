@@ -71,7 +71,7 @@ fi
 OBJDIR="$ROOT_DIR/build/obj-win32"
 SRCDIR="$ROOT_DIR/src"
 
-COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard modem music music_preload"
+COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard modem music music_preload ansi cp437font"
 TERM="xfer xmodem punter rainbow diskimage dir fileselector ui_term"
 
 # Compile common objects

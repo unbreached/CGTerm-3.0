@@ -24,6 +24,7 @@
 #include "macro.h"
 #include "timer.h"
 #include "ui.h"
+#include "ansi.h"
 
 
 struct menu termmenu[] = {
@@ -53,11 +54,21 @@ struct menu termmenu[] = {
   {24, "Z", "Font settings"},
   {25, "K", "Keyboard layout"},
   {26, "W", "Toggle upper/lowercase"},
-  {27, "M", "Oldskool Mode"},
-  {27, "",  ""},
-  {28, "Q", "Quit CGTerm"},
+  {27, "G", "Terminal: PETSCII"},
+  {28, "M", "Oldskool Mode"},
+  {29, "",  ""},
+  {30, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
+
+
+static int find_menu_key(struct menu *m, const char *key) {
+  int i;
+  for (i = 0; m[i].key != NULL; i++) {
+    if (strcmp(m[i].key, key) == 0) return i;
+  }
+  return 0;
+}
 
 
 typedef enum selmode {
@@ -789,6 +800,22 @@ void ui_metakey(SDL_keysym *keysym) {
 
   case SDLK_f:
     gfx_toggle_fullscreen();
+    break;
+
+  case SDLK_g:
+    cfg_termmode ^= 1;
+    if (cfg_termmode == 1) {
+      gfx_set_columns(80);
+      ansi_init();  /* sets font to CP437 (slot 2) */
+      termmenu[find_menu_key(termmenu, "G")].text = "Terminal: ANSI";
+    } else {
+      gfx_set_columns(40);
+      gfx_setfont(1);  /* restore C64 lowercase font */
+      termmenu[find_menu_key(termmenu, "G")].text = "Terminal: PETSCII";
+    }
+    menu_print_menu(termmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
     break;
 
   case SDLK_m:

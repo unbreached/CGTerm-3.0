@@ -31,6 +31,8 @@ extern int cfg_modem;
 extern int cfg_splashfont;
 extern int cfg_menufont;
 extern char cfg_bookmarkfile[];
+extern int cfg_termmode;
+extern int cfg_bookmark_termmode[];
 
 
 int cfg_init(char *argv0);

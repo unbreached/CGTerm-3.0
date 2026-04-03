@@ -421,7 +421,23 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(rx, ty + 84, "K", "Keyboard layout");
     menu_draw_item(rx, ty + 98, "W", "Toggle upper/lowercase");
 
-    menu_draw_item(rx, ty + 126, "Q", "Quit CGTerm");
+    /* Terminal mode toggle — PETSCII/ANSI */
+    {
+      int mx = rx;
+      int my = ty + 112;
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(mx + 10, my, "G", 0xff, 0xff, 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx + 20, my, "] Terminal ", 0x00, 0xee, 0xff);
+      if (cfg_termmode == 1)
+        font_draw_string_color(mx + 140, my, "[ANSI]", 0x00, 0xff, 0x66);
+      else
+        font_draw_string_color(mx + 140, my, "[PETSCII]", 0xff, 0x80, 0xff);
+    }
+
+    menu_draw_item(rx, ty + 140, "Q", "Quit CGTerm");
   }
 
   /* Transfer path at bottom */
@@ -1783,14 +1799,15 @@ void menu_draw_message(const char *message) {
 /* Keyboard layout selector and test mode */
 /* Blocking bookmark editor — shows all 3 fields, Tab to switch, Enter to save.
  * Returns 1 if saved, 0 if cancelled. */
-int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *port, int portsz) {
+int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *port, int portsz, int *mode) {
   SDL_Event ev;
-  int field = 0;  /* 0=name, 1=host, 2=port */
+  int field = 0;  /* 0=name, 1=host, 2=port, 3=mode */
   int cursor[3];
   char *bufs[3];
   int maxlen[3];
   const char *labels[] = {"BBS Name:", "Hostname:", "Port:"};
   int done = 0, saved = 0;
+  int bm_mode = mode ? *mode : 0;
 
   bufs[0] = name; bufs[1] = host; bufs[2] = port;
   maxlen[0] = namesz - 1; maxlen[1] = hostsz - 1; maxlen[2] = portsz - 1;
@@ -1814,7 +1831,7 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
     font_draw_string_color(bx + 170, by + 8, " ]", 0x00, 0xee, 0xff);
 
     for (i = 0; i < 3; i++) {
-      int fy = by + 30 + i * 28;
+      int fy = by + 30 + i * 24;
       SDL_Rect r;
 
       /* Label */
@@ -1841,13 +1858,29 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
       }
     }
 
+    /* Mode field (field 3) */
+    {
+      int fy = by + 30 + 3 * 24;
+      SDL_Rect r;
+      font_draw_string_color(bx + 10, fy, "Mode:", 0x00, 0xee, 0xff);
+      r.x = bx + 110; r.y = fy - 2; r.w = 280; r.h = 16;
+      SDL_FillRect(menu_surface, &r,
+        (field == 3) ? SDL_MapRGBA(menu_surface->format, 0x20, 0x30, 0x60, SDL_ALPHA_OPAQUE)
+                     : SDL_MapRGBA(menu_surface->format, 0x10, 0x15, 0x30, SDL_ALPHA_OPAQUE));
+      if (field == 3) {
+        font_draw_string_color(bx + 112, fy, bm_mode ? "ANSI" : "PETSCII", 0xff, 0xff, 0xff);
+      } else {
+        font_draw_string_color(bx + 112, fy, bm_mode ? "ANSI" : "PETSCII", 0x60, 0x80, 0xff);
+      }
+    }
+
     /* Hints */
-    font_draw_string_color(bx + 10, cy + 50, "Tab ", 0x00, 0xee, 0xff);
-    font_draw_string_color(bx + 50, cy + 50, "next  ", 0x00, 0xff, 0x66);
-    font_draw_string_color(bx + 110, cy + 50, "Enter ", 0x00, 0xee, 0xff);
-    font_draw_string_color(bx + 170, cy + 50, "save  ", 0x00, 0xff, 0x66);
-    font_draw_string_color(bx + 230, cy + 50, "Esc ", 0x00, 0xee, 0xff);
-    font_draw_string_color(bx + 270, cy + 50, "cancel", 0x00, 0xff, 0x66);
+    font_draw_string_color(bx + 10, cy + 58, "Tab ", 0x00, 0xee, 0xff);
+    font_draw_string_color(bx + 50, cy + 58, "next  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(bx + 110, cy + 58, "Enter ", 0x00, 0xee, 0xff);
+    font_draw_string_color(bx + 170, cy + 58, "save  ", 0x00, 0xff, 0x66);
+    font_draw_string_color(bx + 230, cy + 58, "Esc ", 0x00, 0xee, 0xff);
+    font_draw_string_color(bx + 270, cy + 58, "cancel", 0x00, 0xff, 0x66);
 
     menu_dirty = SDL_TRUE;
     menu_show();
@@ -1856,7 +1889,7 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
     while (SDL_PollEvent(&ev)) {
       if (ev.type == SDL_QUIT) exit(0);
       if (ev.type == SDL_KEYDOWN) {
-        int len = (int)strlen(bufs[field]);
+        int len = (field < 3) ? (int)strlen(bufs[field]) : 0;
         switch (ev.key.keysym.sym) {
         case SDLK_ESCAPE:
           done = 1; saved = 0;
@@ -1866,10 +1899,15 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
           done = 1; saved = 1;
           break;
         case SDLK_TAB:
-          field = (field + 1) % 3;
+          field = (field + 1) % 4;
+          break;
+        case SDLK_SPACE:
+          if (field == 3) {
+            bm_mode ^= 1;
+          }
           break;
         case SDLK_BACKSPACE:
-          if (cursor[field] > 0) {
+          if (field < 3 && cursor[field] > 0) {
             memmove(bufs[field] + cursor[field] - 1,
                     bufs[field] + cursor[field],
                     len - cursor[field] + 1);
@@ -1877,25 +1915,31 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
           }
           break;
         case SDLK_DELETE:
-          if (cursor[field] < len) {
+          if (field < 3 && cursor[field] < len) {
             memmove(bufs[field] + cursor[field],
                     bufs[field] + cursor[field] + 1,
                     len - cursor[field]);
           }
           break;
         case SDLK_LEFT:
-          if (cursor[field] > 0) cursor[field]--;
+          if (field < 3 && cursor[field] > 0) cursor[field]--;
+          if (field == 3) bm_mode ^= 1;
           break;
         case SDLK_RIGHT:
-          if (cursor[field] < len) cursor[field]++;
+          if (field < 3 && cursor[field] < len) cursor[field]++;
+          if (field == 3) bm_mode ^= 1;
           break;
         case SDLK_HOME:
-          cursor[field] = 0;
+          if (field < 3) cursor[field] = 0;
           break;
         case SDLK_END:
-          cursor[field] = len;
+          if (field < 3) cursor[field] = len;
           break;
         default:
+          if (field == 3) {
+            /* Space or any key toggles mode */
+            break;
+          }
           if (ev.key.keysym.unicode >= 32 && ev.key.keysym.unicode < 127) {
             if (len < maxlen[field]) {
               memmove(bufs[field] + cursor[field] + 1,
@@ -1910,6 +1954,9 @@ int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *por
       }
     }
     SDL_Delay(20);
+  }
+  if (saved && mode) {
+    *mode = bm_mode;
   }
   return saved;
 }
@@ -2258,6 +2305,13 @@ void menu_draw_message_timed(const char *message, int timeout_ms) {
     SDL_Delay(20);
   }
   menu_hide();
+  /* Flush stale keypresses so they don't leak into the terminal */
+  {
+    SDL_Event flush_ev;
+    while (SDL_PollEvent(&flush_ev)) {
+      if (flush_ev.type == SDL_QUIT) exit(0);
+    }
+  }
 }
 
 
