@@ -46,6 +46,13 @@ static const unsigned char ansi_bold_map[8] = {
 
 static int ansi_fg_index = 7;  /* current ANSI fg color index (0-7), default white */
 static int saved_x = 0, saved_y = 0;
+static int scroll_top = 0, scroll_bottom = 24;  /* scroll region */
+static int private_mode = 0;  /* 1 if ESC[? prefix detected */
+
+/* 256-color palette (indices 0-255) mapped to RGB, stored as C64 palette indices
+ * for the 16 base colors, or direct RGB for extended colors.
+ * For now, 256-color maps to nearest of our 16 VGA colors. */
+static unsigned char color256_to_16[256];
 
 
 /* In ANSI mode with CP437 font (font slot 2), the font grid is
@@ -62,6 +69,46 @@ void ansi_init(void) {
   gfx_fgcolor(COLOR_LTGRAY);
   gfx_set_cell_bg(0);
   gfx_setfont(2);  /* CP437 font for ANSI */
+  scroll_top = 0;
+  scroll_bottom = cfg_rows - 1;
+  private_mode = 0;
+
+  /* Build 256-color to 16-color mapping table */
+  {
+    /* 0-7: standard colors */
+    static const unsigned char base16[] = {
+      COLOR_BLACK, COLOR_RED, COLOR_GREEN, COLOR_BROWN,
+      COLOR_BLUE, COLOR_PURPLE, COLOR_CYAN, COLOR_LTGRAY,
+      COLOR_DKGRAY, COLOR_LTRED, COLOR_LTGREEN, COLOR_YELLOW,
+      COLOR_LTBLUE, 8/*lt magenta*/, 12/*lt cyan*/, COLOR_WHITE
+    };
+    int ci;
+    for (ci = 0; ci < 16; ci++) color256_to_16[ci] = base16[ci];
+    /* 16-231: 6x6x6 color cube — map to nearest base color */
+    for (ci = 16; ci < 232; ci++) {
+      int idx = ci - 16;
+      int r = (idx / 36) * 51, g = ((idx / 6) % 6) * 51, b = (idx % 6) * 51;
+      /* Simple nearest: pick based on dominant channel */
+      if (r > 170 && g < 85 && b < 85) color256_to_16[ci] = COLOR_LTRED;
+      else if (g > 170 && r < 85 && b < 85) color256_to_16[ci] = COLOR_LTGREEN;
+      else if (b > 170 && r < 85 && g < 85) color256_to_16[ci] = COLOR_LTBLUE;
+      else if (r > 170 && g > 170 && b < 85) color256_to_16[ci] = COLOR_YELLOW;
+      else if (r > 170 && b > 170 && g < 85) color256_to_16[ci] = 8; /* lt magenta */
+      else if (g > 170 && b > 170 && r < 85) color256_to_16[ci] = 12; /* lt cyan */
+      else if (r > 170 && g > 170 && b > 170) color256_to_16[ci] = COLOR_WHITE;
+      else if (r > 85 || g > 85 || b > 85) color256_to_16[ci] = COLOR_LTGRAY;
+      else if (r > 40 || g > 40 || b > 40) color256_to_16[ci] = COLOR_DKGRAY;
+      else color256_to_16[ci] = COLOR_BLACK;
+    }
+    /* 232-255: grayscale ramp */
+    for (ci = 232; ci < 256; ci++) {
+      int gray = (ci - 232) * 10 + 8;
+      if (gray > 192) color256_to_16[ci] = COLOR_WHITE;
+      else if (gray > 128) color256_to_16[ci] = COLOR_LTGRAY;
+      else if (gray > 64) color256_to_16[ci] = COLOR_DKGRAY;
+      else color256_to_16[ci] = COLOR_BLACK;
+    }
+  }
 }
 
 
@@ -114,12 +161,34 @@ static void ansi_sgr(void) {
       /* Default foreground */
       ansi_fg_index = 7;
       gfx_fgcolor(ansi_bold ? COLOR_WHITE : COLOR_LTGRAY);
+    } else if (p == 38 && i + 2 < param_count && params[i+1] == 5) {
+      /* 256-color foreground: ESC[38;5;Nm */
+      gfx_fgcolor(color256_to_16[params[i+2] & 0xFF]);
+      i += 2;
     } else if (p >= 40 && p <= 47) {
       /* Background color */
       gfx_set_cell_bg(ansi_color_map[p - 40]);
+    } else if (p == 48 && i + 2 < param_count && params[i+1] == 5) {
+      /* 256-color background: ESC[48;5;Nm */
+      gfx_set_cell_bg(color256_to_16[params[i+2] & 0xFF]);
+      i += 2;
     } else if (p == 49) {
       /* Default background */
       gfx_set_cell_bg(0);
+    } else if (p >= 90 && p <= 97) {
+      /* Bright foreground colors */
+      static const unsigned char bright_map[8] = {
+        COLOR_DKGRAY, COLOR_LTRED, COLOR_LTGREEN, COLOR_YELLOW,
+        COLOR_LTBLUE, 8, 12, COLOR_WHITE
+      };
+      gfx_fgcolor(bright_map[p - 90]);
+    } else if (p >= 100 && p <= 107) {
+      /* Bright background colors */
+      static const unsigned char bright_map[8] = {
+        COLOR_DKGRAY, COLOR_LTRED, COLOR_LTGREEN, COLOR_YELLOW,
+        COLOR_LTBLUE, 8, 12, COLOR_WHITE
+      };
+      gfx_set_cell_bg(bright_map[p - 100]);
     }
   }
 }
@@ -159,26 +228,110 @@ static void ansi_dispatch(unsigned char cmd) {
 
   case 'J':  /* Erase in display */
     n = (param_count > 0) ? params[0] : 0;
-    if (n == 2) {
+    if (n == 0) {
+      /* Clear from cursor to end of display */
+      int save_x = gfx_cursx, save_y = gfx_cursy, x, y;
+      for (x = save_x; x < cfg_columns; x++) {
+        gfx_setcursxy(x, save_y);
+        gfx_draw_char(32);
+      }
+      for (y = save_y + 1; y < cfg_rows; y++)
+        gfx_clear_line(y, gfx_get_fgcolor());
+      gfx_setcursxy(save_x, save_y);
+    } else if (n == 1) {
+      /* Clear from start to cursor */
+      int save_x = gfx_cursx, save_y = gfx_cursy, x, y;
+      for (y = 0; y < save_y; y++)
+        gfx_clear_line(y, gfx_get_fgcolor());
+      for (x = 0; x <= save_x; x++) {
+        gfx_setcursxy(x, save_y);
+        gfx_draw_char(32);
+      }
+      gfx_setcursxy(save_x, save_y);
+    } else if (n == 2) {
       gfx_cls();
       gfx_setcursxy(0, 0);
     }
-    /* n=0 (clear to end) and n=1 (clear to start) — simplified: just clear whole screen */
     break;
 
   case 'K':  /* Erase in line */
     n = (param_count > 0) ? params[0] : 0;
-    if (n == 0) {
-      /* Clear from cursor to end of line */
-      int save_x = gfx_cursx;
-      int x;
-      for (x = save_x; x < cfg_columns; x++) {
-        gfx_setcursxy(x, gfx_cursy);
-        gfx_draw_char(32);
+    {
+      int save_x = gfx_cursx, x;
+      if (n == 0) {
+        /* Clear from cursor to end of line */
+        for (x = save_x; x < cfg_columns; x++) {
+          gfx_setcursxy(x, gfx_cursy);
+          gfx_draw_char(32);
+        }
+      } else if (n == 1) {
+        /* Clear from start of line to cursor */
+        for (x = 0; x <= save_x; x++) {
+          gfx_setcursxy(x, gfx_cursy);
+          gfx_draw_char(32);
+        }
+      } else if (n == 2) {
+        /* Clear entire line */
+        gfx_clear_line(gfx_cursy, gfx_get_fgcolor());
       }
       gfx_setcursxy(save_x, gfx_cursy);
-    } else if (n == 2) {
+    }
+    break;
+
+  case 'L':  /* Insert lines */
+    /* Scroll down from cursor, inserting blank lines */
+    for (i = 0; i < n; i++) {
+      int y;
+      for (y = scroll_bottom; y > gfx_cursy; y--) {
+        gfx_copy_line(
+          gfx_0400 + (y-1) * cfg_columns,
+          gfx_d800 + (y-1) * cfg_columns, y);
+      }
       gfx_clear_line(gfx_cursy, gfx_get_fgcolor());
+    }
+    break;
+
+  case 'M':  /* Delete lines */
+    for (i = 0; i < n; i++) {
+      int y;
+      for (y = gfx_cursy; y < scroll_bottom; y++) {
+        gfx_copy_line(
+          gfx_0400 + (y+1) * cfg_columns,
+          gfx_d800 + (y+1) * cfg_columns, y);
+      }
+      gfx_clear_line(scroll_bottom, gfx_get_fgcolor());
+    }
+    break;
+
+  case 'S':  /* Scroll up */
+    for (i = 0; i < n; i++) gfx_scrollup();
+    break;
+
+  case 'T':  /* Scroll down */
+    /* Scroll down: move lines down, insert blank at top */
+    for (i = 0; i < n; i++) {
+      int y;
+      for (y = scroll_bottom; y > scroll_top; y--) {
+        gfx_copy_line(
+          gfx_0400 + (y-1) * cfg_columns,
+          gfx_d800 + (y-1) * cfg_columns, y);
+      }
+      gfx_clear_line(scroll_top, gfx_get_fgcolor());
+    }
+    break;
+
+  case 'h':  /* Set mode */
+    if (private_mode) {
+      if (param_count > 0 && params[0] == 25)
+        gfx_setcursxy(gfx_cursx, gfx_cursy);  /* show cursor (already visible) */
+      /* ?1000 mouse tracking etc — silently ignore */
+    }
+    break;
+
+  case 'l':  /* Reset mode */
+    if (private_mode) {
+      if (param_count > 0 && params[0] == 25)
+        gfx_setcursxy(-1, -1);  /* hide cursor */
     }
     break;
 
@@ -188,11 +341,19 @@ static void ansi_dispatch(unsigned char cmd) {
 
   case 'n':  /* Device Status Report */
     if (param_count > 0 && params[0] == 6) {
-      /* DSR: respond with cursor position ESC[row;colR (1-based) */
       char response[32];
       snprintf(response, sizeof(response), "\033[%d;%dR", gfx_cursy + 1, gfx_cursx + 1);
       net_send_string((const unsigned char *)response);
     }
+    break;
+
+  case 'r':  /* Set scroll region (DECSTBM) */
+    scroll_top = (param_count > 0 && params[0] > 0) ? params[0] - 1 : 0;
+    scroll_bottom = (param_count > 1 && params[1] > 0) ? params[1] - 1 : cfg_rows - 1;
+    if (scroll_top >= cfg_rows) scroll_top = 0;
+    if (scroll_bottom >= cfg_rows) scroll_bottom = cfg_rows - 1;
+    if (scroll_top >= scroll_bottom) { scroll_top = 0; scroll_bottom = cfg_rows - 1; }
+    gfx_setcursxy(0, 0);
     break;
 
   case 's':  /* Save cursor position */
@@ -202,6 +363,13 @@ static void ansi_dispatch(unsigned char cmd) {
 
   case 'u':  /* Restore cursor position */
     gfx_setcursxy(saved_x, saved_y);
+    break;
+
+  case 'c':  /* Device Attributes */
+    if (param_count == 0 || params[0] == 0) {
+      /* Report as VT102 */
+      net_send_string((const unsigned char *)"\033[?6c");
+    }
     break;
   }
 }
@@ -249,6 +417,7 @@ void ansi_out(unsigned char byte) {
       state = ANSI_CSI;
       param_count = 0;
       current_param = 0;
+      private_mode = 0;
       memset(params, 0, sizeof(params));
     } else {
       /* Unknown ESC sequence, discard */
@@ -257,7 +426,10 @@ void ansi_out(unsigned char byte) {
     break;
 
   case ANSI_CSI:
-    if (byte >= '0' && byte <= '9') {
+    if (byte == '?' && param_count == 0 && current_param == 0) {
+      /* Private mode prefix */
+      private_mode = 1;
+    } else if (byte >= '0' && byte <= '9') {
       /* Accumulate digit */
       current_param = current_param * 10 + (byte - '0');
     } else if (byte == ';') {

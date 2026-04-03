@@ -221,18 +221,70 @@ signed int net_receive(void) {
       /* Escaped 0xFF literal */
       return 0xFF;
     } else if (c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) {
-      /* WILL / WONT / DO / DONT: consume the option byte */
+      /* WILL(FB) / WONT(FC) / DO(FD) / DONT(FE): consume the option byte */
+      int cmd = c;
       c = net_raw_byte();
       if (c < 0) return c;
-      /* Discard all three bytes and continue */
+      /* Respond to Telnet negotiation */
+      if (cmd == 0xFD) {
+        /* DO — server asks us to enable an option */
+        unsigned char response[3] = {0xFF, 0xFC, (unsigned char)c}; /* WONT by default */
+        if (c == 0x18) {
+          /* Terminal Type — we support this */
+          response[1] = 0xFB; /* WILL */
+        } else if (c == 0x1F) {
+          /* NAWS (Negotiate About Window Size) — we support this */
+          response[1] = 0xFB; /* WILL */
+        } else if (c == 0x00) {
+          /* Binary transmission */
+          response[1] = 0xFB; /* WILL */
+        }
+        send(conn, (const char *)response, 3, 0);
+        /* Send window size if NAWS was agreed */
+        if (c == 0x1F) {
+          unsigned char naws[9] = {0xFF, 0xFA, 0x1F,
+            0, (unsigned char)cfg_columns, 0, (unsigned char)cfg_rows,
+            0xFF, 0xF0};
+          send(conn, (const char *)naws, 9, 0);
+        }
+      } else if (cmd == 0xFB) {
+        /* WILL — server offers an option, respond with DO or DONT */
+        unsigned char response[3] = {0xFF, 0xFE, (unsigned char)c}; /* DONT by default */
+        if (c == 0x01 || c == 0x03) {
+          /* Echo or Suppress Go Ahead — accept */
+          response[1] = 0xFD; /* DO */
+        }
+        send(conn, (const char *)response, 3, 0);
+      }
+      /* WONT(FC) and DONT(FE) — just acknowledge silently */
     } else if (c == 0xFA) {
-      /* SB: consume until IAC SE (0xFF 0xF0) */
-      int prev = 0;
-      for (;;) {
-        c = net_raw_byte();
-        if (c < 0) return c;
-        if (prev == 0xFF && c == 0xF0) break;
-        prev = c;
+      /* SB: subnegotiation */
+      int sb_opt = net_raw_byte();
+      if (sb_opt < 0) return sb_opt;
+      /* Consume until IAC SE (0xFF 0xF0) */
+      {
+        int prev = 0;
+        for (;;) {
+          c = net_raw_byte();
+          if (c < 0) return c;
+          if (prev == 0xFF && c == 0xF0) break;
+          prev = c;
+        }
+      }
+      /* Respond to Terminal Type request (option 24, SEND=1) */
+      if (sb_opt == 0x18) {
+        const char *ttype = cfg_termmode == 1 ? "ANSI" : "ANSI";
+        unsigned char resp[64];
+        int len = 0, ti;
+        resp[len++] = 0xFF; /* IAC */
+        resp[len++] = 0xFA; /* SB */
+        resp[len++] = 0x18; /* Terminal Type */
+        resp[len++] = 0x00; /* IS */
+        for (ti = 0; ttype[ti] && len < 58; ti++)
+          resp[len++] = ttype[ti];
+        resp[len++] = 0xFF; /* IAC */
+        resp[len++] = 0xF0; /* SE */
+        send(conn, (const char *)resp, len, 0);
       }
     }
     /* Otherwise discard the two bytes (IAC + command) and loop */
