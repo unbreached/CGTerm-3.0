@@ -746,6 +746,16 @@ void select_send_multipunter(FileSelector *fs) {
 
 
 void ui_metakey(SDL_keysym *keysym) {
+  /* Unicode-based help trigger — works on any keyboard layout */
+  if (keysym->unicode == '?') {
+    char fname[1024];
+    path_build_asset(fname, sizeof(fname), "help.txt");
+    menu_show_help(fname);
+    menu_print_menu(termmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
+    return;
+  }
   switch (keysym->sym) {
 
   case SDLK_LALT:
@@ -794,19 +804,6 @@ void ui_metakey(SDL_keysym *keysym) {
         ui_inputcall(30, "Connect to host [port]:", hostbuf, &ui_connect, FOCUS_TERM);
       }
     }
-    break;
-
-  case SDLK_F1:
-  case SDLK_QUESTION:
-    /* Help viewer */
-    {
-      char fname[1024];
-      path_build_asset(fname, sizeof(fname), "help.txt");
-      menu_show_help(fname);
-    }
-    menu_print_menu(termmenu);
-    menu_show();
-    kbd_focus = FOCUS_MENU;
     break;
 
   case SDLK_e:

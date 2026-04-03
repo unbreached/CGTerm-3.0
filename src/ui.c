@@ -204,6 +204,13 @@ void ui_connect(char *host) {
 
 
 void ui_menukey(SDL_keysym *keysym) {
+  /* Check unicode for ? (help) — works on any keyboard layout */
+  if (keysym->unicode == '?') {
+    menu_hide();
+    kbd_focus = FOCUS_TERM;
+    ui_metakey(keysym);
+    return;
+  }
   switch (keysym->sym) {
 
   case SDLK_ESCAPE:
@@ -218,7 +225,6 @@ void ui_menukey(SDL_keysym *keysym) {
   case SDLK_p: case SDLK_q: case SDLK_r: case SDLK_s:
   case SDLK_t: case SDLK_u: case SDLK_v: case SDLK_w:
   case SDLK_z:
-  case SDLK_F1: case SDLK_QUESTION: case SDLK_SLASH:
   case SDLK_LALT: case SDLK_RALT:
     menu_hide();
     kbd_focus = FOCUS_TERM;
