@@ -528,16 +528,24 @@ int kbd_getkey() {
                                 goto petscii_done;
                             }
 
-                            /* Swedish/international characters → PETSCII */
+                            /* Swedish/German characters → PETSCII.
+                             * These map to the screencodes where the localized ROM
+                             * has the corresponding glyphs. Works regardless of
+                             * active charset — the byte is the same, only display differs. */
                             switch (uc) {
-                            case 0x00E5: key = 0x5D; goto petscii_done; /* å → ] position (Å in Swedish ROM sc29) */
-                            case 0x00C5: key = 0xDD; goto petscii_done; /* Å → shifted ] */
-                            case 0x00F6: key = 0x5C; goto petscii_done; /* ö → £ position (Ö in Swedish ROM) */
-                            case 0x00D6: key = 0xDC; goto petscii_done; /* Ö → shifted £ */
-                            case 0x00E4: key = 0x5B; goto petscii_done; /* ä → [ position (Ä in Swedish ROM sc27) */
-                            case 0x00C4: key = 0xDB; goto petscii_done; /* Ä → shifted [ */
-                            case 0x00FC: key = 0x5B; goto petscii_done; /* ü (German) */
-                            case 0x00DC: key = 0xDB; goto petscii_done; /* Ü */
+                            /* Swedish: å→sc29, ö→sc28, ä→sc27 */
+                            case 0x00E5: key = 0x5D; goto petscii_done; /* å */
+                            case 0x00C5: key = 0xDD; goto petscii_done; /* Å */
+                            case 0x00F6: key = 0x5C; goto petscii_done; /* ö */
+                            case 0x00D6: key = 0xDC; goto petscii_done; /* Ö */
+                            case 0x00E4: key = 0x5B; goto petscii_done; /* ä */
+                            case 0x00C4: key = 0xDB; goto petscii_done; /* Ä */
+                            /* German: ü, ß — use same Swedish codes since most
+                             * BBSes don't have dedicated German PETSCII support.
+                             * ü→same as ä position, ß→same as £ */
+                            case 0x00FC: key = 0x5B; goto petscii_done; /* ü → ä position */
+                            case 0x00DC: key = 0xDB; goto petscii_done; /* Ü → Ä position */
+                            case 0x00DF: key = 0x5C; goto petscii_done; /* ß → ö position */
                             }
                         }
 
