@@ -407,36 +407,36 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(lx, ty + 56, "S", "Save screen");
     menu_draw_item(lx, ty + 70, "I", "Screenshot");
     menu_draw_item(lx, ty + 84, "Z", "Font settings");
-    /* Upper/Lowercase toggle */
+    /* Upper/Lowercase toggle — same style as Charset */
     {
       int mx = lx;
       int my = ty + 98;
+      const char *gname = gfx_get_font() == 0 ? "UPPER" : "lower";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
       font_set_font(menu_font[1]);
       font_draw_string_color(mx + 10, my, "W", 0xff, 0xff, 0xff);
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Graphics ", 0x00, 0xee, 0xff);
-      if (gfx_get_font() == 0)
-        font_draw_string_color(mx + 140, my, "[UPPER]", 0xff, 0xff, 0x54);
-      else
-        font_draw_string_color(mx + 140, my, "[lower]", 0x00, 0xff, 0x66);
+      font_draw_string_color(mx + 140, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 150, my, gname, 0xff, 0xff, 0x54);
+      font_draw_string_color(mx + 150 + (int)strlen(gname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
-    /* Terminal mode toggle — PETSCII/ANSI */
+    /* Terminal mode toggle — same style as Charset */
     {
       int mx = lx;
       int my = ty + 112;
+      const char *tname = cfg_termmode == 1 ? "ANSI" : "PETSCII";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
       font_set_font(menu_font[1]);
       font_draw_string_color(mx + 10, my, "G", 0xff, 0xff, 0xff);
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Terminal ", 0x00, 0xee, 0xff);
-      if (cfg_termmode == 1)
-        font_draw_string_color(mx + 130, my, "[ANSI]", 0x00, 0xff, 0x66);
-      else
-        font_draw_string_color(mx + 130, my, "[PETSCII]", 0xff, 0x80, 0xff);
+      font_draw_string_color(mx + 140, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 150, my, tname, 0xff, 0xff, 0x54);
+      font_draw_string_color(mx + 150 + (int)strlen(tname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
     menu_draw_item(lx, ty + 126, "C", "Record macro");
@@ -466,20 +466,20 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 130 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
-    /* Oldschool modem toggle */
+    /* Oldschool modem toggle — same style as Charset */
     {
       int mx = rx;
       int my = ty + 84;
+      const char *mname = cfg_modem ? "ON" : "OFF";
       font_set_font(menu_font[0]);
       font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
       font_set_font(menu_font[1]);
       font_draw_string_color(mx + 10, my, "M", 0xff, 0xff, 0xff);
       font_set_font(menu_font[0]);
       font_draw_string_color(mx + 20, my, "] Oldskool Mode ", 0x00, 0xee, 0xff);
-      if (cfg_modem)
-        font_draw_string_color(mx + 200, my, "[ON]", 0x00, 0xff, 0x66);
-      else
-        font_draw_string_color(mx + 200, my, "[OFF]", 0xff, 0x40, 0x40);
+      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 210, my, mname, cfg_modem ? 0x00 : 0xff, cfg_modem ? 0xff : 0x40, cfg_modem ? 0x66 : 0x40);
+      font_draw_string_color(mx + 210 + (int)strlen(mname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
     menu_draw_item_redkey(rx, ty + 154, "Q", "Quit CGTerm");
