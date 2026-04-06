@@ -276,17 +276,16 @@ static const unsigned char cp437_data[2048] = {
 
 
 /* Create an SDL surface from the embedded CP437 font data.
- * Returns a 256x64 surface (32 columns x 8 rows of 8x8 chars)
- * in the same format as upper.bmp/lower.bmp. */
+ * Returns a 256x128 surface (32 columns x 8 rows of 8x16 chars)
+ * Each 8x8 source row is doubled to create 8x16 glyphs. */
 SDL_Surface *cp437_create_raw_font(void) {
   SDL_Surface *surface;
   Uint8 *pixels;
   int c, x, y;
 
-  surface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256, 64, 8, 0, 0, 0, 0);
+  surface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256, 128, 8, 0, 0, 0, 0);
   if (!surface) return NULL;
 
-  /* Clear to 0 (background) */
   SDL_FillRect(surface, NULL, 0);
 
   pixels = (Uint8 *)surface->pixels;
@@ -295,13 +294,15 @@ SDL_Surface *cp437_create_raw_font(void) {
     int col = c & 0x1f;       /* column in 32-wide grid */
     int row = c / 32;         /* row in 8-tall grid */
     int px = col * 8;
-    int py = row * 8;
+    int py = row * 16;        /* 16 pixels per char row */
 
     for (y = 0; y < 8; y++) {
       unsigned char bits = cp437_data[c * 8 + y];
       for (x = 0; x < 8; x++) {
         if (bits & (0x80 >> x)) {
-          pixels[(py + y) * surface->pitch + px + x] = 0xff;  /* foreground */
+          /* Double each row for 8x16 appearance */
+          pixels[(py + y*2)     * surface->pitch + px + x] = 0xff;
+          pixels[(py + y*2 + 1) * surface->pitch + px + x] = 0xff;
         }
       }
     }

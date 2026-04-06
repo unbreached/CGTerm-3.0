@@ -144,14 +144,15 @@ SDL_Surface *gfx_createfont_pal(SDL_Surface *srcsurface, int zoom, SDL_Color *pa
 }
 
 /* ANSI font: uses magenta key color as transparent background.
- * This allows per-cell BG colors by filling the cell first,
- * then blitting the character with colorkey transparency. */
+ * Reads 16 rows per char from the source (8x16 CP437 font).
+ * Each source row maps to one output row (no vertical zoom needed). */
 SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *pal) {
   SDL_Surface *tempsurface;
   SDL_Surface *surface;
   Uint8 *sp;
-  int c, x, y, z1, z2, col, hzoom;
+  int c, x, y, z2, col, hzoom;
   Uint32 fg, keycol;
+  int src_char_h = 16;  /* source is 8x16 */
 
   if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256 * charwidth, 16 * charheight, 8, 0, 0, 0, 0)) == NULL) {
     return(NULL);
@@ -175,19 +176,18 @@ SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *p
   for (col = 0; col < 16; ++col) {
     fg = SDL_MapRGB(surface->format, pal[col].r, pal[col].g, pal[col].b);
     for (c = 0; c < 256; ++c) {
-      for (y = 0; y < 8; ++y) {
-	for (z1 = 0; z1 < zoom; ++z1) {
-	  sp = (Uint8 *)srcsurface->pixels + (c & 0x1f) * 8 + ((c / 32) * 8 + y) * srcsurface->pitch;
+      /* Read 16 source rows, map to charheight output rows */
+      for (y = 0; y < src_char_h && y < charheight; ++y) {
+	  sp = (Uint8 *)srcsurface->pixels + (c & 0x1f) * 8 + ((c / 32) * src_char_h + y) * srcsurface->pitch;
 	  for (x = 0; x < 8; ++x) {
 	    if (*sp) {
 	      for (z2 = 0; z2 < hzoom; ++z2) {
-		drawpixel(c * charwidth + x * hzoom + z2, col * charheight + y * zoom + z1, fg);
+		drawpixel(c * charwidth + x * hzoom + z2, col * charheight + y, fg);
 	      }
 	    }
 	    /* else: leave as keycol (transparent) */
 	    ++sp;
 	  }
-	}
       }
     }
   }

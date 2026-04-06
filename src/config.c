@@ -753,6 +753,9 @@ void cfg_set_bookmark_note(const char *host, int port, const char *note) {
   }
 
   fclose(tmp);
+#ifdef WINDOWS
+  remove(notes_path);  /* Windows rename() fails if dest exists */
+#endif
   rename(tmppath, notes_path);
 }
 
