@@ -823,9 +823,13 @@ void gfx_set_columns(int cols) {
   gfx_menu_height = gfx_height;
   gfx_menu_lastline = (gfx_height - 1) / charheight;
 
-  /* Clear and redraw */
+  /* Clear screen surface to black — prevents leftover pixels from previous mode */
+  SDL_FillRect(gfx_screen, NULL, SDL_MapRGB(gfx_screen->format, 0, 0, 0));
+
+  /* Clear character buffers and BG buffer */
   gfx_setcursxy(0, 0);
   gfx_cls();
+  memset(gfx_bg_buffer, 0, sizeof(gfx_bg_buffer));
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 
