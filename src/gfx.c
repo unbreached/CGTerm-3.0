@@ -739,6 +739,13 @@ void gfx_toggle_fullscreen(void) {
     }
     cfg_fullscreen = 1;
   }
+  /* Regenerate fonts — SDL_SetVideoMode may invalidate surfaces on some platforms */
+  gfx_destroyfont(fontlist[0]);
+  gfx_destroyfont(fontlist[1]);
+  gfx_destroyfont(fontlist[2]);
+  fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom);
+  fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom);
+  fontlist[2] = gfx_createfont_ansi(rawfont[2], cfg_zoom, vga_palette);
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 
