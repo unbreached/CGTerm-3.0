@@ -72,6 +72,8 @@ static int find_menu_key(struct menu *m, const char *key) {
 }
 
 
+
+
 typedef enum selmode {
   SEL_DIR,
   SEL_FILE,
@@ -827,19 +829,12 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_g:
-    cfg_termmode ^= 1;
-    if (cfg_termmode == 1) {
-      gfx_set_columns(80);
-      ansi_init();
+    if (cfg_termmode == 0) {
+      enter_ansi_mode();
       termmenu[find_menu_key(termmenu, "G")].text = "Terminal: ANSI";
     } else {
-      gfx_set_columns(40);
-      gfx_setfont(1);
+      enter_petscii_mode();
       termmenu[find_menu_key(termmenu, "G")].text = "Terminal: PETSCII";
-      /* Re-show background if not connected */
-      if (!net_connected()) {
-        gfx_show_startup_bg();
-      }
     }
     menu_print_menu(termmenu);
     menu_show();

@@ -13,3 +13,5 @@ void ui_display_net_status(int code, char *message);
 void ui_connect(char *host);
 void ui_pageup(void);
 void ui_pagedown(void);
+void enter_ansi_mode(void);
+void enter_petscii_mode(void);

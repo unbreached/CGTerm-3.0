@@ -422,12 +422,10 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       cfg_sethost(cfg_bookmark_host[b]);
       cfg_port = cfg_bookmark_port[b];
       snprintf(cfg_connect_name, 128, "%s", cfg_bookmark_alias[b]);
-      cfg_termmode = cfg_bookmark_termmode[b];
-      if (cfg_termmode == 1) {
-        gfx_set_columns(80);
-        ansi_init();
-      } else {
-        gfx_set_columns(40);
+      if (cfg_bookmark_termmode[b] == 1) {
+        enter_ansi_mode();
+      } else if (cfg_termmode == 1) {
+        enter_petscii_mode();  /* switch back if was in ANSI */
       }
       snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
       cfg_debug(_DebugMsg);
@@ -585,6 +583,24 @@ void ui_pageup(void) {
 void ui_pagedown(void) {
   if (gfx_offset < gfx_maxoffset) {
     gfx_set_offset(gfx_offset + cfg_columns);
+  }
+}
+
+
+/* ---- Terminal mode switching ---- */
+
+void enter_ansi_mode(void) {
+  cfg_termmode = 1;
+  gfx_set_columns(80);
+  ansi_init();
+}
+
+void enter_petscii_mode(void) {
+  cfg_termmode = 0;
+  gfx_set_columns(40);
+  gfx_setfont(1);
+  if (!net_connected()) {
+    gfx_show_startup_bg();
   }
 }
 
