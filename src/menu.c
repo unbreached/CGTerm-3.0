@@ -2422,6 +2422,7 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
       /* Render edit buffer line by line */
       {
         int ei = 0;
+        int cursor_x = lx, cursor_y = ty;
         y = ty;
         while (ei <= editlen && y < menu_height - 40) {
           char line[80];
@@ -2432,11 +2433,13 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
           line[li] = 0;
           if (ei < editlen && editbuf[ei] == '\n') ei++;
           font_draw_string_color(lx, y, line, 0x00, 0xff, 0x66);
+          cursor_x = lx + li * 10;
+          cursor_y = y;
           y += 14;
           if (ei >= editlen) break;
         }
-        /* Cursor indicator */
-        font_draw_string_color(lx, y, "_", 0xff, 0xff, 0xff);
+        /* Cursor at end of text */
+        font_draw_string_color(cursor_x, cursor_y, "_", 0xff, 0xff, 0xff);
       }
     } else {
       /* Display note */
