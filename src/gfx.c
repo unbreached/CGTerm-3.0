@@ -783,15 +783,26 @@ void gfx_reload_charset(void) {
 }
 
 
+static int saved_zoom = 0;  /* remember zoom before 80-col switch */
+
 void gfx_set_columns(int cols) {
   if (cols != 40 && cols != 80) return;
   if (cols == cfg_columns) return;
 
   cfg_columns = cols;
   if (cfg_columns == 40) {
+    /* Restore original zoom when going back to 40 cols */
+    if (saved_zoom > 0) {
+      cfg_zoom = saved_zoom;
+      saved_zoom = 0;
+    }
     charwidth = 8 * cfg_zoom;
   } else {
-    if (cfg_zoom == 1 || cfg_zoom == 3) cfg_zoom = 2;
+    /* Save zoom before forcing it for 80 cols */
+    if (cfg_zoom == 1 || cfg_zoom == 3) {
+      saved_zoom = cfg_zoom;
+      cfg_zoom = 2;
+    }
     charwidth = 4 * cfg_zoom;
   }
   gfx_width = cfg_zoom * GFX_WIDTH;
