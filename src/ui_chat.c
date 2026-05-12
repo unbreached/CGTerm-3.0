@@ -22,11 +22,23 @@ struct menu chatmenu[] = {
   {9, "S", "Save screen to seq file"},
   {10, "V", "Play macro"},
   {11, "Alt", "Toggle case"},
+  {12, "?", "Help"},
   {0, NULL, NULL}
 };
 
 
 void ui_metakey(SDL_keysym *keysym) {
+  /* Unicode-based help trigger — works on any keyboard layout */
+  if (keysym->unicode == '?') {
+    char fname[1024];
+    path_build_asset(fname, sizeof(fname), "help.txt");
+    menu_show_help(fname);
+    menu_print_menu(chatmenu);
+    menu_show();
+    kbd_focus = FOCUS_MENU;
+    return;
+  }
+
   switch (keysym->sym) {
 
   case SDLK_LALT:
@@ -47,7 +59,7 @@ void ui_metakey(SDL_keysym *keysym) {
       menu_show();
       kbd_focus = FOCUS_REQUESTER;
     } else {
-      menu_draw_bookmarks();
+      menu_draw_bookmarks_sel(ui_get_bookmark_cursor());
       menu_show();
       kbd_focus = FOCUS_BOOKMARKS;
     }

@@ -8,6 +8,7 @@ void ui_xferkey(SDL_keysym *keysym);
 void ui_requestkey(SDL_keysym *keysym);
 void ui_bookmarkkey(SDL_keysym *keysym);
 void ui_selectdirkey(SDL_keysym *keysym);
+int ui_get_bookmark_cursor(void);
 void ui_inputcall(int width, char *title, char *text, void (*donecall)(char *), Focus focus);
 void ui_display_net_status(int code, char *message);
 void ui_connect(char *host);

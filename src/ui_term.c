@@ -57,8 +57,9 @@ struct menu termmenu[] = {
   {27, "C", "Record macro"},
   {28, "V", "Play macro"},
   {29, "A", "Abort"},
-  {30, "",  ""},
-  {31, "Q", "Quit CGTerm"},
+  {30, "?", "Help"},
+  {31, "",  ""},
+  {32, "Q", "Quit CGTerm"},
   {0, NULL, NULL}
 };
 
@@ -168,6 +169,29 @@ void ui_selectdirkey(SDL_keysym *keysym) {
 	/* Enter directory. "." means go up */
 	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
 	  cfg_change_dir(fsel->path, "..");
+	} else if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "[ Go to Home ]") == 0) {
+	  const char *homedir = NULL;
+#ifdef WINDOWS
+	  /* Try USERPROFILE first, then HOMEDRIVE+HOMEPATH */
+	  homedir = getenv("USERPROFILE");
+	  if (!homedir) {
+	    const char *homedrive = getenv("HOMEDRIVE");
+	    const char *homepath = getenv("HOMEPATH");
+	    static char win_home_path[512];
+	    if (homedrive && homepath) {
+	      snprintf(win_home_path, sizeof(win_home_path), "%s%s", homedrive, homepath);
+	      homedir = win_home_path;
+	    }
+	  }
+#else
+	  homedir = getenv("HOME");
+#endif
+	  if (homedir && strlen(homedir) > 0) {
+	    snprintf(fsel->path, sizeof(fsel->path), "%s", homedir);
+	  } else {
+	    menu_draw_message("Home directory not found");
+	    menu_show();
+	  }
 	} else {
 	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
 	}
@@ -183,6 +207,29 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       if (fsel->selectedfile->type == T_DIR) {
 	if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "<- Back") == 0) {
 	  cfg_change_dir(fsel->path, "..");
+	} else if (fsel->selectedfile->name && strcmp(fsel->selectedfile->name, "[ Go to Home ]") == 0) {
+	  const char *homedir = NULL;
+#ifdef WINDOWS
+	  /* Try USERPROFILE first, then HOMEDRIVE+HOMEPATH */
+	  homedir = getenv("USERPROFILE");
+	  if (!homedir) {
+	    const char *homedrive = getenv("HOMEDRIVE");
+	    const char *homepath = getenv("HOMEPATH");
+	    static char win_home_path[512];
+	    if (homedrive && homepath) {
+	      snprintf(win_home_path, sizeof(win_home_path), "%s%s", homedrive, homepath);
+	      homedir = win_home_path;
+	    }
+	  }
+#else
+	  homedir = getenv("HOME");
+#endif
+	  if (homedir && strlen(homedir) > 0) {
+	    snprintf(fsel->path, sizeof(fsel->path), "%s", homedir);
+	  } else {
+	    menu_draw_message("Home directory not found");
+	    menu_show();
+	  }
 	} else {
 	  cfg_change_dir(fsel->path, fsel->selectedfile->name);
 	}
@@ -222,6 +269,30 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       kbd_focus = select_focus;
       select_done_call(fsel);
       fs_free(fsel);
+    /* "[ Go to Home ]" entry — navigate to home directory */
+    } else if (fsel->selectedfile->name &&
+               strcmp(fsel->selectedfile->name, "[ Go to Home ]") == 0) {
+      const char *homedir = NULL;
+#ifdef WINDOWS
+      /* Try USERPROFILE first, then HOMEDRIVE+HOMEPATH */
+      homedir = getenv("USERPROFILE");
+      if (!homedir) {
+        const char *homedrive = getenv("HOMEDRIVE");
+        const char *homepath = getenv("HOMEPATH");
+        static char win_home_path2[512];
+        if (homedrive && homepath) {
+          snprintf(win_home_path2, sizeof(win_home_path2), "%s%s", homedrive, homepath);
+          homedir = win_home_path2;
+        }
+      }
+#else
+      homedir = getenv("HOME");
+#endif
+      if (homedir) {
+        snprintf(fsel->path, sizeof(fsel->path), "%s", homedir);
+        fs_read_dir(fsel, fsel->path);
+        fs_draw(fsel);
+      }
     } else if (fsel->selectedfile->type == T_DIR) {
       cfg_change_dir(fsel->path, fsel->selectedfile->name);
       fs_read_dir(fsel, fsel->path);
@@ -337,7 +408,8 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     if (fsel->selectedfile && fsel->selectedfile->name) {
       /* Don't delete special entries */
       if (strcmp(fsel->selectedfile->name, "[ Use this folder ]") == 0 ||
-          strcmp(fsel->selectedfile->name, "<- Back") == 0) {
+          strcmp(fsel->selectedfile->name, "<- Back") == 0 ||
+          strcmp(fsel->selectedfile->name, "[ Go to Home ]") == 0) {
         break;
       }
       {
@@ -403,7 +475,8 @@ void ui_selectdirkey(SDL_keysym *keysym) {
       fsel->selectedfile = dir_find(fsel->dir, fsel->current + fsel->offset);
     if (fsel->selectedfile && fsel->selectedfile->name) {
       if (strcmp(fsel->selectedfile->name, "[ Use this folder ]") == 0 ||
-          strcmp(fsel->selectedfile->name, "<- Back") == 0) {
+          strcmp(fsel->selectedfile->name, "<- Back") == 0 ||
+          strcmp(fsel->selectedfile->name, "[ Go to Home ]") == 0) {
         break;
       }
       /* Store the old name and ask for new name */
@@ -429,7 +502,11 @@ static void fs_create_dir_done(char *dirname) {
       '/',
 #endif
       dirname);
+#ifdef WINDOWS
+    if (_mkdir(fullpath) == 0) {
+#else
     if (mkdir(fullpath, 0755) == 0) {
+#endif
       menu_draw_message_timed("Directory created", 2000);
     } else {
       menu_draw_message_timed("Could not create directory", 2000);
@@ -778,7 +855,7 @@ void ui_metakey(SDL_keysym *keysym) {
       menu_show();
       kbd_focus = FOCUS_REQUESTER;
     } else {
-      menu_draw_bookmarks_sel(0);
+      menu_draw_bookmarks_sel(ui_get_bookmark_cursor());
       menu_show();
       kbd_focus = FOCUS_BOOKMARKS;
     }

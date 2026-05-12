@@ -591,12 +591,14 @@ void ui_pagedown(void) {
 
 void enter_ansi_mode(void) {
   cfg_termmode = 1;
+  cfg_save_setting("termmode", "ansi");
   gfx_set_columns(80);
   ansi_init();
 }
 
 void enter_petscii_mode(void) {
   cfg_termmode = 0;
+  cfg_save_setting("termmode", "petscii");
   gfx_set_columns(40);
   gfx_setfont(1);
   if (!net_connected()) {
@@ -604,6 +606,9 @@ void enter_petscii_mode(void) {
   }
 }
 
+int ui_get_bookmark_cursor(void) {
+  return bm_cursor;
+}
 
 void ui_init(void) {
   kbd_add_focus(FOCUS_MENU, &ui_menukey);
