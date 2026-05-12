@@ -24,6 +24,8 @@ extern char *cfg_bookmark_host[];
 extern int cfg_bookmark_port[];
 extern char cfg_xferdir[];
 extern char cfg_dldir[];
+extern char cfg_seqdir[];
+extern char cfg_screendir[];
 extern int cfg_editmode;
 extern int cfg_debugmode;
 extern int cfg_splash;

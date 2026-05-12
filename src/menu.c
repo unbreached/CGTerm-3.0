@@ -2373,6 +2373,90 @@ void menu_draw_message_timed(const char *message, int timeout_ms) {
 }
 
 
+/* Blocking SET PATHS submenu.
+ * Returns 'u' / 'd' / 's' / 'p' to indicate which path to change, or 0 to cancel. */
+int menu_set_paths(void) {
+  SDL_Event ev;
+  int result = 0;
+  int redraw = 1;
+  int maxchars;
+
+  while (!result) {
+    if (redraw) {
+      int lx = 30;
+      int ty = 30;
+      int line_h = 24;
+      Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+
+      SDL_FillRect(menu_surface, NULL, solidbg);
+      menu_draw_borderbox(10, 10, menu_width - 11, menu_height - 11);
+
+      font_set_font(menu_font[1]);
+      font_draw_string_color(lx, ty, "[ ", 0x00, 0xee, 0xff);
+      font_draw_string_color(lx + 20, ty, "SET PATHS", 0xff, 0x40, 0x80);
+      font_draw_string_color(lx + 110, ty, " ]", 0x00, 0xee, 0xff);
+
+      maxchars = (menu_width - lx - 160) / 10;
+      if (maxchars < 16) maxchars = 16;
+      if (maxchars > 60) maxchars = 60;
+
+      {
+        const char *labels[] = {
+          "[U] Upload path:",
+          "[D] Download path:",
+          "[S] SEQ save path:",
+          "[P] Screenshot path:",
+        };
+        const char *paths[] = { cfg_xferdir, cfg_dldir, cfg_seqdir, cfg_screendir };
+        int i;
+        char trunc[80];
+        for (i = 0; i < 4; ++i) {
+          int y = ty + 40 + i * line_h;
+          font_set_font(menu_font[0]);
+          font_draw_string_color(lx, y, labels[i], 0x00, 0xee, 0xff);
+          if ((int)strlen(paths[i]) > maxchars) {
+            snprintf(trunc, sizeof(trunc), "...%s", paths[i] + strlen(paths[i]) - maxchars + 3);
+          } else {
+            snprintf(trunc, sizeof(trunc), "%s", paths[i]);
+          }
+          font_draw_string_color(lx + 200, y, trunc, 0x00, 0xff, 0x66);
+        }
+      }
+
+      font_set_font(menu_font[0]);
+      font_draw_string_color(lx, menu_height - 30,
+        "Press U/D/S/P to change a path, Esc to back", 0x60, 0x80, 0xff);
+
+      menu_dirty = SDL_TRUE;
+      menu_show();
+      redraw = 0;
+    }
+
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN) {
+        int uc = ev.key.keysym.unicode;
+        if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+          uc = ev.key.keysym.sym;
+        if (ev.key.keysym.sym == SDLK_ESCAPE || ev.key.keysym.sym == SDLK_q) {
+          result = -1;
+        } else if (uc == 'u' || uc == 'U') {
+          result = 'u';
+        } else if (uc == 'd' || uc == 'D') {
+          result = 'd';
+        } else if (uc == 's' || uc == 'S') {
+          result = 's';
+        } else if (uc == 'p' || uc == 'P') {
+          result = 'p';
+        }
+      }
+    }
+    SDL_Delay(20);
+  }
+  return (result == -1) ? 0 : result;
+}
+
+
 /* Blocking bookmark info viewer/editor.
  * Shows note text with option to edit. */
 void menu_show_bookmark_info(const char *alias, const char *host, int port) {

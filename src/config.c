@@ -82,6 +82,8 @@ char *cfg_bookmark_host[40];
 int cfg_bookmark_port[40];
 char cfg_xferdir[256];
 char cfg_dldir[256];
+char cfg_seqdir[256];
+char cfg_screendir[256];
 int cfg_termmode = 0;
 char cfg_connect_name[128] = "";
 int cfg_charset = 0;
@@ -180,6 +182,10 @@ int cfg_init(char *argv0) {
     getcwd(cfg_dldir, sizeof(cfg_dldir));
   }
 #endif
+
+  /* SEQ files and screenshots default to the download directory */
+  snprintf(cfg_seqdir, sizeof(cfg_seqdir), "%s", cfg_dldir);
+  snprintf(cfg_screendir, sizeof(cfg_screendir), "%s", cfg_dldir);
 
   return(0);
 }
@@ -443,6 +449,10 @@ signed int cfg_readconfig(char *configfile) {
 	  cfg_change_dir(cfg_xferdir, value);
 	} else if (strcmp(key, "dldir") == 0) {
 	  cfg_change_dir(cfg_dldir, value);
+	} else if (strcmp(key, "seqdir") == 0) {
+	  cfg_change_dir(cfg_seqdir, value);
+	} else if (strcmp(key, "screendir") == 0) {
+	  cfg_change_dir(cfg_screendir, value);
 	} else if (strcmp(key, "localecho") == 0) {
 	  if (strcmp("yes", value) == 0) {
 	    cfg_localecho = 1;

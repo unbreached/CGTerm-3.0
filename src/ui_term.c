@@ -35,7 +35,7 @@ struct menu termmenu[] = {
   {5,  "",  ""},
   {6,  "",  "-- TRANSFERS & FiLES --"},
   {7,  "T", "Transfer file"},
-  {9,  "J", "Set path"},
+  {9,  "J", "Set paths"},
   {10, "U", "Unjoin disk image"},
   {11, "N", "New disk image"},
   {12, "",  ""},
@@ -712,6 +712,26 @@ void select_set_dldir(FileSelector *fs) {
   cfg_save_setting("xferdir", cfg_dldir);
 }
 
+static void select_set_upload_path(FileSelector *fs) {
+  snprintf(cfg_xferdir, 256, "%s", fs->path);
+  cfg_save_setting("xferdir", cfg_xferdir);
+}
+
+static void select_set_download_path(FileSelector *fs) {
+  snprintf(cfg_dldir, 256, "%s", fs->path);
+  cfg_save_setting("dldir", cfg_dldir);
+}
+
+static void select_set_seq_path(FileSelector *fs) {
+  snprintf(cfg_seqdir, 256, "%s", fs->path);
+  cfg_save_setting("seqdir", cfg_seqdir);
+}
+
+static void select_set_screen_path(FileSelector *fs) {
+  snprintf(cfg_screendir, 256, "%s", fs->path);
+  cfg_save_setting("screendir", cfg_screendir);
+}
+
 
 /* New disk image creation */
 static char new_d64_path[512];
@@ -956,7 +976,27 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_j:
-    kbd_select_dir_from(&select_set_dldir, FOCUS_TERM, "Set warez path / image", cfg_dldir);
+    {
+      int choice = menu_set_paths();
+      switch (choice) {
+      case 'u':
+        kbd_select_dir_from(&select_set_upload_path, FOCUS_TERM, "Upload path", cfg_xferdir);
+        break;
+      case 'd':
+        kbd_select_dir_from(&select_set_download_path, FOCUS_TERM, "Download path", cfg_dldir);
+        break;
+      case 's':
+        kbd_select_dir_from(&select_set_seq_path, FOCUS_TERM, "SEQ save path", cfg_seqdir);
+        break;
+      case 'p':
+        kbd_select_dir_from(&select_set_screen_path, FOCUS_TERM, "Screenshot path", cfg_screendir);
+        break;
+      default:
+        menu_hide();
+        kbd_focus = FOCUS_TERM;
+        break;
+      }
+    }
     break;
 
   case SDLK_l:
@@ -986,9 +1026,9 @@ void ui_metakey(SDL_keysym *keysym) {
       tm_info = localtime(&now);
       strftime(bmpname, sizeof(bmpname), "cgterm_%Y%m%d_%H%M%S.bmp", tm_info);
 #ifdef WINDOWS
-      snprintf(bmppath, sizeof(bmppath), "%s\\%s", cfg_dldir, bmpname);
+      snprintf(bmppath, sizeof(bmppath), "%s\\%s", cfg_screendir, bmpname);
 #else
-      snprintf(bmppath, sizeof(bmppath), "%s/%s", cfg_dldir, bmpname);
+      snprintf(bmppath, sizeof(bmppath), "%s/%s", cfg_screendir, bmpname);
 #endif
       if (gfx_save_screenshot(bmppath) == 0) {
         snprintf(msg, sizeof(msg), "Screenshot saved: %s", bmpname);
@@ -1037,7 +1077,7 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_s:
-    kbd_select_dir_from(&save_screen_dir_done, FOCUS_TERM, "Save screen where?", cfg_dldir);
+    kbd_select_dir_from(&save_screen_dir_done, FOCUS_TERM, "Save screen where?", cfg_seqdir);
     break;
 
   case SDLK_t:
