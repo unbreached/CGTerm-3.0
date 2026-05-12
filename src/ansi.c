@@ -198,6 +198,12 @@ static void ansi_dispatch(unsigned char cmd) {
   int n, row, col, i;
 
   n = (param_count > 0 && params[0] > 0) ? params[0] : 1;
+  /* Clamp cursor-movement repeat counts to the terminal dimensions so a
+   * malicious server can't freeze the UI with huge repeat values. */
+  {
+    int maxn = (cfg_rows > cfg_columns ? cfg_rows : cfg_columns);
+    if (n > maxn) n = maxn;
+  }
 
   switch (cmd) {
 
@@ -430,8 +436,11 @@ void ansi_out(unsigned char byte) {
       /* Private mode prefix */
       private_mode = 1;
     } else if (byte >= '0' && byte <= '9') {
-      /* Accumulate digit */
-      current_param = current_param * 10 + (byte - '0');
+      /* Accumulate digit, clamped to avoid signed overflow / DoS loops. */
+      if (current_param < 65535) {
+        current_param = current_param * 10 + (byte - '0');
+        if (current_param > 65535) current_param = 65535;
+      }
     } else if (byte == ';') {
       /* Parameter separator */
       if (param_count < 8) {

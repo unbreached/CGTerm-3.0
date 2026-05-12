@@ -47,7 +47,7 @@ static void dbg(const char *fmt, ...) {
 #define XFER_PATH_MAX 1024
 
 char xfer_tempdlname[XFER_PATH_MAX] = "";
-char xfer_tempulname[XFER_PATH_MAX] = "upload.tmp";
+char xfer_tempulname[XFER_PATH_MAX] = "";
 char xfer_filename[256];
 
 FILE *xfer_sendfile, *xfer_recvfile;
@@ -177,6 +177,45 @@ static int xfer_open_temp_download(void) {
   }
 
   return 1;
+}
+
+/* Create secure temporary file for uploads */
+static int xfer_create_temp_upload(void) {
+#ifdef WINDOWS
+  char tempPath[1024];
+  char tempFile[1088];
+
+  if (GetTempPath(sizeof(tempPath), tempPath) == 0) {
+    return 0;
+  }
+
+  if (GetTempFileName(tempPath, "cgup", 0, tempFile) == 0) {
+    return 0;
+  }
+
+  strncpy(xfer_tempulname, tempFile, sizeof(xfer_tempulname) - 1);
+  xfer_tempulname[sizeof(xfer_tempulname) - 1] = 0;
+  return 1;
+#else
+  int fd;
+
+  snprintf(xfer_tempulname, sizeof(xfer_tempulname), "/tmp/cgterm-upload-XXXXXX");
+  fd = mkstemp(xfer_tempulname);
+  if (fd < 0) {
+    xfer_tempulname[0] = 0;
+    return 0;
+  }
+  close(fd);
+  return 1;
+#endif
+}
+
+/* Cleanup upload temporary file */
+static void xfer_cleanup_temp_upload(void) {
+  if (xfer_tempulname[0]) {
+    remove(xfer_tempulname);
+    xfer_tempulname[0] = 0;
+  }
 }
 
 static int xfer_copy_file(FILE *from, FILE *to, int bytesleft) {
@@ -382,9 +421,14 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
       return 1;
     }
 
-    if (pos + 1 < namebufsz) {
-      namebuf[pos++] = (char) c;
+    /* Prevent integer overflow and ensure safe buffer bounds */
+    if (pos < namebufsz - 1 && pos < 255) {  /* Added explicit size limit */
+      namebuf[pos] = (char) c;
+      pos++;
       namebuf[pos] = 0;
+    } else {
+      /* Buffer full - stop reading filename */
+      break;
     }
   }
 
@@ -721,7 +765,8 @@ void xfer_send(char *filename) {
   gfx_vbl();
 
   if ((p = strrchr(cfg_xferdir, '.')) && strlen(p) == 4 && (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3])) {
-    if (xfer_copy_from_image(cfg_xferdir, filename, xfer_tempulname)) {
+    /* Create secure temporary file for upload */
+    if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, filename, xfer_tempulname)) {
       snprintf(name, sizeof(name), "%s", xfer_tempulname);
       deletetmp = 1;
     } else {
@@ -777,6 +822,7 @@ void xfer_send(char *filename) {
 
   if (deletetmp) {
     remove(name);
+    xfer_cleanup_temp_upload();
   }
 }
 
@@ -924,10 +970,63 @@ static int xfer_ensure_dldir(void) {
   return 1;
 }
 
+/* Validate filename to prevent path traversal attacks */
+static int xfer_validate_filename(const char *filename) {
+  const char *p;
+
+  if (!filename || strlen(filename) == 0 || strlen(filename) > 255) {
+    return 0;
+  }
+
+  /* Block path traversal sequences */
+  if (strstr(filename, "..") || strstr(filename, "/.") || strstr(filename, "\\.")) {
+    return 0;
+  }
+
+  /* Block absolute paths and directory separators */
+  if (strchr(filename, '/') || strchr(filename, '\\') || filename[0] == '/') {
+    return 0;
+  }
+
+  /* Block null bytes and control characters */
+  for (p = filename; *p; p++) {
+    if (*p < 32 || *p == 127) {
+      return 0;
+    }
+  }
+
+  /* Block Windows reserved device names (case-insensitive, ignoring extension).
+   * Names like CON.txt, com1.log, lpt9, NUL are all reserved on Windows. */
+  {
+    char stem[16];
+    int sl = 0;
+    const char *q = filename;
+    while (*q && *q != '.' && sl < (int)sizeof(stem) - 1) {
+      char ch = *q++;
+      if (ch >= 'A' && ch <= 'Z') ch = (char)(ch - 'A' + 'a');
+      stem[sl++] = ch;
+    }
+    stem[sl] = 0;
+
+    if (strcmp(stem, "con") == 0 || strcmp(stem, "prn") == 0 ||
+        strcmp(stem, "aux") == 0 || strcmp(stem, "nul") == 0) {
+      return 0;
+    }
+    /* com1..com9, lpt1..lpt9 */
+    if (sl == 4 && (memcmp(stem, "com", 3) == 0 || memcmp(stem, "lpt", 3) == 0)
+        && stem[3] >= '1' && stem[3] <= '9') {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 void xfer_save_file_in_dir(char *filename) {
   FILE *from, *to;
   char msgbuf[4096];
   char name[1088];
+  char safe_filename[256];
 
   if (!xfer_ensure_dldir()) {
     menu_draw_message("No download directory!");
@@ -935,6 +1034,18 @@ void xfer_save_file_in_dir(char *filename) {
     gfx_vbl();
     return;
   }
+
+  /* Validate and sanitize filename */
+  if (!xfer_validate_filename(filename)) {
+    snprintf(msgbuf, sizeof(msgbuf), "Invalid filename blocked: %.240s", filename);
+    menu_draw_message(msgbuf);
+    menu_show();
+    gfx_vbl();
+    return;
+  }
+
+  /* Create safe copy of filename */
+  snprintf(safe_filename, sizeof(safe_filename), "%.240s", filename);
 
   if ((from = fopen(xfer_tempdlname, "rb")) == NULL) {
     menu_draw_message("Couldn't open temp file!");
@@ -950,7 +1061,33 @@ void xfer_save_file_in_dir(char *filename) {
 #else
     '/',
 #endif
-    filename);
+    safe_filename);
+
+  /* Refuse to overwrite an existing file — append .1, .2, ... until free. */
+  {
+    FILE *probe = fopen(name, "rb");
+    if (probe != NULL) {
+      char altname[1100];
+      int suffix;
+      fclose(probe);
+      for (suffix = 1; suffix < 1000; suffix++) {
+        snprintf(altname, sizeof(altname), "%s.%d", name, suffix);
+        probe = fopen(altname, "rb");
+        if (probe == NULL) {
+          snprintf(name, sizeof(name), "%s", altname);
+          break;
+        }
+        fclose(probe);
+      }
+      if (suffix >= 1000) {
+        fclose(from);
+        menu_draw_message("File exists, too many duplicates!");
+        menu_show();
+        gfx_vbl();
+        return;
+      }
+    }
+  }
 
   to = fopen(name, "wb");
   if (to == NULL) {
@@ -1100,7 +1237,8 @@ void xfer_send_multipunter(FileSelector *fs) {
       dbg("MP-SEND: cfg_xferdir='%s'\n", cfg_xferdir);
       if (from_image) {
         dbg("MP-SEND: extracting '%s' from image '%s'\n", de->name, cfg_xferdir);
-        if (xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
+        /* Create secure temporary file for upload */
+        if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
           snprintf(name, sizeof(name), "%s", xfer_tempulname);
           deletetmp = 1;
         } else {

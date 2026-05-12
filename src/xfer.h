@@ -21,6 +21,7 @@ extern char xfer_filename[];
 extern int xfer_cancel;
 extern int xfer_saved_bytes;
 extern int xfer_file_size;
+#define XFER_BUFFER_SIZE 4096
 extern unsigned char xfer_buffer[];
 extern int xfer_debug;
 

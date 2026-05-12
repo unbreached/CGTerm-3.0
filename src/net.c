@@ -52,11 +52,20 @@ void (*net_status)(int, char *);
 
 int net_connect(const char *host, int port, void (*status)(int, char *)) {
   struct sockaddr_in address;
+#ifdef WINDOWS
   struct hostent *hostent;
+#endif
 #if defined(__WIN32__) || defined(WINDOWS)
   WSADATA wsaData;
   u_long nonblock = 1;
+#endif
 
+  /* Reject NULL/empty host before any string indexing. */
+  if (host == NULL || host[0] == 0) {
+    if (status) status(2, "No host specified");
+    return(1);
+  }
+#if defined(__WIN32__) || defined(WINDOWS)
   if (!winsockstarted) {
     if (WSAStartup(MAKEWORD(2, 0), &wsaData) != 0) {
       printf("WinSock startup failed\n");
@@ -74,17 +83,51 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
   address.sin_family = AF_INET;
   address.sin_port = htons(port);
 
+  /* DNS resolution with Windows compatibility */
   if (isdigit((int) host[strlen(host) - 1])) {
+    /* Direct IP address */
     address.sin_addr.s_addr = inet_addr(host);
-  } else {
-    hostent = gethostbyname(host); 
-    if (hostent) { 
-      address.sin_addr = *((struct in_addr *) hostent->h_addr);
+    if (address.sin_addr.s_addr == INADDR_NONE) {
+      if (net_status) net_status(2, "Invalid IP address");
+      return(1);
     }
-    else {
+  } else {
+    /* Hostname resolution with Windows compatibility */
+#ifdef WINDOWS
+    /* Use traditional gethostbyname on Windows for MinGW compatibility */
+    hostent = gethostbyname(host);
+    if (hostent) {
+      address.sin_addr = *((struct in_addr *) hostent->h_addr);
+    } else {
       if (net_status) net_status(2, "Unknown host");
       return(1);
     }
+#else
+    /* Use secure getaddrinfo() on modern systems */
+    struct addrinfo hints, *result;
+    char port_str[16];
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;        /* IPv4 only for compatibility */
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_ADDRCONFIG;   /* Only return addresses if we have connectivity */
+
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    if (getaddrinfo(host, port_str, &hints, &result) != 0) {
+      if (net_status) net_status(2, "Hostname resolution failed");
+      return(1);
+    }
+
+    if (result == NULL) {
+      if (net_status) net_status(2, "No addresses found");
+      return(1);
+    }
+
+    /* Copy the first IPv4 address */
+    address.sin_addr = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
+    freeaddrinfo(result);
+#endif
   }
 
   buflen = 0;
@@ -265,14 +308,21 @@ signed int net_receive(void) {
       /* SB: subnegotiation */
       int sb_opt = net_raw_byte();
       if (sb_opt < 0) return sb_opt;
-      /* Consume until IAC SE (0xFF 0xF0) */
+      /* Consume until IAC SE (0xFF 0xF0). Cap iterations so a peer can't
+       * pin us in this loop forever with an unterminated subnegotiation. */
       {
         int prev = 0;
-        for (;;) {
+        int sb_iter;
+        for (sb_iter = 0; sb_iter < 4096; sb_iter++) {
           c = net_raw_byte();
           if (c < 0) return c;
           if (prev == 0xFF && c == 0xF0) break;
           prev = c;
+        }
+        if (sb_iter >= 4096) {
+          /* Treat as protocol abuse: drop the connection. */
+          net_disconnect();
+          return -2;
         }
       }
       /* Respond to Terminal Type request (option 24, SEND=1) */

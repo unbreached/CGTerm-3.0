@@ -156,12 +156,15 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
   char *p;
 #ifdef WINDOWS
   DIR *d;
-  char namebuf[256];
+  char namebuf[1024];
   char *name;
   int len;
 
-  /* Copy path to namebuf, add a slash, and remember where it ends */
-  len = strlen(path);
+  /* Reject paths that would leave no room for a separator + filename. */
+  len = (int)strlen(path);
+  if (len < 0 || len >= (int)sizeof(namebuf) - 260) {
+    return NULL;
+  }
   memcpy(namebuf, path, len);
   namebuf[len++] = '\\';
   name = namebuf + len;
@@ -231,6 +234,53 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
     }
   }
 
+  /* Add "Go to Home" entry if we're not already in home directory */
+  {
+    const char *homedir = NULL;
+#ifdef WINDOWS
+    /* Try USERPROFILE first, then HOMEDRIVE+HOMEPATH */
+    homedir = getenv("USERPROFILE");
+    if (!homedir) {
+      const char *homedrive = getenv("HOMEDRIVE");
+      const char *homepath = getenv("HOMEPATH");
+      static char win_home_path[512];
+      if (homedrive && homepath) {
+        snprintf(win_home_path, sizeof(win_home_path), "%s%s", homedrive, homepath);
+        homedir = win_home_path;
+      }
+    }
+#else
+    homedir = getenv("HOME");
+#endif
+    /* Only add if we have a valid home directory and we're not already there */
+    if (homedir && strlen(homedir) > 0 && strcmp(path, homedir) != 0) {
+      DirEntry *home_entry;
+      if ((home_entry = malloc(sizeof(*home_entry))) != NULL) {
+        home_entry->prev = entry;
+        home_entry->next = NULL;
+        entry->next = home_entry;
+        entry = home_entry;
+        if ((home_entry->name = malloc(16))) {
+          strcpy(home_entry->name, "[ Go to Home ]");
+        }
+        memset(home_entry->rawname, 0xa0, 16);
+        home_entry->rawname[0] = 'H';
+        home_entry->rawname[1] = 'O';
+        home_entry->rawname[2] = 'M';
+        home_entry->rawname[3] = 'E';
+        home_entry->type = T_SEQ;  /* special type */
+        home_entry->closed = 1;
+        home_entry->locked = 0;
+        home_entry->track = 0;
+        home_entry->sector = 0;
+        home_entry->size = 0;
+        home_entry->tagged = 0;
+        home_entry->mtime = 0;
+        dir->numentries++;
+      }
+    }
+  }
+
 #ifdef WINDOWS
   /* Add available drive letters so users can switch drives */
   {
@@ -294,6 +344,10 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       }
       memset(entry->rawname, 0xa0, sizeof(entry->rawname));
 #ifdef WINDOWS
+      /* Skip entries whose name would overflow namebuf. */
+      if ((name - namebuf) + (int)namelen + 1 > (int)sizeof(namebuf)) {
+        continue;
+      }
       memcpy(name, entry->name, namelen + 1);
       if ((d = opendir(name))) {
 	entry->type = T_DIR;
@@ -451,8 +505,9 @@ void dir_free(Dir *dir) {
 
 DirEntry *dir_find(Dir *dir, int entrynum) {
   DirEntry *de;
+  if (!dir || entrynum < 0) return NULL;
   de = dir->firstentry;
-  while (entrynum--) {
+  while (de && entrynum--) {
     de = de->next;
   }
   return(de);

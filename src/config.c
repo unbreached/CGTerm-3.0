@@ -253,12 +253,19 @@ void real_cfg_change_dir(char *dirbuffer, const char *newdir) {
     }
   }
   if (dirbuffer[l - 1] != DIRCHAR) {
+    /* Need room for separator + null. dirbuffer is a 256-byte fixed array. */
+    if (l + 1 >= 256) {
+      return;
+    }
     dirbuffer[l++] = DIRCHAR;
     dirbuffer[l] = 0;
   }
   {
-    size_t remaining = 256 - strlen(dirbuffer);
-    strncat(dirbuffer, newdir, remaining - 1);
+    size_t used = strlen(dirbuffer);
+    if (used + 1 < 256) {
+      size_t remaining = 256 - used;
+      strncat(dirbuffer, newdir, remaining - 1);
+    }
   }
 }
 
@@ -293,7 +300,11 @@ void addhost(int num, char *alias, char *hostname, int port) {
   snprintf(_debugMsg, sizeof(_debugMsg), "adding %s (%s:%d)", alias, hostname, port);
     cfg_debug(_debugMsg);
   if ((ptr = malloc(strlen(hostname) + 1)) == NULL) {
-    printf("Malloc failed, prepare to crash\n"); // :P
+    printf("addhost: malloc failed for hostname\n");
+    cfg_bookmark_host[num] = NULL;
+    cfg_bookmark_alias[num] = NULL;
+    cfg_bookmark_port[num] = 0;
+    return;
   }
   strcpy(ptr, hostname);
   if ((chr = strchr(ptr, ','))) {
@@ -302,7 +313,10 @@ void addhost(int num, char *alias, char *hostname, int port) {
   cfg_bookmark_host[num] = ptr;
 
   if ((ptr = malloc(strlen(alias) + 1)) == NULL) {
-    printf("Malloc failed, prepare to crash\n"); // :P
+    printf("addhost: malloc failed for alias\n");
+    cfg_bookmark_alias[num] = NULL;
+    cfg_bookmark_port[num] = 0;
+    return;
   }
   strcpy(ptr, alias);
   if (strlen(alias) > 27) {

@@ -47,7 +47,7 @@ int punter_recv_string(char *sendstring, char *recvstring) {
   }
   bytecnt = 0;
   errorcnt = 20;
-  while (bytecnt != 3) {
+  while (bytecnt < 3) {  /* Changed from != to < to prevent overflow */
     c = xfer_recv_byte(3000);
     if (c < 0) {
       if (--errorcnt <= 0 || xfer_cancel) {
@@ -61,7 +61,13 @@ int punter_recv_string(char *sendstring, char *recvstring) {
       bytecnt = 0;
       continue;
     }
-    recvstring[bytecnt++] = c;
+    /* Bounds check before writing */
+    if (bytecnt < 3) {
+      recvstring[bytecnt++] = c;
+    } else {
+      /* Prevent buffer overflow - discard extra bytes */
+      break;
+    }
   }
   recvstring[3] = 0;
   //printf("punter_recv_string: received \"%s\"\n", recvstring);
@@ -135,6 +141,12 @@ signed int punter_recv_block(int len) {
   signed int c;
   int bytecnt;
   int errorcnt = 10;
+
+  /* Clamp peer-supplied block size to buffer capacity to prevent overflow.
+   * Real Punter blocks are ~254 bytes; anything larger is malicious. */
+  if (len < 0 || len > XFER_BUFFER_SIZE) {
+    return -1;
+  }
 
  restart:
   //printf("punter_recv_block: receiving %d byte block\n", len);
