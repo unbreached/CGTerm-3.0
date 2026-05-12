@@ -314,6 +314,8 @@ void addhost(int num, char *alias, char *hostname, int port) {
 
   if ((ptr = malloc(strlen(alias) + 1)) == NULL) {
     printf("addhost: malloc failed for alias\n");
+    free(cfg_bookmark_host[num]);
+    cfg_bookmark_host[num] = NULL;
     cfg_bookmark_alias[num] = NULL;
     cfg_bookmark_port[num] = 0;
     return;

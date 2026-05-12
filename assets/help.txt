@@ -5,6 +5,7 @@
   KEYBOARD SHORTCUTS
   ------------------
   ESC          Open/close menu
+  ?            Show this help (or use menu)
   Alt+ESC      Send ESC to BBS (ANSI mode)
   Ctrl+V       Paste from clipboard
   PageUp/Down  Scroll through history

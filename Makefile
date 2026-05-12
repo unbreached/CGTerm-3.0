@@ -18,11 +18,11 @@ RM ?= rm -f
 
 CC ?= gcc
 
-# Auto-detect SDL_mixer
-HAVE_SDL_MIXER := $(shell echo '\#include <SDL_mixer.h>' | $(CC) $(shell sdl-config --cflags) -E - >/dev/null 2>&1 && echo 1 || echo 0)
+# Disable SDL_mixer for now - will implement custom music solution
+HAVE_SDL_MIXER := 0
 ifeq ($(HAVE_SDL_MIXER),1)
-  SDL_MIXER_CFLAGS := -DHAVE_SDL_MIXER
-  SDL_MIXER_LDFLAGS := -lSDL_mixer
+  SDL_MIXER_CFLAGS := -DHAVE_SDL_MIXER -I/opt/homebrew/Cellar/sdl12-compat/1.2.76/include -I/opt/homebrew/include
+  SDL_MIXER_LDFLAGS := -L/opt/homebrew/lib -lSDL_mixer
   $(info [+] SDL_mixer found — music support enabled)
 else
   SDL_MIXER_CFLAGS :=
@@ -30,8 +30,8 @@ else
   $(info [*] SDL_mixer not found — music support disabled (optional))
 endif
 
-CFLAGS ?= -O2 -Wall $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -I$(SRCDIR) $(SDL_MIXER_CFLAGS)
-LDFLAGS ?= $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -lm
+CFLAGS ?= -O2 -Wall $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -I$(SRCDIR) $(SDL_MIXER_CFLAGS) -I/opt/homebrew/include
+LDFLAGS ?= $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib -lopenmpt -lm
 
 COMMON_SRCS := \
 	kernal.c \

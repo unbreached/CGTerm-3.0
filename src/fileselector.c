@@ -58,7 +58,10 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
   }
   if ((fs->dir = dir_read(path)) == NULL) {
     /* couldn't read device... */
-    puts("fs_read_dir failed!");
+    char errmsg[256];
+    snprintf(errmsg, sizeof(errmsg), "Cannot access path: %s", path);
+    menu_draw_message(errmsg);
+    menu_show();
     return(-1);
   }
   if (fs->dir->numentries) {

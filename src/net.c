@@ -89,6 +89,8 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
     address.sin_addr.s_addr = inet_addr(host);
     if (address.sin_addr.s_addr == INADDR_NONE) {
       if (net_status) net_status(2, "Invalid IP address");
+      CLOSESOCKET(conn);
+      conn = INVALID_SOCKET;
       return(1);
     }
   } else {
@@ -100,6 +102,8 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
       address.sin_addr = *((struct in_addr *) hostent->h_addr);
     } else {
       if (net_status) net_status(2, "Unknown host");
+      CLOSESOCKET(conn);
+      conn = INVALID_SOCKET;
       return(1);
     }
 #else
@@ -116,11 +120,15 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
 
     if (getaddrinfo(host, port_str, &hints, &result) != 0) {
       if (net_status) net_status(2, "Hostname resolution failed");
+      CLOSESOCKET(conn);
+      conn = INVALID_SOCKET;
       return(1);
     }
 
     if (result == NULL) {
       if (net_status) net_status(2, "No addresses found");
+      CLOSESOCKET(conn);
+      conn = INVALID_SOCKET;
       return(1);
     }
 
