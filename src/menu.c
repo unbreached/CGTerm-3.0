@@ -2274,6 +2274,7 @@ void menu_keyboard_test(void) {
             path_build_asset(fname, sizeof(fname), kbd_files[selection]);
             if (kbd_reload(fname) == 0) {
               cfg_keyboard = kbd_files[selection];
+              cfg_save_setting("keyboard", kbd_files[selection]);
               menu_draw_message_timed("Keyboard layout loaded!", 2000);
             } else {
               menu_draw_message_timed("Failed to load layout!", 2000);
@@ -2919,14 +2920,14 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   font_set_font(menu_font[0]);
   switch (entrytype) {
   case 1:
-    /* Directory: folder arrow + name in green */
-    font_draw_string_color(x, y + 1, ">", 0x00, 0xee, 0xff);
-    font_draw_string_color(x + 14, y + 1, text, 0x00, 0xff, 0x66);
+    /* Directory: folder icon + name in green */
+    font_draw_string_color(x, y + 1, "DIR:", 0x00, 0xee, 0xff);
+    font_draw_string_color(x + 40, y + 1, text, 0x00, 0xff, 0x66);
     break;
   case 2:
     /* Disk image: disk icon + name in orange */
-    font_draw_string_color(x, y + 1, "*", 0xff, 0x88, 0x00);
-    font_draw_string_color(x + 14, y + 1, text, 0xff, 0xaa, 0x44);
+    font_draw_string_color(x, y + 1, "IMG:", 0xff, 0x88, 0x00);
+    font_draw_string_color(x + 40, y + 1, text, 0xff, 0xaa, 0x44);
     break;
   case 3:
     /* Special entries */
@@ -2945,8 +2946,29 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
     }
     break;
   default:
-    /* Regular files in light blue */
-    font_draw_string_color(x, y + 1, namebuf, 0x60, 0x80, 0xff);
+    /* Regular files: color-coded by extension */
+    {
+      char *ext = strrchr(namebuf, '.');
+      if (ext) {
+        if (strcasecmp(ext, ".prg") == 0) {
+          font_draw_string_color(x, y + 1, "PRG:", 0x80, 0xff, 0x80);
+          font_draw_string_color(x + 40, y + 1, namebuf, 0x60, 0xff, 0x60);
+        } else if (strcasecmp(ext, ".seq") == 0) {
+          font_draw_string_color(x, y + 1, "SEQ:", 0xff, 0xaa, 0x80);
+          font_draw_string_color(x + 40, y + 1, namebuf, 0xff, 0xcc, 0x60);
+        } else if (strcasecmp(ext, ".usr") == 0) {
+          font_draw_string_color(x, y + 1, "USR:", 0xff, 0x80, 0xff);
+          font_draw_string_color(x + 40, y + 1, namebuf, 0xff, 0x60, 0xff);
+        } else if (strcasecmp(ext, ".del") == 0) {
+          font_draw_string_color(x, y + 1, "DEL:", 0x80, 0x80, 0x80);
+          font_draw_string_color(x + 40, y + 1, namebuf, 0xa0, 0xa0, 0xa0);
+        } else {
+          font_draw_string_color(x, y + 1, namebuf, 0x60, 0x80, 0xff);
+        }
+      } else {
+        font_draw_string_color(x, y + 1, namebuf, 0x60, 0x80, 0xff);
+      }
+    }
     break;
   }
 

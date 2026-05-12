@@ -340,6 +340,7 @@ void gfx_setfont(int f) {
 void gfx_toggle_font(void) {
   font ^= 1;
   memset(dirty, SDL_TRUE, sizeof(dirty));
+  cfg_save_setting("case", font ? "lower" : "upper");
 }
 
 int gfx_get_font(void) {
@@ -790,11 +791,21 @@ void gfx_set_columns(int cols) {
   if (cols == cfg_columns) return;
 
   cfg_columns = cols;
+  {
+    char val[8];
+    snprintf(val, sizeof(val), "%d", cfg_columns);
+    cfg_save_setting("columns", val);
+  }
   if (cfg_columns == 40) {
     /* Restore original zoom when going back to 40 cols */
     if (saved_zoom > 0) {
       cfg_zoom = saved_zoom;
       saved_zoom = 0;
+      {
+        char zoom_val[8];
+        snprintf(zoom_val, sizeof(zoom_val), "%d", cfg_zoom);
+        cfg_save_setting("zoom", zoom_val);
+      }
     }
     charwidth = 8 * cfg_zoom;
   } else {
@@ -802,6 +813,11 @@ void gfx_set_columns(int cols) {
     if (cfg_zoom == 1 || cfg_zoom == 3) {
       saved_zoom = cfg_zoom;
       cfg_zoom = 2;
+      {
+        char zoom_val[8];
+        snprintf(zoom_val, sizeof(zoom_val), "%d", cfg_zoom);
+        cfg_save_setting("zoom", zoom_val);
+      }
     }
     charwidth = 4 * cfg_zoom;
   }

@@ -10,6 +10,7 @@
 #endif
 #include "config.h"
 #include "paths.h"
+#include "gfx.h"
 
 
 #ifdef WINDOWS
@@ -17,6 +18,43 @@
 #else
 #define DIRCHAR '/'
 #endif
+
+/* Helper function to validate hostname */
+static int validate_hostname(const char *hostname) {
+  size_t len = strlen(hostname);
+  const char *p;
+
+  if (len == 0 || len > 253) return 0;  /* RFC limits */
+
+  for (p = hostname; *p; p++) {
+    if (!isalnum(*p) && *p != '.' && *p != '-') {
+      return 0;  /* Invalid character */
+    }
+  }
+
+  /* Don't allow hostname to start/end with hyphen or be all dots */
+  if (hostname[0] == '-' || hostname[len-1] == '-' || strspn(hostname, ".") == len) {
+    return 0;
+  }
+
+  return 1;
+}
+
+/* Helper function to validate alias */
+static int validate_alias(const char *alias) {
+  size_t len = strlen(alias);
+  const char *p;
+
+  if (len == 0 || len > 64) return 0;  /* Reasonable limit */
+
+  for (p = alias; *p; p++) {
+    if (*p < 32 || *p == 127) {  /* No control characters */
+      return 0;
+    }
+  }
+
+  return 1;
+}
 
 
 int cfg_read = 0;
@@ -77,7 +115,19 @@ static const char *cfg_default_keyboard_profile(void) {
 
 int cfg_init(char *argv0) {
 #ifdef WINDOWS
-  cfg_homedir = ".";
+  /* Try USERPROFILE first, then HOMEDRIVE+HOMEPATH, then current dir */
+  if ((cfg_homedir = getenv("USERPROFILE")) == NULL) {
+    const char *homedrive = getenv("HOMEDRIVE");
+    const char *homepath = getenv("HOMEPATH");
+    static char win_home[512];
+    if (homedrive && homepath) {
+      snprintf(win_home, sizeof(win_home), "%s%s", homedrive, homepath);
+      cfg_homedir = win_home;
+    } else {
+      printf("No home directory found, using current directory\n");
+      cfg_homedir = ".";
+    }
+  }
 #else
   if ((cfg_homedir = getenv("HOME")) == NULL) {
     printf("$HOME is not set, using current directory\n");
@@ -283,6 +333,22 @@ int addbookmark(char *line) {
     return(0);
   }
 
+  /* Validate parsed data before using */
+  if (!validate_hostname(hostname)) {
+    printf("Invalid hostname in config: %s\n", hostname);
+    return(0);
+  }
+
+  if (!validate_alias(alias)) {
+    printf("Invalid alias in config: %s\n", alias);
+    return(0);
+  }
+
+  if (port <= 0 || port > 65535) {
+    printf("Invalid port in config: %d\n", port);
+    return(0);
+  }
+
   addhost(cfg_numbookmarks, alias, hostname, port);
 
   /* Check for optional mode field: "bookmark = alias, host, port, ansi" */
@@ -483,6 +549,26 @@ signed int cfg_readconfig(char *configfile) {
 	    fclose(cfg);
 	    return(-1);
 	  }
+	} else if (strcmp(key, "case") == 0) {
+	  if (strcmp(value, "upper") == 0) {
+	    gfx_setfont(0);
+	  } else if (strcmp(value, "lower") == 0) {
+	    gfx_setfont(1);
+	  } else {
+	    printf("Invalid case value in %s line %d: %s\n", configfile, line + 1, value);
+	    fclose(cfg);
+	    return(-1);
+	  }
+	} else if (strcmp(key, "termmode") == 0) {
+	  if (strcmp(value, "ansi") == 0) {
+	    cfg_termmode = 1;
+	  } else if (strcmp(value, "petscii") == 0) {
+	    cfg_termmode = 0;
+	  } else {
+	    printf("Invalid termmode value in %s line %d: %s\n", configfile, line + 1, value);
+	    fclose(cfg);
+	    return(-1);
+	  }
 	} else {
 	  printf("Unknown config key in %s line %d\n", configfile, line + 1);
 	  fclose(cfg);
@@ -607,8 +693,20 @@ void cfg_debug(const char *s){
 
 
 static void cfg_resolve_bookmarkfile(char *resolved, size_t size) {
-  if (cfg_bookmarkfile[0] == '~' && cfg_bookmarkfile[1] == '/') {
-    snprintf(resolved, size, "%s%s", cfg_homedir, cfg_bookmarkfile + 1);
+  if (cfg_bookmarkfile[0] == '~') {
+#ifdef WINDOWS
+    if (cfg_bookmarkfile[1] == '/' || cfg_bookmarkfile[1] == '\\') {
+      snprintf(resolved, size, "%s\\%s", cfg_homedir, cfg_bookmarkfile + 2);
+    } else {
+      snprintf(resolved, size, "%s", cfg_bookmarkfile);
+    }
+#else
+    if (cfg_bookmarkfile[1] == '/') {
+      snprintf(resolved, size, "%s%s", cfg_homedir, cfg_bookmarkfile + 1);
+    } else {
+      snprintf(resolved, size, "%s", cfg_bookmarkfile);
+    }
+#endif
   } else {
     snprintf(resolved, size, "%s", cfg_bookmarkfile);
   }
