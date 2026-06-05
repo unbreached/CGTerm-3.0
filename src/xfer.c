@@ -601,6 +601,14 @@ int xfer_save_data(unsigned char *data, int length) {
   int l;
   int written = 0;
 
+  /* reject negative lengths and cap total download size so a malicious
+     server cannot stream an unbounded file (also guards the int counter
+     against overflow). */
+  if (length < 0 || xfer_saved_bytes > XFER_MAX_DOWNLOAD - length) {
+    xfer_progress_status("Download exceeds maximum size", xfer_saved_bytes, xfer_file_size);
+    return(0);
+  }
+
   while (written < length) {
     l = (int)fwrite(data + written, 1, length - written, xfer_recvfile);
     if (l > 0) {

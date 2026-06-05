@@ -19,15 +19,14 @@ char *make_name(unsigned char *rawname) {
   int l;
   char *name;
 
-  for (l = 0; rawname[l] != 0xa0 && l < 16; ++l);
+  /* bound the index BEFORE dereferencing: rawname is a fixed 16-byte field
+     with no guaranteed terminator, so test l < 16 first. */
+  for (l = 0; l < 16 && rawname[l] != 0xa0; ++l);
   if ((name = malloc(l+1)) == NULL) {
     return(NULL);
   }
   memcpy(name, rawname, l);
   name[l] = 0;
-  for (l = 0; rawname[l]; ++l) {
-
-  }
   return(name);
 }
 
@@ -108,6 +107,11 @@ Dir *dir_read_image(DiskImage *di) {
       entry = back_entry;
       dir->numentries = 2;
     }
+  }
+
+  /* both header entries failed to allocate: nothing to hang entries off */
+  if (entry == NULL) {
+    goto ReadDirDone;
   }
 
   while (di_read(fh, buffer, 254) == 254) {

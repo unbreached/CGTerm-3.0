@@ -236,6 +236,11 @@ int kbd_reload(char *keyboardcfg) {
     return 1;
   }
   while (fgets(linebuf, sizeof(linebuf), in) != NULL) {
+    if (strlen(linebuf) >= sizeof(linebuf) - 1) {
+      printf("line too long in file: %s\n", keyboardcfg);
+      fclose(in);
+      return 1;
+    }
     if (linebuf[0] == '#' || linebuf[0] == '\n' || linebuf[0] == '\r') {
       continue;
     }
@@ -248,6 +253,10 @@ int kbd_reload(char *keyboardcfg) {
         apply_mapping(value, map->unshifted, map->shifted, map->cbm, map->control);
       }
     }
+  }
+  if (ferror(in)) {
+    fclose(in);
+    return 1;
   }
   fclose(in);
   return 0;

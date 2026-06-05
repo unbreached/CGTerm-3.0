@@ -271,9 +271,12 @@ void parse_cmd(unsigned char *chars, unsigned char *colors, int length, unsigned
 
 void input_draw(void) {
   unsigned char convbuf[80];
+  int visible = input_len - input_offset;
 
+  if (visible < 0) visible = 0;
+  if (visible > (int)sizeof(convbuf)) visible = (int)sizeof(convbuf);
   memset(convbuf, ' ', 80);
-  memcpy(convbuf, input_buffer + input_offset, input_len - input_offset);
+  memcpy(convbuf, input_buffer + input_offset, visible);
   gfx_copy_line(convbuf, color_buffer + input_offset, 24);
   gfx_setcursxy(input_pos, 24);
   gfx_fgcolor(input_color);

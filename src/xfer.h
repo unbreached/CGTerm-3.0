@@ -22,6 +22,10 @@ extern int xfer_cancel;
 extern int xfer_saved_bytes;
 extern int xfer_file_size;
 #define XFER_BUFFER_SIZE 4096
+/* upper bound on a single download; far above any legitimate C64-era
+   transfer (a D81 image is 800 KB), so a hostile server cannot stream an
+   unbounded file to fill the disk. */
+#define XFER_MAX_DOWNLOAD (64 * 1024 * 1024)
 extern unsigned char xfer_buffer[];
 extern int xfer_debug;
 

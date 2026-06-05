@@ -76,7 +76,7 @@ void ui_inputkey(SDL_keysym *keysym) {
       break;
     }
     {
-      if (input_len < input_maxlen) {
+      if (input_len < input_maxlen - 1) {
 	++input_len;
 	memmove(input_buffer + input_pos + input_offset + 1,
 		input_buffer + input_pos + input_offset,

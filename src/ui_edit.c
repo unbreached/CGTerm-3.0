@@ -67,6 +67,11 @@ void kbd_select_dir(void (*donecall)(FileSelector *), Focus focus) {
 
 
 void ui_selectdirkey(SDL_keysym *keysym) {
+  if (fsel == NULL) {
+    menu_hide();
+    kbd_focus = FOCUS_TERM;
+    return;
+  }
   if (fsel->numentries == 0) {
     menu_hide();
     kbd_focus = FOCUS_TERM;
@@ -156,7 +161,7 @@ void ui_selectdirkey(SDL_keysym *keysym) {
 
 
 void select_set_xferdir(FileSelector *fs) {
-  strcpy(cfg_xferdir, fs->path);
+  snprintf(cfg_xferdir, 256, "%s", fs->path);
 }
 
 

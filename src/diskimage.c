@@ -222,13 +222,46 @@ int get_block_num(ImageType type, TrackSector ts) {
 }
 
 
-/* get a pointer to block data */
-unsigned char *get_ts_addr(DiskImage *di, TrackSector ts) {
-  return(di->image + get_block_num(di->type, ts) * 256);
+/* validate a track/sector against the image geometry.
+   track/sector come straight from untrusted image data, so every chain
+   link must be checked before it is used to index the image buffer. */
+int di_ts_valid(DiskImage *di, TrackSector ts) {
+  int blk;
+
+  if (ts.track < 1 || ts.track > di_tracks(di->type)) {
+    return(0);
+  }
+  if (ts.sector >= di_sectors_per_track(di->type, ts.track)) {
+    return(0);
+  }
+  blk = get_block_num(di->type, ts);
+  if (blk < 0 || (blk + 1) * 256 > di->size) {
+    return(0);
+  }
+  return(1);
 }
 
 
-/* return a pointer to the next block in the chain */
+/* get a pointer to block data.  Clamps the computed block into the image
+   so a malformed/hostile track/sector can never produce an out-of-bounds
+   pointer; callers that pass attacker-controlled ts should also gate on
+   di_ts_valid(), but this is the last line of defence for every caller. */
+unsigned char *get_ts_addr(DiskImage *di, TrackSector ts) {
+  int blk = get_block_num(di->type, ts);
+  int maxblk = di->size / 256;
+
+  if (blk < 0) {
+    blk = 0;
+  } else if (blk >= maxblk) {
+    blk = maxblk - 1;
+  }
+  return(di->image + blk * 256);
+}
+
+
+/* return a pointer to the next block in the chain.  A link that does not
+   point at a valid block terminates the chain (track 0) so loops that walk
+   *->track cannot follow attacker-crafted pointers off the image. */
 TrackSector next_ts_in_chain(DiskImage *di, TrackSector ts) {
   unsigned char *p;
   TrackSector newts;
@@ -236,6 +269,10 @@ TrackSector next_ts_in_chain(DiskImage *di, TrackSector ts) {
   p = get_ts_addr(di, ts);
   newts.track = p[0];
   newts.sector = p[1];
+  if (newts.track != 0 && !di_ts_valid(di, newts)) {
+    newts.track = 0;
+    newts.sector = 0;
+  }
   return(newts);
 }
 
@@ -452,20 +489,26 @@ TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
 /* allocate next available directory block */
 TrackSector alloc_next_dir_ts(DiskImage *di) {
   unsigned char *p;
-  int spt;
+  int spt, hops;
   TrackSector ts, lastts;
 
   if (di_track_blocks_free(di, di->bam.track)) {
     ts.track = di->bam.track;
     ts.sector = 0;
-    while (ts.track) {
+    lastts = ts;
+    for (hops = 0; ts.track && hops < di->size / 256; hops++) {
       lastts = ts;
       ts = next_ts_in_chain(di, ts);
     }
     ts.track = lastts.track;
     ts.sector = lastts.sector + 3;
     spt = di_sectors_per_track(di->type, ts.track);
-    for (; ; ts.sector = (ts.sector + 1) % spt) {
+    if (spt <= 0) {
+      ts.track = 0;
+      ts.sector = 0;
+      return(ts);
+    }
+    for (hops = 0; hops < di->size / 256; ts.sector = (ts.sector + 1) % spt, hops++) {
       if (di_is_ts_free(di, ts)) {
 	di_alloc_ts(di, ts);
 	p = get_ts_addr(di, lastts);
@@ -478,6 +521,10 @@ TrackSector alloc_next_dir_ts(DiskImage *di) {
 	return(ts);
       }
     }
+    /* no free sector found (corrupt or full image) */
+    ts.track = 0;
+    ts.sector = 0;
+    return(ts);
   } else {
     ts.track = 0;
     ts.sector = 0;
@@ -531,7 +578,8 @@ void di_free_ts(DiskImage *di, TrackSector ts) {
 
 /* free a chain of blocks */
 void free_chain(DiskImage *di, TrackSector ts) {
-  while (ts.track) {
+  int hops;
+  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
     di_free_ts(di, ts);
     ts = next_ts_in_chain(di, ts);
   }
@@ -756,10 +804,10 @@ RawDirEntry *find_file_entry(DiskImage *di, const unsigned char *rawpattern, Fil
   unsigned char *buffer;
   TrackSector ts;
   RawDirEntry *rde;
-  int offset;
+  int offset, hops;
 
   ts = next_ts_in_chain(di, di->bam);
-  while (ts.track) {
+  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -779,11 +827,11 @@ RawDirEntry *alloc_file_entry(DiskImage *di, const unsigned char *rawname, FileT
   unsigned char *buffer;
   TrackSector ts;
   RawDirEntry *rde;
-  int offset;
+  int offset, hops;
 
   /* check if file already exists */
   ts = next_ts_in_chain(di, di->bam);
-  while (ts.track) {
+  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -800,7 +848,7 @@ RawDirEntry *alloc_file_entry(DiskImage *di, const unsigned char *rawname, FileT
 
   /* allocate empty slot */
   ts = next_ts_in_chain(di, di->bam);
-  while (ts.track) {
+  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -869,7 +917,7 @@ ImageFile *di_open(DiskImage *di, const unsigned char *rawname, FileType type, c
       imgfile->nextts.track = p[0];
       imgfile->nextts.sector = p[1];
       if (imgfile->nextts.track == 0) {
-	imgfile->buflen = imgfile->nextts.sector - 1;
+	imgfile->buflen = (imgfile->nextts.sector >= 1) ? imgfile->nextts.sector - 1 : 0;
       } else {
 	imgfile->buflen = 254;
       }
@@ -917,6 +965,12 @@ int di_read(ImageFile *imgfile, unsigned char *buffer, int len) {
   int counter = 0;
 
   while (len) {
+    /* a cyclic/over-long block chain cannot legitimately yield more bytes
+       than the whole image; stop so callers that loop on di_read() == 254
+       cannot be spun forever by a crafted image. */
+    if (imgfile->position >= imgfile->diskimage->size) {
+      return(counter);
+    }
     bytesleft = imgfile->buflen - imgfile->bufptr;
     if (bytesleft == 0) {
       if (imgfile->nextts.track == 0) {
@@ -928,7 +982,7 @@ int di_read(ImageFile *imgfile, unsigned char *buffer, int len) {
       imgfile->nextts.track = p[0];
       imgfile->nextts.sector = p[1];
       if (imgfile->nextts.track == 0) {
-	imgfile->buflen = imgfile->nextts.sector - 1;
+	imgfile->buflen = (imgfile->nextts.sector >= 1) ? imgfile->nextts.sector - 1 : 0;
       } else {
 	imgfile->buflen = 254;
       }
