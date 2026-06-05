@@ -449,6 +449,48 @@ Asset Path Resolution Fix (paths.c)
   next to the binary
 
 
+--------------------------------------------------
+[ PATCH: 2026-06-05 // SECURITY HARDENING PASS    ]
+--------------------------------------------------
+
+Disk Image Parser Hardening (diskimage.c, dir.c)
+------------------------------------------------
+- CRITICAL: a malicious .d64/.d71/.d81 could drive track/
+  sector bytes straight into the image buffer with no bounds
+  check, giving out-of-bounds reads AND writes just by
+  browsing the image in the file selector
+- Added di_ts_valid() geometry check; get_ts_addr() now clamps
+  every computed block into the image, and next_ts_in_chain()
+  terminates the chain on any invalid link
+- Capped all block-chain walks so a cyclic chain can no longer
+  spin forever (free_chain, find/alloc file entry, directory
+  allocation, di_read)
+- Fixed buflen = sector-1 underflow that turned a last block
+  of t0/s0 into a ~2GB out-of-bounds copy
+- make_name() now bounds-checks before dereferencing the 16-byte
+  name field; removed a dead unbounded scan loop
+- dir_read_image() guards against a NULL entry on malloc failure
+
+Input Field Fixes (chat.c, ui.c)
+--------------------------------
+- Fixed a stack overflow in CGChat: pressing HOME on a long
+  input line copied up to 175 bytes into an 80-byte buffer
+- Fixed a 1-byte global overflow in the shared input editor
+  (off-by-one in the length guard)
+
+Robustness (gfx.c, font.c, keyboard.c, music.c, ui_edit.c, xfer.c)
+------------------------------------------------------------------
+- gfx_setcursxy() clamps the cursor to the visible buffer
+- font_draw_string() renders high bytes (>= 0x80) correctly
+- kbd_reload() now rejects over-long lines and checks ferror
+- XM loader validates file size before allocating
+- Replaced a fragile strcpy and added a NULL guard in CGEdit
+- Capped maximum download size so a hostile server cannot
+  stream an unbounded file to fill the disk
+- Switched to the non-deprecated libopenmpt load API (clean
+  build with no warnings)
+
+
 TODO:
 - Add support for connection status
 - Add support for larger bookmarks

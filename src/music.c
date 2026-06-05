@@ -201,6 +201,12 @@ static int load_xm_file(const char *filename) {
   file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
 
+  if (file_size <= 0) {
+    printf("[!] Invalid or empty XM file: %s\n", filename);
+    fclose(file);
+    return 0;
+  }
+
   /* Allocate buffer and read file */
   file_data = malloc(file_size);
   if (!file_data) {
@@ -218,7 +224,9 @@ static int load_xm_file(const char *filename) {
   fclose(file);
 
   /* Create OpenMPT module */
-  xm_module = openmpt_module_create_from_memory(file_data, file_size, NULL, NULL, NULL);
+  xm_module = openmpt_module_create_from_memory2(file_data, file_size,
+                                                 NULL, NULL, NULL, NULL,
+                                                 NULL, NULL, NULL);
   free(file_data);
 
   if (!xm_module) {

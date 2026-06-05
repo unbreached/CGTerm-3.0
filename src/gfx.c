@@ -606,6 +606,11 @@ void gfx_vbl(void) {
 
 void gfx_setcursxy(int x, int y) {
   resetcursor();
+  /* clamp to the visible buffer (cfg_columns x 25 rows): the cursor index
+     gfx_cursy * cfg_columns + gfx_cursx feeds every screen write, so this is
+     the last line of defence against an out-of-range cursor from any caller. */
+  if (x < 0) x = 0; else if (x >= cfg_columns) x = cfg_columns - 1;
+  if (y < 0) y = 0; else if (y > 24) y = 24;
   gfx_cursx = x;
   gfx_cursy = y;
 }

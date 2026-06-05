@@ -4,9 +4,49 @@
 
 This document summarizes the critical security vulnerabilities that have been patched in CGTerm 3.0. These fixes address remote code execution, file system compromise, and network security vulnerabilities.
 
+## June 2026: Memory-Safety Hardening Pass
+
+A focused audit of the untrusted-input paths (remote byte streams, file
+transfers, and on-disk image structures) produced the following fixes.
+
+### [CRITICAL] Disk-image parser — out-of-bounds read/write (diskimage.c, dir.c)
+A malicious `.d64/.d71/.d81` controls the track/sector bytes in directory
+and file block chains. These were used to index the image buffer with **no
+bounds check**, giving an out-of-bounds read *and* write reachable simply by
+browsing a downloaded image in the file selector. Additionally a last-block
+marker of track 0 / sector 0 made `buflen = sector - 1` underflow to −1,
+turning a read into a multi-gigabyte out-of-bounds copy.
+
+- Added `di_ts_valid()` validating track/sector against the image geometry.
+- `get_ts_addr()` now clamps every computed block into the image buffer, so
+  no caller can produce an out-of-bounds pointer.
+- `next_ts_in_chain()` terminates the chain on any invalid link.
+- Every block-chain walk is capped at the image block count, so cyclic
+  chains can no longer loop forever (DoS).
+- Clamped the `buflen` underflow.
+- `make_name()` bounds-checks before dereferencing the 16-byte name field
+  (removed a dead unbounded scan), and `dir_read_image()` guards a NULL
+  entry on allocation failure.
+
+### [HIGH] Input-field overflows (chat.c, ui.c)
+- CGChat: pressing HOME on a long input line copied up to 175 bytes into an
+  80-byte stack buffer — fixed by clamping the visible span.
+- Shared input editor: off-by-one length guard allowed a 1-byte write past
+  the global buffer — guard tightened.
+
+### [LOW] Robustness hardening
+- `gfx_setcursxy()` clamps the cursor to the visible screen buffer.
+- `font_draw_string()` casts to `unsigned char` so glyphs ≥ 0x80 render.
+- `kbd_reload()` rejects over-long lines and checks `ferror`.
+- XM loader validates file size before allocating.
+- CGEdit: replaced a fragile `strcpy`, added a file-selector NULL guard.
+- Capped maximum download size so a hostile server cannot fill the disk.
+- Moved to the non-deprecated libopenmpt load API; the tree now builds with
+  zero compiler warnings.
+
 ## Week 1: Critical Vulnerability Fixes
 
-### 🔴 Fix 1: Path Traversal Prevention in File Downloads
+### [CRITICAL] Fix 1: Path Traversal Prevention in File Downloads
 **File:** `src/xfer.c:927+` | **Severity:** CRITICAL
 
 **Issue:** File downloads allowed path traversal sequences (`../../../etc/passwd`) enabling arbitrary file overwrite.
@@ -20,7 +60,7 @@ This document summarizes the critical security vulnerabilities that have been pa
 
 **Security Impact:** Prevents complete file system compromise.
 
-### 🔴 Fix 2: Buffer Overflow Prevention in Punter Protocol  
+### [CRITICAL] Fix 2: Buffer Overflow Prevention in Punter Protocol  
 **File:** `src/punter.c:50+` | **Severity:** CRITICAL
 
 **Issue:** `punter_recv_string()` could overflow destination buffer via malicious server responses.
@@ -32,7 +72,7 @@ This document summarizes the critical security vulnerabilities that have been pa
 
 **Security Impact:** Prevents remote code execution via stack smashing.
 
-### 🔴 Fix 3: Integer Overflow Prevention in Buffer Management
+### [CRITICAL] Fix 3: Integer Overflow Prevention in Buffer Management
 **File:** `src/xfer.c:385+` | **Severity:** CRITICAL
 
 **Issue:** Unchecked buffer position increment could lead to integer overflow.
@@ -46,7 +86,7 @@ This document summarizes the critical security vulnerabilities that have been pa
 
 ## Week 2: High Priority Network Security Fixes
 
-### 🟠 Fix 4: Modern DNS Resolution
+### [HIGH] Fix 4: Modern DNS Resolution
 **File:** `src/net.c:80+` | **Severity:** HIGH
 
 **Issue:** Used deprecated `gethostbyname()` vulnerable to DNS attacks and lacks IPv6 support.
@@ -60,7 +100,7 @@ This document summarizes the critical security vulnerabilities that have been pa
 
 **Security Impact:** Prevents DNS poisoning and improves network reliability.
 
-### 🟠 Fix 5: Enhanced Configuration Input Validation
+### [HIGH] Fix 5: Enhanced Configuration Input Validation
 **File:** `src/config.c:20+` | **Severity:** HIGH
 
 **Issue:** Configuration parsing relied solely on sscanf field width limits.
@@ -74,7 +114,7 @@ This document summarizes the critical security vulnerabilities that have been pa
 
 **Security Impact:** Prevents configuration-based attacks and improves input sanitization.
 
-### 🟠 Fix 6: Secure Temporary File Creation
+### [HIGH] Fix 6: Secure Temporary File Creation
 **File:** `src/xfer.c:160+` | **Severity:** HIGH
 
 **Issue:** Fixed temporary filenames enabled race conditions and symlink attacks.
@@ -111,51 +151,29 @@ make clean && make
 ```
 
 ### Validation Status
-✅ All critical buffer overflow vulnerabilities patched
-✅ Path traversal attacks prevented
-✅ Modern network functions implemented  
-✅ Secure temporary file creation enabled
-✅ Enhanced input validation active
-✅ Configuration parsing hardened
+- All critical buffer overflow vulnerabilities patched
+- Path traversal attacks prevented
+- Modern network functions implemented  
+- Secure temporary file creation enabled
+- Enhanced input validation active
+- Configuration parsing hardened
 
-## Deployment Recommendations
+## Known Limitations
 
-### Immediate Actions
-1. **Deploy patched version** to replace vulnerable installations
-2. **Update documentation** to reflect security improvements
-3. **Notify users** of critical security updates available
+These are inherent to what CGTerm is (a classic C/G telnet client for C64
+BBSes) rather than bugs:
 
-### Ongoing Security
-1. **Regular security audits** every 6 months
-2. **Penetration testing** before major releases
-3. **Static code analysis** integration into build process
-4. **Security training** for development team
+- **Connections are plaintext.** BBSes speak raw telnet, so there is no
+  TLS/transport encryption. Treat the network path as untrusted.
+- **Downloads are untrusted data.** Files pulled from a BBS are stored as-is;
+  the disk-image parser is now bounds-checked, but you should still keep the
+  download directory on a non-executable location and not blindly run what you
+  fetch.
+- **No privilege separation.** Run CGTerm as a normal, unprivileged user.
 
-### Network Deployment Hardening
-1. Use dedicated user account with minimal privileges
-2. Restrict download directories with `noexec` mount options
-3. Implement firewall rules for necessary BBS ports only
-4. Monitor file operations with `inotify` or similar tools
+## Reporting a Vulnerability
 
-## Future Security Roadmap
+**Security Contact:** david@unbreached.se
 
-### Short Term (Next Release)
-- [ ] Implement TLS/SSL support for encrypted BBS connections
-- [ ] Add SHA-256 file integrity checking for transfers
-- [ ] Implement process sandboxing for file operations
-
-### Medium Term (6 Months)
-- [ ] Add certificate validation for secure connections  
-- [ ] Implement comprehensive audit logging
-- [ ] Create security monitoring dashboard
-
-### Long Term (12 Months)
-- [ ] Full privilege separation architecture
-- [ ] Cryptographic message authentication
-- [ ] Runtime attack detection system
-
----
-
-**Security Contact:** For security issues, contact david@unbreached.se
-**Last Updated:** April 19, 2026
+**Last Updated:** June 5, 2026
 **Version:** CGTerm 3.0 Scene Edition (Hardened)
