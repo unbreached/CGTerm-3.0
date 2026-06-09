@@ -256,6 +256,7 @@ int gfx_init(int fullscreen, char *appname) {
     return(1);
   }
   SDL_WM_SetCaption(appname, appname);
+  SDL_ShowCursor(SDL_DISABLE);  /* keyboard-driven terminal: hide the OS mouse cursor */
   SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
 
   /* Load C64 character ROM fonts based on charset setting */
@@ -736,7 +737,7 @@ void gfx_toggle_fullscreen(void) {
       exit(1);
     }
     SDL_WM_GrabInput(SDL_GRAB_OFF);
-    SDL_ShowCursor(SDL_ENABLE);
+    SDL_ShowCursor(SDL_DISABLE);  /* stay hidden in windowed mode too */
     cfg_fullscreen = 0;
   } else {
     if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
