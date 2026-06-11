@@ -145,3 +145,32 @@ cgedit    PETSCII editor
 Linux:    /usr/local/bin, /usr/local/share/cgterm/assets
 macOS:    /Applications/CGTerm.app
 Windows:  Portable (run from any directory)
+
+
+//TROUBLESHOOTING
+--------------------------------------------------
+macOS (Apple Silicon): build fails with
+"ld: symbol(s) not found for architecture arm64"
+(undefined _SDL_*, _openmpt_*, _main)
+
+  Your SDL/libopenmpt libraries are Intel (x86_64)
+  builds — typically from an Intel Homebrew under
+  /usr/local on a machine migrated from an Intel Mac.
+  The compiler produces arm64 objects, the linker
+  skips the x86_64 libraries, and every SDL symbol
+  comes up undefined.
+
+  Fix (preferred): install native arm64 Homebrew
+  (/opt/homebrew) and the deps, then rebuild:
+
+      brew install sdl12-compat libopenmpt
+      make clean && make
+
+  Workaround: build everything under Rosetta so the
+  architectures match your x86_64 libraries:
+
+      arch -x86_64 zsh
+      make clean && make
+
+  Or skip building entirely and use the prebuilt
+  CGTerm-3.0-macos-arm64.zip from the releases page.
