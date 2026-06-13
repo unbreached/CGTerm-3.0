@@ -380,7 +380,9 @@ int rainbow_recv(void) {
       continue;
     }
 
-    if ((int)blockno == expected_block - 1) {
+    if (blockno == (unsigned char)(expected_block - 1)) {
+      /* duplicate of the previous block — use the same 8-bit wrap semantics
+       * as the accept path below so detection still works past 256 blocks */
       xfer_send_byte(RB_ACK);
       continue;
     }

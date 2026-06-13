@@ -153,6 +153,9 @@ signed int punter_recv_block(int len) {
   punter_send_string("S/B");
   bytecnt = 0;
   while (bytecnt < len) {
+    if (xfer_cancel) {
+      return(-1);   /* user pressed ESC — abort promptly */
+    }
     if ((c = xfer_recv_byte_error(500, 10)) < 0) {
       if (bytecnt == 3) {
 	if (strncmp("S/B", (const char *)xfer_buffer, 3) == 0) {
@@ -364,8 +367,13 @@ int punter_recv(void) {
     return(0);
   }
 
-  while (punter_next_blocknum() < 0xff00 && nextblocksize >= 7) {
+  while (!xfer_cancel && punter_next_blocknum() < 0xff00 && nextblocksize >= 7) {
     nextblocksize = punter_recv_block(nextblocksize);
+  }
+  if (xfer_cancel) {
+    /* a cooperating peer can otherwise stream valid short blocks forever and
+     * keep the transfer un-cancellable; honor the user's ESC here */
+    return(0);
   }
   if (nextblocksize < 0) {
     //punter_fail("Block timeout");

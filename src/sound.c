@@ -75,10 +75,17 @@ signed int sound_load_sample(const char *filename) {
     if (sound_numsamples >= MAXSAMPLES) {
       return(-1);
     }
-    for (sample = 0; sound_buffer[sample]; ++sample);
+    /* bound the scan and re-check, like sound_register_buffer — without this
+     * (and the missing ++sound_numsamples) a full table would index past the
+     * end of sound_buffer[] */
+    for (sample = 0; sample < MAXSAMPLES && sound_buffer[sample]; ++sample);
+    if (sample >= MAXSAMPLES) {
+      return(-1);
+    }
     if (SDL_LoadWAV(filename, &sound_audiospec, &sound_buffer[sample], &sound_length[sample]) == NULL) {
       return(-1);
     }
+    ++sound_numsamples;
     return(sample);
   } else {
     return(0);
@@ -87,9 +94,10 @@ signed int sound_load_sample(const char *filename) {
 
 
 void sound_free_sample(int sample) {
-  if (sound_buffer[sample]) {
+  if (sample >= 0 && sample < MAXSAMPLES && sound_buffer[sample]) {
     SDL_FreeWAV(sound_buffer[sample]);
     sound_buffer[sample] = 0;
+    --sound_numsamples;
   }
 }
 

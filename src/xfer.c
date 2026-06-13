@@ -497,6 +497,10 @@ static int multipunter_recv(void) {
     multipunter_sanitize_filename(remote_name, local_name, sizeof(local_name), punter_last_filetype, filecount + 1);
     snprintf(xfer_filename, 256, "%s", local_name);
     xfer_save_file(local_name);
+    /* Reclaim the temp file before the next iteration's mkstemp overwrites the
+     * name — the per-file save paths only remove it on success, so a rejected
+     * filename or write error would otherwise orphan it in the temp dir. */
+    xfer_cleanup_temp_download();
     ++filecount;
   }
 

@@ -297,7 +297,10 @@ int gfx_init(int fullscreen, char *appname) {
   font = 1;
   memset(dirty, SDL_FALSE, sizeof(dirty));
 
-  menu_init(gfx_width, gfx_height);
+  if (menu_init(gfx_width, gfx_height)) {
+    printf("menu_init Error\n");
+    return(1);
+  }
   gfx_menu_width = gfx_width;
   gfx_menu_height = gfx_height;
   gfx_menu_xpos = 0;
@@ -429,6 +432,21 @@ void gfx_copy_line(unsigned char *chars, unsigned char *colors, int line) {
     *screen++ = *chars++;
     *colram++ = *colors++;
   }
+}
+
+
+/* Move one on-screen line to another, including the per-cell background-color
+ * plane (gfx_bg). Used by the ANSI insert/delete/scroll-line handlers; without
+ * scrolling gfx_bg the ANSI background colors would be left behind. */
+void gfx_scroll_line(int srcline, int dstline) {
+  int srcoff = cfg_columns * srcline;
+  int dstoff = cfg_columns * dstline;
+
+  resetcursor();
+  dirty[dstline] = SDL_TRUE;
+  memmove(gfx_0400 + dstoff, gfx_0400 + srcoff, cfg_columns);
+  memmove(gfx_d800 + dstoff, gfx_d800 + srcoff, cfg_columns);
+  memmove(gfx_bg + dstoff, gfx_bg + srcoff, cfg_columns);
 }
 
 
@@ -699,7 +717,7 @@ void gfx_delete(void) {
       --gfx_cursy;
       gfx_draw_char(32);
     }
-    dirty[gfx_cursy - 1] = SDL_TRUE;
+    dirty[gfx_cursy] = SDL_TRUE;
   }
 }
 
@@ -830,10 +848,15 @@ void gfx_set_columns(int cols) {
   gfx_width = cfg_zoom * GFX_WIDTH;
   gfx_height = cfg_zoom * GFX_HEIGHT;
 
-  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp,
-      (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
-    printf("Unable to resize window: %s\n", SDL_GetError());
-    return;
+  {
+    SDL_Surface *newscreen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp,
+        (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE);
+    if (newscreen == NULL) {
+      /* keep the existing surface rather than leaving gfx_screen NULL */
+      printf("Unable to resize window: %s\n", SDL_GetError());
+      return;
+    }
+    gfx_screen = newscreen;
   }
 
   /* Regenerate fonts for new charwidth */
@@ -851,7 +874,10 @@ void gfx_set_columns(int cols) {
   gfx_bg = gfx_bg_buffer + gfx_maxoffset;
 
   /* Resize menu overlay */
-  menu_init(gfx_width, gfx_height);
+  if (menu_init(gfx_width, gfx_height)) {
+    printf("menu_init failed on column switch: %s\n", SDL_GetError());
+    return;
+  }
   gfx_menu_width = gfx_width;
   gfx_menu_height = gfx_height;
   gfx_menu_lastline = (gfx_height - 1) / charheight;
@@ -905,11 +931,21 @@ void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned cha
   int x, y;
 
   resetcursor();
+  /* The paste origin is the (movable) cursor, so rect_x/rect_y + the saved
+   * rect_w/rect_h can run past the screen. Always advance the source pointer
+   * by the full rectangle (to keep rows aligned) but only write cells that
+   * fall inside the 25-row x cfg_columns screen buffer (and dirty[25]). */
   for (y = 0; y < rect_h; ++y) {
-    dirty[rect_y + y] = SDL_TRUE;
+    int dy = rect_y + y;
+    if (dy >= 0 && dy < 25) dirty[dy] = SDL_TRUE;
     for (x = 0; x < rect_w; ++x) {
-      gfx_0400[(rect_y + y) * cfg_columns + rect_x + x] = *rect_0400++;
-      gfx_d800[(rect_y + y) * cfg_columns + rect_x + x] = *rect_d800++;
+      int dx = rect_x + x;
+      unsigned char ch = *rect_0400++;
+      unsigned char co = *rect_d800++;
+      if (dy >= 0 && dy < 25 && dx >= 0 && dx < cfg_columns) {
+        gfx_0400[dy * cfg_columns + dx] = ch;
+        gfx_d800[dy * cfg_columns + dx] = co;
+      }
     }
   }
 }

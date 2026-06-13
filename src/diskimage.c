@@ -419,7 +419,7 @@ void di_alloc_ts(DiskImage *di, TrackSector ts) {
 /* allocate next available block */
 TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
   unsigned char *bam;
-  int spt, s1, s2, t1, t2, bpt, boff;
+  int spt, s1, s2, t1, t2, bpt, boff, i;
   TrackSector ts;
 
   switch (di->type) {
@@ -455,7 +455,9 @@ TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
     if  (bam[ts.track * bpt + boff]) {
       spt = di_sectors_per_track(di->type, ts.track);
       ts.sector = (prevts.sector + interleave(di->type)) % spt;
-      for (; ; ts.sector = (ts.sector + 1) % spt) {
+      /* bound the scan: a crafted BAM can claim free blocks (count byte)
+       * while marking every sector allocated, which would spin forever */
+      for (i = 0; i < spt; ++i, ts.sector = (ts.sector + 1) % spt) {
 	if (di_is_ts_free(di, ts)) {
 	  di_alloc_ts(di, ts);
 	  return(ts);
@@ -470,7 +472,7 @@ TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
       if  (bam[(ts.track - t1) * bpt + boff]) {
 	spt = di_sectors_per_track(di->type, ts.track);
 	ts.sector = (prevts.sector + interleave(di->type)) % spt;
-	for (; ; ts.sector = (ts.sector + 1) % spt) {
+	for (i = 0; i < spt; ++i, ts.sector = (ts.sector + 1) % spt) {
 	  if (di_is_ts_free(di, ts)) {
 	    di_alloc_ts(di, ts);
 	    return(ts);
@@ -579,7 +581,10 @@ void di_free_ts(DiskImage *di, TrackSector ts) {
 /* free a chain of blocks */
 void free_chain(DiskImage *di, TrackSector ts) {
   int hops;
-  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
+  /* validate the first link too — di_delete() passes a raw, possibly
+   * hostile directory startts straight in (next_ts_in_chain validates
+   * every subsequent link, but the first was unchecked) */
+  for (hops = 0; ts.track && di_ts_valid(di, ts) && hops < di->size / 256; hops++) {
     di_free_ts(di, ts);
     ts = next_ts_in_chain(di, ts);
   }
@@ -657,7 +662,7 @@ DiskImage *di_load_image(char *name) {
   /* read file into buffer */
   read = 0;
   while (read < filesize) {
-    if ((l = fread(di->image, 1, filesize - read, file))) {
+    if ((l = fread(di->image + read, 1, filesize - read, file))) {
       read += l;
     } else {
       //puts("fread failed");
@@ -745,22 +750,58 @@ void di_sync(DiskImage *di) {
   FILE *file;
   int l, left;
   unsigned char *image;
+  char *tmpname;
+  size_t namelen;
 
-  if ((file = fopen(di->filename, "wb"))) {
-    image = di->image;
-    left = di->size;
-    l = 0;
-    while (left) {
-      if ((l = fwrite(image, 1, left, file)) == 0) {
-	fclose(file);
-	return;
-      }
-      left -= l;
-      image += l;
-    }
-    fclose(file);
-    di->modified = 0;
+  if (di->filename == NULL) return;
+
+  /* Write to a sibling temp file and only rename it over the original on full
+   * success. Opening the original "wb" truncates it to zero immediately, so a
+   * mid-write failure (disk full, media removed) would otherwise destroy the
+   * user's existing .d64/.d71/.d81 with no recovery. */
+  namelen = strlen(di->filename);
+  if ((tmpname = malloc(namelen + 5)) == NULL) return;
+  memcpy(tmpname, di->filename, namelen);
+  memcpy(tmpname + namelen, ".tmp", 5);   /* copies the trailing NUL too */
+
+  if ((file = fopen(tmpname, "wb")) == NULL) {
+    free(tmpname);
+    return;   /* original left intact */
   }
+  image = di->image;
+  left = di->size;
+  l = 0;
+  while (left) {
+    if ((l = fwrite(image, 1, left, file)) == 0) {
+      fclose(file);
+      remove(tmpname);
+      free(tmpname);
+      return;   /* write failed — original left intact */
+    }
+    left -= l;
+    image += l;
+  }
+  if (fclose(file) != 0) {
+    remove(tmpname);
+    free(tmpname);
+    return;
+  }
+
+  /* Replace the original with the fully-written temp. */
+#if defined(WINDOWS) || defined(__WIN32__)
+  remove(di->filename);   /* Windows rename() won't overwrite an existing file */
+#endif
+  if (rename(tmpname, di->filename) != 0) {
+    /* fallback for platforms/filesystems where rename can't overwrite */
+    remove(di->filename);
+    if (rename(tmpname, di->filename) != 0) {
+      remove(tmpname);
+      free(tmpname);
+      return;   /* leave di->modified set so a later close can retry */
+    }
+  }
+  di->modified = 0;
+  free(tmpname);
 }
 
 
@@ -1024,6 +1065,12 @@ int di_write(ImageFile *imgfile, unsigned char *buffer, int len) {
 	return(counter);
       }
       imgfile->nextts = alloc_next_ts(imgfile->diskimage, imgfile->ts);
+      if (imgfile->nextts.track == 0) {
+	/* no free block found (e.g. a crafted BAM whose free-count lies) —
+	 * treat as disk full instead of writing into block 0 */
+	set_status(imgfile->diskimage, 72, 0, 0);
+	return(counter);
+      }
       if (imgfile->ts.track == 0) {
 	imgfile->rawdirentry->startts = imgfile->nextts;
       } else {
@@ -1072,24 +1119,29 @@ void di_close(ImageFile *imgfile) {
     if (imgfile->bufptr) {
       if (imgfile->diskimage->blocksfree) {
 	imgfile->nextts = alloc_next_ts(imgfile->diskimage, imgfile->ts);
-	if (imgfile->ts.track == 0) {
-	  imgfile->rawdirentry->startts = imgfile->nextts;
+	if (imgfile->nextts.track == 0) {
+	  /* no free block (e.g. crafted BAM) — disk full, don't write block 0 */
+	  set_status(imgfile->diskimage, 72, 0, 0);
 	} else {
+	  if (imgfile->ts.track == 0) {
+	    imgfile->rawdirentry->startts = imgfile->nextts;
+	  } else {
+	    p = get_ts_addr(imgfile->diskimage, imgfile->ts);
+	    p[0] = imgfile->nextts.track;
+	    p[1] = imgfile->nextts.sector;
+	  }
+	  imgfile->ts = imgfile->nextts;
 	  p = get_ts_addr(imgfile->diskimage, imgfile->ts);
-	  p[0] = imgfile->nextts.track;
-	  p[1] = imgfile->nextts.sector;
+	  p[0] = 0;
+	  p[1] = 0xff;
+	  memcpy(p + 2, imgfile->buffer, 254);
+	  imgfile->bufptr = 0;
+	  if (++(imgfile->rawdirentry->sizelo) == 0) {
+	    ++(imgfile->rawdirentry->sizehi);
+	  }
+	  --(imgfile->diskimage->blocksfree);
+	  imgfile->rawdirentry->type |= 0x80;
 	}
-	imgfile->ts = imgfile->nextts;
-	p = get_ts_addr(imgfile->diskimage, imgfile->ts);
-	p[0] = 0;
-	p[1] = 0xff;
-	memcpy(p + 2, imgfile->buffer, 254);
-	imgfile->bufptr = 0;
-	if (++(imgfile->rawdirentry->sizelo) == 0) {
-	  ++(imgfile->rawdirentry->sizehi);
-	}
-	--(imgfile->diskimage->blocksfree);
-	imgfile->rawdirentry->type |= 0x80;
       }
     } else {
       imgfile->rawdirentry->type |= 0x80;

@@ -20,6 +20,7 @@ void gfx_set_cell_bg(int c);
 void gfx_draw_char(int c);
 void gfx_clear_line(int line, int color);
 void gfx_copy_line(unsigned char *line, unsigned char *color, int y);
+void gfx_scroll_line(int srcline, int dstline);
 void gfx_cls(void);
 void gfx_scrollup(void);
 void gfx_vbl(void);

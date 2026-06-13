@@ -149,7 +149,9 @@ int main(int argc, char *argv[]) {
     } else if (strlen(linebuf) >= 3) {
 
       if (sscanf(linebuf, "%15s %d \n", keyname, &value) == 2) {
-	if ((key = matchkey(keyname)) != 64) {
+	if (value < 0 || value >= SDLK_LAST) {
+	  printf("value out of range on line %d\n", line);
+	} else if ((key = matchkey(keyname)) != 64) {
 	  keytable[value] = key;
 	} else {
 	  printf("Unknown key: %s\n", keyname);

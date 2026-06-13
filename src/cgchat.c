@@ -85,8 +85,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #else
-  strncpy(fname, cfg_homedir, 1000);
-  strcat(fname, "/.cgchatrc");
+  snprintf(fname, sizeof(fname), "%s/.cgchatrc", cfg_homedir);
   if (cfg_file_exists(fname)) {
     if (cfg_readconfig(fname) < 0) {
       return(1);
@@ -236,6 +235,10 @@ int main(int argc, char *argv[]) {
     }
 
     if (c == -2) {
+      /* drop any half-received line so it can't be prepended to the first
+       * line of the next session after a mid-line disconnect */
+      data_len = 0;
+      data_buffer[0] = 0;
       if (timer_get_ticks() < cfg_nextreconnect) {
 	cfg_nextreconnect = timer_get_ticks() + cfg_reconnect * 1000;
       } else {

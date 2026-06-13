@@ -4,7 +4,10 @@ setlocal enabledelayedexpansion
 set ROOT=%~dp0..
 if "%PREFIX%"=="" set PREFIX=%ProgramFiles%\CGTerm
 set BINDIR=%PREFIX%\bin
-set DATADIR=%PREFIX%\share\cgterm\assets
+:: Assets must live in a directory the binary actually probes. On Windows
+:: paths.c looks in exe_dir\assets, then parent\assets, then exe_dir — never
+:: share\cgterm\assets. Use exe_dir\assets (= %BINDIR%\assets) so it is found.
+set DATADIR=%BINDIR%\assets
 
 echo.
 echo  ============================================
@@ -128,7 +131,11 @@ if exist "%ROOT%\bin\cgedit.exe" copy /Y "%ROOT%\bin\cgedit.exe" "%BINDIR%" >nul
 copy /Y "%ROOT%\assets\*.bmp" "%DATADIR%" >nul
 copy /Y "%ROOT%\assets\*.kbd" "%DATADIR%" >nul
 copy /Y "%ROOT%\assets\*.wav" "%DATADIR%" >nul
+if exist "%ROOT%\assets\*.xm" copy /Y "%ROOT%\assets\*.xm" "%DATADIR%" >nul 2>nul
 if exist "%ROOT%\assets\*.txt" copy /Y "%ROOT%\assets\*.txt" "%DATADIR%" >nul 2>nul
+:: the font menu needs the fonts\ subdirectory too
+if not exist "%DATADIR%\fonts" mkdir "%DATADIR%\fonts"
+copy /Y "%ROOT%\assets\fonts\*.bmp" "%DATADIR%\fonts" >nul
 
 echo.
 echo [+] Installed binaries to %BINDIR%
@@ -142,7 +149,16 @@ if errorlevel 1 (
     echo.
     set /p ADD_PATH="Add %BINDIR% to your PATH? [y/n] "
     if /i "!ADD_PATH!"=="y" (
-        setx PATH "%PATH%;%BINDIR%" >nul 2>&1
+        :: Append to the USER PATH from the registry, not the merged %PATH%.
+        :: setx PATH "%PATH%;..." would copy the whole machine PATH into the
+        :: user scope and truncate it at 1024 chars.
+        set "USERPATH="
+        for /f "tokens=2*" %%a in ('reg query HKCU\Environment /v PATH 2^>nul') do set "USERPATH=%%b"
+        if defined USERPATH (
+            setx PATH "!USERPATH!;%BINDIR%" >nul 2>&1
+        ) else (
+            setx PATH "%BINDIR%" >nul 2>&1
+        )
         if errorlevel 1 (
             echo [!] Could not update PATH automatically.
             echo     Add this manually: %BINDIR%

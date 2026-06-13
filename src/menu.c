@@ -149,12 +149,33 @@ void menu_cls(void) {
 }
 
 
+/* Release everything menu_init() allocated. Font slots alias each other on
+ * fallback (e.g. menu_font[1] == menu_font[0]), so free each distinct Font*
+ * exactly once. Safe to call when nothing is allocated (all NULL). */
+static void menu_free_resources(void) {
+  int i, j;
+  for (i = 0; i < 6; ++i) {
+    if (menu_font[i] == NULL) continue;
+    for (j = 0; j < i; ++j)
+      if (menu_font[j] == menu_font[i]) break;   /* alias of an earlier slot */
+    if (j == i) font_free(menu_font[i]);          /* distinct -> free once */
+  }
+  for (i = 0; i < 6; ++i) menu_font[i] = NULL;
+  if (cursorsurface) { SDL_FreeSurface(cursorsurface); cursorsurface = NULL; }
+  if (menu_surface) { SDL_FreeSurface(menu_surface); menu_surface = NULL; }
+}
+
+
 int menu_init(int width, int height) {
   SDL_Surface *tempsurface;
   char fname[1024];
   menu_width = width;
   menu_height = height;
   menu_visible = SDL_FALSE;
+
+  /* menu_init() is called again on every 40/80-column switch; release the
+   * previous surfaces and fonts so they don't leak on each mode change. */
+  menu_free_resources();
 
   if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE|SDL_SRCALPHA, width, height, 32,
 					   0x000000ff,
@@ -189,7 +210,7 @@ int menu_init(int width, int height) {
       path_build_asset(fname, sizeof(fname), "10x12yellow.bmp");
       if ((menu_font[0] = font_load_font(fname, 10, 12, 32, 4)) == NULL) {
         printf("Couldn't load menu font\n");
-        SDL_FreeSurface(menu_surface);
+        menu_free_resources();   /* frees menu_surface and NULLs it */
         return(1);
       }
     }
@@ -231,9 +252,9 @@ int menu_init(int width, int height) {
 					   0x00ff0000,
 					   0x00000000)) == NULL) {
     printf("Couldn't create cursor surface\n");
-    SDL_FreeSurface(menu_surface);
-    font_free(menu_font[0]);
-    font_free(menu_font[1]);
+    /* free all distinct fonts + menu_surface (menu_font[1] aliases [0], so
+     * the old two-call free here double-freed); cursorsurface is NULL. */
+    menu_free_resources();
     return(1);
   }
   SDL_FillRect(cursorsurface, NULL, SDL_MapRGB(cursorsurface->format, 0xc0, 0x80, 0xff));

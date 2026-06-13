@@ -885,6 +885,8 @@ void ui_metakey(SDL_keysym *keysym) {
     if (macro_rec) {
       macro_rec = 0;
     } else {
+      macro_play = 0;   /* don't start recording over an in-progress playback */
+      macro_ctr = 0;
       macro_len = 0;
       macro_rec = 1;
     }

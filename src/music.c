@@ -19,7 +19,8 @@ static int music_initok = 0;
 
 #define MAX_SFX 8
 static Mix_Chunk *sfx_chunks[MAX_SFX];
-static int sfx_count = 0;
+static int sfx_is_wav[MAX_SFX];   /* 1 = Mix_LoadWAV (Mix_FreeChunk), 0 = raw (free) */
+static int sfx_count = 0;         /* number of slots in use */
 
 int music_init(void) {
   if (music_initok) return 0;
@@ -73,42 +74,65 @@ int music_is_playing(void) {
   return Mix_PlayingMusic();
 }
 
+/* find a free SFX slot, or -1 if the table is full */
+static int sfx_find_free_slot(void) {
+  int i;
+  for (i = 0; i < MAX_SFX; i++) {
+    if (sfx_chunks[i] == NULL) return i;
+  }
+  return -1;
+}
+
 int music_load_sfx(const char *filename) {
   Mix_Chunk *chunk;
-  if (!music_initok || sfx_count >= MAX_SFX) return -1;
+  int slot;
+  if (!music_initok) return -1;
+  if ((slot = sfx_find_free_slot()) < 0) return -1;
   chunk = Mix_LoadWAV(filename);
   if (!chunk) {
     printf("Couldn't load SFX %s: %s\n", filename, Mix_GetError());
     return -1;
   }
-  sfx_chunks[sfx_count] = chunk;
-  return sfx_count++;
+  sfx_chunks[slot] = chunk;
+  sfx_is_wav[slot] = 1;
+  sfx_count++;
+  return slot;
 }
 
 int music_load_sfx_raw(void *buf, unsigned int len) {
   Mix_Chunk *chunk;
-  if (!music_initok || sfx_count >= MAX_SFX) return -1;
+  int slot;
+  if (!music_initok) return -1;
+  if ((slot = sfx_find_free_slot()) < 0) return -1;
   chunk = (Mix_Chunk *)malloc(sizeof(Mix_Chunk));
   if (!chunk) return -1;
   chunk->allocated = 0;
   chunk->abuf = (Uint8 *)buf;
   chunk->alen = len;
   chunk->volume = MIX_MAX_VOLUME;
-  sfx_chunks[sfx_count] = chunk;
-  return sfx_count++;
+  sfx_chunks[slot] = chunk;
+  sfx_is_wav[slot] = 0;
+  sfx_count++;
+  return slot;
 }
 
 void music_free_sfx(int id) {
-  if (!music_initok || id < 0 || id >= sfx_count) return;
+  if (!music_initok || id < 0 || id >= MAX_SFX) return;
   if (sfx_chunks[id]) {
     Mix_HaltChannel(-1);
-    free(sfx_chunks[id]);
+    if (sfx_is_wav[id]) {
+      Mix_FreeChunk(sfx_chunks[id]);   /* Mix owns abuf — must use Mix_FreeChunk */
+    } else {
+      free(sfx_chunks[id]);            /* raw chunk: abuf is owned by the caller */
+    }
     sfx_chunks[id] = NULL;
+    sfx_is_wav[id] = 0;
+    if (sfx_count > 0) sfx_count--;    /* reclaim the slot so the table can't exhaust */
   }
 }
 
 void music_play_sfx(int id) {
-  if (!music_initok || id < 0 || id >= sfx_count) return;
+  if (!music_initok || id < 0 || id >= MAX_SFX || !sfx_chunks[id]) return;
   Mix_PlayChannel(-1, sfx_chunks[id], 0);
 }
 
@@ -120,8 +144,13 @@ int music_sfx_playing(void) {
 void music_shutdown(void) {
   int i;
   music_stop();
-  for (i = 0; i < sfx_count; i++) {
-    if (sfx_chunks[i]) free(sfx_chunks[i]);
+  for (i = 0; i < MAX_SFX; i++) {
+    if (sfx_chunks[i]) {
+      if (sfx_is_wav[i]) Mix_FreeChunk(sfx_chunks[i]);
+      else free(sfx_chunks[i]);
+      sfx_chunks[i] = NULL;
+      sfx_is_wav[i] = 0;
+    }
   }
   sfx_count = 0;
   if (music_initok) {

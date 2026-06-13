@@ -417,13 +417,18 @@ int kbd_getkey() {
                     }
                     /* ESC alone opens menu */
                     if (event.key.keysym.sym == SDLK_ESCAPE) {
+                        clipboard_paste_clear();   /* ESC cancels an in-progress paste */
                         ui_menu();
+                        return 0;
+                    } else if (((event.key.keysym.mod & KMOD_CTRL) || (event.key.keysym.mod & KMOD_META))
+                               && event.key.keysym.sym == SDLK_v) {
+                        /* paste: Ctrl+V (Linux/Windows) or Cmd+V (macOS). Must be
+                         * checked before the generic META handler below, or Cmd+V
+                         * is swallowed as a meta key on macOS and never pastes. */
+                        clipboard_paste();
                         return 0;
                     } else if (event.key.keysym.mod & KMOD_META) {
                         ui_metakey(&event.key.keysym);
-                    } else if ((event.key.keysym.mod & KMOD_CTRL) && event.key.keysym.sym == SDLK_v) {
-                        clipboard_paste();
-                        return 0;
                     } else if (cfg_termmode == 1) {
                         /* ANSI mode: send ASCII/escape sequences for special keys */
                         switch (event.key.keysym.sym) {
@@ -579,7 +584,7 @@ int kbd_getkey() {
                             macrobuf_shift[macro_len] = shift;
                             macrobuf_ctrl[macro_len] = ctrl;
                             macrobuf_cbm[macro_len] = cbm;
-                            if (++macro_len == macro_maxlen) {
+                            if (++macro_len >= macro_maxlen) {
                                 macro_rec = 0;
                             }
                         }
@@ -613,11 +618,20 @@ int kbd_getkey() {
     }
     
     if (macro_play) {
+        /* Bounds-check the index: if recording was (re)started mid-playback,
+         * macro_len can drop below macro_ctr, and an "== macro_len" exit test
+         * would let macro_ctr run off the end of the buffer (OOB read whose
+         * bytes get transmitted to the BBS, then a crash). */
+        if (macro_ctr < 0 || macro_ctr >= macro_len) {
+            macro_play = 0;
+            macro_ctr = 0;
+            return(key);
+        }
         key = macrobuf_key[macro_ctr];
         shift = macrobuf_shift[macro_ctr];
         ctrl = macrobuf_ctrl[macro_ctr];
         cbm = macrobuf_cbm[macro_ctr];
-        if (++macro_ctr == macro_len) {
+        if (++macro_ctr >= macro_len) {
             macro_play = 0;
         }
         return(key);

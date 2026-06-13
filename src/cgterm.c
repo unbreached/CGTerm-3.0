@@ -22,7 +22,12 @@
 #include "music.h"
 #include "xfer.h"
 #include "ansi.h"
+#include "clipboard.h"
 
+
+#ifndef CGTERM_VERSION
+#define CGTERM_VERSION "3.0.0"
+#endif
 
 int sendcrlf = 0;
 unsigned int lastsend = 0;
@@ -101,7 +106,7 @@ void log_close(void) {
 
 void usage(void) {
     puts("cgterm [-4|-8] [-d delay] [-f] [-k keyboard.kbd] [-o logfile] [-r seconds]");
-    puts("       [-s] [-z zoom] [-b(debug)] [-l(ocal echo) on|off (default=off)]");
+    puts("       [-s] [-z zoom] [-b(debug)] [-l (local echo on)] [-V (version)]");
     puts("       [host [port]]");
 }
 
@@ -145,7 +150,7 @@ int main(int argc, char *argv[]) {
 
   cfg_load_bookmarks();
 
-  while ((opt = getopt(argc, argv, "r:d:z:k:o:fs48lb")) != -1) {
+  while ((opt = getopt(argc, argv, "r:d:z:k:o:fs48lbV")) != -1) {
       
     switch (opt) {
 
@@ -199,6 +204,10 @@ int main(int argc, char *argv[]) {
     case 'b':
             cfg_debugmode = 1;
             break;
+
+    case 'V':
+            puts("CGTerm " CGTERM_VERSION " - Genesis Project C64 Scene Edition");
+            return(0);
             
     case 'l':
             cfg_localecho = 1;
@@ -313,11 +322,9 @@ int main(int argc, char *argv[]) {
 
   } else if (argc == 1 || argc == 2) {
 
-    if (strchr(argv[0], '.') == NULL) {
-      printf("Invalid hostname: %s\n", argv[0]);
-      return(1);
-    }
-
+    /* Let the resolver decide what is valid — the old strchr('.') check
+     * rejected legitimate single-label names (localhost, /etc/hosts aliases,
+     * SSH/stunnel tunnels) and was inconsistent with the connect dialog. */
     cfg_host = argv[0];
     if (argc == 2) {
       cfg_port = (int)strtol(argv[1], (char **)NULL, 10);
@@ -340,7 +347,9 @@ int main(int argc, char *argv[]) {
 
 
   if (cfg_logfile) {
-    if ((logh = fopen(cfg_logfile, "w")) == NULL) {
+    /* append, don't truncate — opening "w" silently destroyed the previous
+     * session capture every launch when logfile= was set in the config */
+    if ((logh = fopen(cfg_logfile, "a")) == NULL) {
       printf("Couldn't open %s for writing\n", cfg_logfile);
       return(1);
     }
@@ -377,6 +386,17 @@ int main(int argc, char *argv[]) {
       }
     } else {
         k = kbd_getkey();
+    }
+
+    /* Drain queued clipboard paste, paced at >= 8ms/byte even when senddelay
+     * is 0, so a paste doesn't overrun the BBS. Only while connected and the
+     * terminal has focus; bytes flow through the same send path as typing. */
+    if (!k && net_connected() && kbd_focus == FOCUS_TERM && clipboard_paste_pending()) {
+      unsigned int pace = cfg_senddelay > 8 ? (unsigned int)cfg_senddelay : 8;
+      if (timer_get_ticks() > lastsend + pace) {
+        int pb = clipboard_paste_byte();
+        if (pb > 0) k = (unsigned char)pb;
+      }
     }
 
     c = -1;
