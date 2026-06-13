@@ -81,11 +81,14 @@ codesign --force -s - "$MACOS/cgedit"
 codesign --force -s - "$MACOS/CGTerm"
 codesign --force -s - "$APP"
 
-echo "[*] Creating tarball..."
+echo "[*] Creating zip..."
 cd "$DIST"
-rm -f cgterm-3.0-macos.tar.gz
-tar czf cgterm-3.0-macos.tar.gz CGTerm.app
+rm -f CGTerm-3.0-macos.zip
+# ditto (not zip/tar) preserves the code signature, symlinks and resource forks
+# of the signed .app — a plain archiver corrupts the signature and the app gets
+# SIGKILLed on launch.
+ditto -c -k --keepParent CGTerm.app CGTerm-3.0-macos.zip
 
 echo ""
-echo "[+] Built: $DIST/cgterm-3.0-macos.tar.gz"
-ls -lh "$DIST/cgterm-3.0-macos.tar.gz"
+echo "[+] Built: $DIST/CGTerm-3.0-macos.zip"
+ls -lh "$DIST/CGTerm-3.0-macos.zip"
