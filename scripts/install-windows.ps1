@@ -2,7 +2,9 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Prefix = if ($env:PREFIX) { $env:PREFIX } else { Join-Path $env:ProgramFiles "CGTerm" }
 $BinDir = Join-Path $Prefix "bin"
-$DataDir = Join-Path $Prefix "share\cgterm\assets"
+# Assets must live where the binary probes (exe_dir\assets); paths.c never
+# looks in share\cgterm\assets on Windows.
+$DataDir = Join-Path $BinDir "assets"
 
 Write-Host ""
 Write-Host " ============================================"
@@ -121,7 +123,11 @@ Copy-Item "$Root\bin\cgedit.exe" $BinDir -Force -ErrorAction SilentlyContinue
 Copy-Item "$Root\assets\*.bmp" $DataDir -Force
 Copy-Item "$Root\assets\*.kbd" $DataDir -Force
 Copy-Item "$Root\assets\*.wav" $DataDir -Force
+Copy-Item "$Root\assets\*.xm" $DataDir -Force -ErrorAction SilentlyContinue
 Copy-Item "$Root\assets\*.txt" $DataDir -Force -ErrorAction SilentlyContinue
+# the font menu needs the fonts\ subdirectory too
+New-Item -ItemType Directory -Force -Path (Join-Path $DataDir "fonts") | Out-Null
+Copy-Item "$Root\assets\fonts\*.bmp" (Join-Path $DataDir "fonts") -Force
 
 Write-Host ""
 Write-Host "[+] Installed binaries to $BinDir"

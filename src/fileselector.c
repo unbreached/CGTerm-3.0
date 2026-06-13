@@ -54,6 +54,7 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
   fs->selectedfile = NULL;
   if (fs->numentries) {
     dir_free(fs->dir);
+    fs->dir = NULL;
     fs->numentries = 0;
   }
   if ((fs->dir = dir_read(path)) == NULL) {
@@ -67,7 +68,10 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
   if (fs->dir->numentries) {
     fs->numentries = fs->dir->numentries;
   } else {
-    free(fs->dir);
+    /* dir_free (not free) — the Dir owns its title/entry allocations; also
+     * NULL it so fs_free() doesn't later double-free this pointer. */
+    dir_free(fs->dir);
+    fs->dir = NULL;
     fs->numentries = 0;
   }
   return(fs->numentries);

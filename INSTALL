@@ -30,8 +30,8 @@
 
 //REQUIREMENTS
 --------------------------------------------------
-- SDL 1.2         (required)
-- SDL_mixer 1.2   (optional, for XM/MOD music)
+- SDL 1.2         (required; sdl12-compat is fine)
+- libopenmpt      (required on macOS/Linux for XM/MOD music)
 - C compiler      (gcc or clang)
 - make
 
@@ -53,8 +53,8 @@ Using the install script (recommended):
 
 Or manually:
 
-    sudo apt install libsdl1.2-dev           # Debian/Ubuntu
-    sudo apt install libsdl-mixer1.2-dev     # optional, for music
+    sudo apt install libsdl1.2-dev           # Debian/Ubuntu (or libsdl1.2-compat-dev)
+    sudo apt install libopenmpt-dev          # for XM/MOD music
     make && sudo make install
 
 Installs to:
@@ -75,12 +75,15 @@ This builds a native .app bundle and installs to /Applications.
 
 Dependencies (Homebrew):
 
-    brew install sdl
+    brew install sdl12-compat libopenmpt
 
-For music support (optional):
+(The old 'sdl' formula was removed from Homebrew;
+sdl12-compat provides the SDL 1.2 API on top of SDL2.
+libopenmpt provides XM/MOD music playback.)
 
-    Download SDL_mixer 1.2.12 source from libsdl.org
-    ./configure && make && make install
+On Apple Silicon, make sure these come from the native
+arm64 Homebrew in /opt/homebrew — see TROUBLESHOOTING
+below if the link step reports undefined arm64 symbols.
 
 The .app bundle is created at:
 
@@ -104,18 +107,17 @@ Output:
 
 //KEYBOARD LAYOUTS
 --------------------------------------------------
-Select a keyboard layout matching your system:
+CGTerm ships a single key map, assets/default.kbd, which
+is loaded automatically. To use a custom map, pass it
+with -k:
 
-    cgterm -k assets/mac-se-c64.kbd
-    cgterm -k assets/mac-us-c64.kbd
-    cgterm -k assets/linux-se-c64.kbd
-    cgterm -k assets/linux-us-c64.kbd
-    cgterm -k assets/win-se-c64.kbd
-    cgterm -k assets/win-us-c64.kbd
+    cgterm -k /path/to/your.kbd
 
 Or set it in your config file (~/.cgtermrc):
 
-    keyboard = mac-us-c64.kbd
+    keyboard = default.kbd
+
+See assets/KEYBOARD-PROFILES.md for the key-map format.
 
 
 //CONFIG FILE
@@ -125,7 +127,7 @@ Windows:      cgterm.cfg (same directory as exe)
 
 Example settings:
 
-    keyboard = mac-us-c64.kbd
+    keyboard = default.kbd
     columns = 40
     zoom = 2
     modem = yes

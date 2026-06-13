@@ -38,8 +38,9 @@ HAVE_SDL_MIXER=0
 if [ ! -f "$SDL_MIXER_DIR/include/SDL_mixer.h" ]; then
     echo "[*] Downloading SDL_mixer 1.2.12 Windows dev files..."
     cd /tmp
+    # optional download — don't let a network failure abort the build (set -e)
     curl -L --connect-timeout 10 --max-time 30 -o SDL_mixer-devel-1.2.12-VC.zip \
-        "https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-devel-1.2.12-VC.zip" 2>/dev/null
+        "https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-devel-1.2.12-VC.zip" 2>/dev/null || true
     if [ -f SDL_mixer-devel-1.2.12-VC.zip ]; then
         unzip -o SDL_mixer-devel-1.2.12-VC.zip >/dev/null 2>&1
         echo "[+] SDL_mixer 1.2.12 downloaded"

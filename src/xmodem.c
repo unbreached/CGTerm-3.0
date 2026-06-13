@@ -122,24 +122,18 @@ static int xmodem_recv_bytes = 0;
 int xmodem_save_data(unsigned char *data, int length) {
   if (data) {
     XMDBG("[XMODEM] save_data buffer incoming length=%d pending=%u\n", length, xmodem_buffer_len);
+    if (length < 0) length = 0;
+    if (length > (int)sizeof(xmodem_buffer)) length = (int)sizeof(xmodem_buffer);
+    /* One-block look-behind: trailing-pad trimming is only correct for the
+     * genuine final block (handled at EOT flush below), so always write the
+     * previously buffered block in full and hold back only the newest block.
+     * (Never overwrite the held block before flushing it — doing so silently
+     * drops a data block whenever the next block is all padding.) */
     if (xmodem_buffer_len) {
-      /* Check if the NEW block is all padding — if so, don't write
-       * the previous block yet. It might be the true last data block
-       * that needs trimming. */
-      int all_pad = 1;
-      int i;
-      for (i = 0; i < length; i++) {
-        if (data[i] != XM_PAD) { all_pad = 0; break; }
+      if (xfer_save_data(xmodem_buffer, xmodem_buffer_len) != (int)xmodem_buffer_len) {
+        XMDBG("[XMODEM] save_data write failed on buffered block len=%u\n", xmodem_buffer_len);
+        return 0;
       }
-      if (!all_pad) {
-        /* New block has real data — safe to write the buffered one */
-        if (xfer_save_data(xmodem_buffer, xmodem_buffer_len) != (int)xmodem_buffer_len) {
-          XMDBG("[XMODEM] save_data write failed on buffered block len=%u\n", xmodem_buffer_len);
-          return 0;
-        }
-      }
-      /* If all_pad, we skip writing the previous block for now —
-       * it will be written (with trim) at final flush */
     }
     memcpy(xmodem_buffer, data, length);
     xmodem_buffer_len = (unsigned int)length;

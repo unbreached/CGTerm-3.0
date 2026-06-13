@@ -281,11 +281,10 @@ static void bm_rewrite_all(void) {
   FILE *cfg;
   char fname[256];
   int i;
-#ifdef WINDOWS
-  snprintf(fname, sizeof(fname), "cgterm-bookmarks.cfg");
-#else
-  snprintf(fname, sizeof(fname), "%s/.cgterm-bookmarks", cfg_homedir);
-#endif
+  /* Use the same resolved path that bookmark add/load use (honors the
+   * bookmarkfile config key) so edit/delete don't silently rewrite a
+   * different file than the one bookmarks are read from. */
+  cfg_resolve_bookmarkfile(fname, sizeof(fname));
   if ((cfg = fopen(fname, "w")) != NULL) {
     for (i = 0; i < cfg_numbookmarks; i++) {
       if (cfg_bookmark_termmode[i] == 1) {

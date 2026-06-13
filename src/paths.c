@@ -187,6 +187,24 @@ int path_init(const char *argv0) {
       return 1;
     }
   }
+  /* installed location from `make install` (e.g. PREFIX/share/cgterm/assets) */
+#ifdef PREFIX
+  if (dir_has_asset(PREFIX "/share/cgterm/assets", "default.kbd")) {
+    snprintf(g_asset_root, sizeof(g_asset_root), PREFIX "/share/cgterm/assets");
+    snprintf(g_system_config_dir, sizeof(g_system_config_dir), "/etc");
+    return 1;
+  }
+#endif
+  if (dir_has_asset("/usr/local/share/cgterm/assets", "default.kbd")) {
+    snprintf(g_asset_root, sizeof(g_asset_root), "/usr/local/share/cgterm/assets");
+    snprintf(g_system_config_dir, sizeof(g_system_config_dir), "/etc");
+    return 1;
+  }
+  if (dir_has_asset("/usr/share/cgterm/assets", "default.kbd")) {
+    snprintf(g_asset_root, sizeof(g_asset_root), "/usr/share/cgterm/assets");
+    snprintf(g_system_config_dir, sizeof(g_system_config_dir), "/etc");
+    return 1;
+  }
   snprintf(g_asset_root, sizeof(g_asset_root), "%s", exe_dir);
   snprintf(g_system_config_dir, sizeof(g_system_config_dir), "%s", exe_dir);
   return 1;

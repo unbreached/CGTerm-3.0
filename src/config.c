@@ -292,7 +292,7 @@ void cfg_sethost(char *h) {
 }
 
 
-void addhost(int num, char *alias, char *hostname, int port) {
+int addhost(int num, char *alias, char *hostname, int port) {
     char *ptr;
     char *chr;
     char _debugMsg[256];
@@ -304,7 +304,7 @@ void addhost(int num, char *alias, char *hostname, int port) {
     cfg_bookmark_host[num] = NULL;
     cfg_bookmark_alias[num] = NULL;
     cfg_bookmark_port[num] = 0;
-    return;
+    return(0);
   }
   strcpy(ptr, hostname);
   if ((chr = strchr(ptr, ','))) {
@@ -318,7 +318,7 @@ void addhost(int num, char *alias, char *hostname, int port) {
     cfg_bookmark_host[num] = NULL;
     cfg_bookmark_alias[num] = NULL;
     cfg_bookmark_port[num] = 0;
-    return;
+    return(0);
   }
   strcpy(ptr, alias);
   if (strlen(alias) > 27) {
@@ -330,6 +330,7 @@ void addhost(int num, char *alias, char *hostname, int port) {
   cfg_bookmark_alias[num] = ptr;
 
   cfg_bookmark_port[num] = port;
+  return(1);
 }
 
 
@@ -371,7 +372,10 @@ int addbookmark(char *line) {
     return(0);
   }
 
-  addhost(cfg_numbookmarks, alias, hostname, port);
+  if (!addhost(cfg_numbookmarks, alias, hostname, port)) {
+    /* allocation failed — don't register a NULL bookmark slot */
+    return(0);
+  }
 
   /* Check for optional mode field: "bookmark = alias, host, port, ansi" */
   cfg_bookmark_termmode[cfg_numbookmarks] = 0;  /* default: PETSCII */
@@ -609,7 +613,10 @@ signed int cfg_readconfig(char *configfile) {
 
     } else {
 
-      if (!sscanf(linebuf, "%s", linebuf)) {
+      /* parse into a separate buffer — sscanf with overlapping source and
+       * destination (linebuf into linebuf) is undefined behaviour */
+      char tok[256];
+      if (sscanf(linebuf, "%255s", tok) == 0) {
 	printf("Syntax error in %s line %d\n", configfile, line + 1);
 	fclose(cfg);
 	return(-1);
@@ -659,7 +666,7 @@ static void cfg_get_config_path(char *out, size_t outsz) {
 /* Save a single setting to the config file.
  * If the key already exists, update it in place.
  * If not, append it at the end. */
-void cfg_save_setting(const char *key, const char *value) {
+int cfg_save_setting(const char *key, const char *value) {
   char fname[512];
   char tmpname[512];
   char linebuf[1024];
@@ -672,7 +679,10 @@ void cfg_save_setting(const char *key, const char *value) {
 
   in = fopen(fname, "r");
   out = fopen(tmpname, "w");
-  if (!out) return;
+  if (!out) {
+    if (in) fclose(in);   /* don't leak the input handle when temp open fails */
+    return(0);
+  }
 
   if (in) {
     while (fgets(linebuf, sizeof(linebuf), in)) {
@@ -701,7 +711,11 @@ void cfg_save_setting(const char *key, const char *value) {
 
   /* Replace original with temp */
   remove(fname);
-  rename(tmpname, fname);
+  if (rename(tmpname, fname) != 0) {
+    remove(tmpname);   /* clean up the temp file if the replace failed */
+    return(0);
+  }
+  return(1);
 }
 
 
@@ -718,7 +732,7 @@ void cfg_debug(const char *s){
 }
 
 
-static void cfg_resolve_bookmarkfile(char *resolved, size_t size) {
+void cfg_resolve_bookmarkfile(char *resolved, size_t size) {
   if (cfg_bookmarkfile[0] == '~') {
 #ifdef WINDOWS
     if (cfg_bookmarkfile[1] == '/' || cfg_bookmarkfile[1] == '\\') {

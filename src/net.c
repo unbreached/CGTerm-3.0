@@ -19,6 +19,7 @@
 #include "net.h"
 #include "config.h"
 #include "gfx.h"
+#include "ansi.h"
 
 #if defined(__WIN32__) || defined(WINDOWS)
 /* Windows */
@@ -48,6 +49,23 @@ unsigned char *bufptr;
 signed int buflen;
 
 void (*net_status)(int, char *);
+
+/* Persistent Telnet IAC parser state, so an IAC sequence split across
+ * recv() boundaries resumes correctly on the next net_receive() call
+ * instead of desynchronising and leaking the command byte as data. */
+enum { TN_DATA = 0, TN_IAC, TN_OPT, TN_SB_OPT, TN_SB_DATA };
+static int tn_state = TN_DATA;
+static int tn_cmd = 0;          /* WILL/WONT/DO/DONT while in TN_OPT */
+static int tn_sb_opt = 0;       /* subnegotiation option while in TN_SB_* */
+static int tn_sb_prev = 0;      /* previous byte, for detecting IAC SE */
+static int tn_sb_iter = 0;      /* subnegotiation byte counter (abuse cap) */
+static int net_telnet_seen = 0; /* peer speaks Telnet -> escape outgoing 0xFF */
+
+static void net_reset_telnet(void) {
+  tn_state = TN_DATA;
+  tn_cmd = tn_sb_opt = tn_sb_prev = tn_sb_iter = 0;
+  net_telnet_seen = 0;
+}
 
 
 int net_connect(const char *host, int port, void (*status)(int, char *)) {
@@ -83,17 +101,11 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
   address.sin_family = AF_INET;
   address.sin_port = htons(port);
 
-  /* DNS resolution with Windows compatibility */
-  if (isdigit((int) host[strlen(host) - 1])) {
-    /* Direct IP address */
-    address.sin_addr.s_addr = inet_addr(host);
-    if (address.sin_addr.s_addr == INADDR_NONE) {
-      if (net_status) net_status(2, "Invalid IP address");
-      CLOSESOCKET(conn);
-      conn = INVALID_SOCKET;
-      return(1);
-    }
-  } else {
+  /* Treat host as a literal IPv4 address if it parses as one; otherwise
+   * resolve it as a name. Don't decide from the trailing character — real
+   * hostnames can legitimately end in a digit (e.g. "c64node1"). */
+  address.sin_addr.s_addr = inet_addr(host);
+  if (address.sin_addr.s_addr == INADDR_NONE) {
     /* Hostname resolution with Windows compatibility */
 #ifdef WINDOWS
     /* Use traditional gethostbyname on Windows for MinGW compatibility */
@@ -140,6 +152,8 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
 
   buflen = 0;
   bufptr = buffer;
+  net_reset_telnet();
+  ansi_reset();   /* fresh escape-parser state for the new session */
 
   if (net_status) net_status(0, "Connecting...");
 
@@ -263,46 +277,51 @@ signed int net_receive(void) {
   signed int c;
 
   for (;;) {
-    c = net_raw_byte();
-    if (c < 0) return c;
+    switch (tn_state) {
 
-    if (c != 0xFF) return c;
-
-    /* IAC detected */
-    c = net_raw_byte();
-    if (c < 0) return c;
-
-    if (c == 0xFF) {
-      /* Escaped 0xFF literal */
-      return 0xFF;
-    } else if (c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) {
-      /* WILL(FB) / WONT(FC) / DO(FD) / DONT(FE): consume the option byte */
-      int cmd = c;
+    case TN_DATA:
       c = net_raw_byte();
       if (c < 0) return c;
-      /* Respond to Telnet negotiation */
-      if (cmd == 0xFD) {
+      if (c != 0xFF) return c;
+      net_telnet_seen = 1;   /* peer speaks Telnet */
+      tn_state = TN_IAC;
+      break;
+
+    case TN_IAC:
+      c = net_raw_byte();
+      if (c < 0) return c;    /* resume in TN_IAC on the next call */
+      if (c == 0xFF) {
+        tn_state = TN_DATA;
+        return 0xFF;          /* escaped 0xFF literal */
+      } else if (c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) {
+        tn_cmd = c;            /* WILL / WONT / DO / DONT */
+        tn_state = TN_OPT;
+      } else if (c == 0xFA) {
+        tn_state = TN_SB_OPT; /* subnegotiation */
+      } else {
+        tn_state = TN_DATA;   /* two-byte command with no option — discard */
+      }
+      break;
+
+    case TN_OPT:
+      c = net_raw_byte();
+      if (c < 0) return c;
+      if (tn_cmd == 0xFD) {
         /* DO — server asks us to enable an option */
         unsigned char response[3] = {0xFF, 0xFC, (unsigned char)c}; /* WONT by default */
-        if (c == 0x18) {
-          /* Terminal Type — we support this */
-          response[1] = 0xFB; /* WILL */
-        } else if (c == 0x1F) {
-          /* NAWS (Negotiate About Window Size) — we support this */
-          response[1] = 0xFB; /* WILL */
-        } else if (c == 0x00) {
-          /* Binary transmission */
+        if (c == 0x18 || c == 0x1F || c == 0x00) {
+          /* Terminal Type / NAWS / Binary — we support these */
           response[1] = 0xFB; /* WILL */
         }
         send(conn, (const char *)response, 3, 0);
-        /* Send window size if NAWS was agreed */
         if (c == 0x1F) {
+          /* Send window size now that NAWS was agreed */
           unsigned char naws[9] = {0xFF, 0xFA, 0x1F,
             0, (unsigned char)cfg_columns, 0, (unsigned char)cfg_rows,
             0xFF, 0xF0};
           send(conn, (const char *)naws, 9, 0);
         }
-      } else if (cmd == 0xFB) {
+      } else if (tn_cmd == 0xFB) {
         /* WILL — server offers an option, respond with DO or DONT */
         unsigned char response[3] = {0xFF, 0xFE, (unsigned char)c}; /* DONT by default */
         if (c == 0x01 || c == 0x03) {
@@ -311,52 +330,70 @@ signed int net_receive(void) {
         }
         send(conn, (const char *)response, 3, 0);
       }
-      /* WONT(FC) and DONT(FE) — just acknowledge silently */
-    } else if (c == 0xFA) {
-      /* SB: subnegotiation */
-      int sb_opt = net_raw_byte();
-      if (sb_opt < 0) return sb_opt;
-      /* Consume until IAC SE (0xFF 0xF0). Cap iterations so a peer can't
-       * pin us in this loop forever with an unterminated subnegotiation. */
-      {
-        int prev = 0;
-        int sb_iter;
-        for (sb_iter = 0; sb_iter < 4096; sb_iter++) {
-          c = net_raw_byte();
-          if (c < 0) return c;
-          if (prev == 0xFF && c == 0xF0) break;
-          prev = c;
+      /* WONT(FC) and DONT(FE) — acknowledge silently */
+      tn_state = TN_DATA;
+      break;
+
+    case TN_SB_OPT:
+      c = net_raw_byte();
+      if (c < 0) return c;
+      tn_sb_opt = c;
+      tn_sb_prev = 0;
+      tn_sb_iter = 0;
+      tn_state = TN_SB_DATA;
+      break;
+
+    case TN_SB_DATA:
+      /* Consume subnegotiation bytes until IAC SE (0xFF 0xF0). */
+      c = net_raw_byte();
+      if (c < 0) return c;
+      if (tn_sb_prev == 0xFF && c == 0xF0) {
+        /* Respond to Terminal Type request (option 24, SEND=1) */
+        if (tn_sb_opt == 0x18) {
+          /* CBM identifies us as a C64 client in PETSCII mode; ANSI otherwise */
+          const char *ttype = cfg_termmode == 1 ? "ANSI" : "CBM";
+          unsigned char resp[64];
+          int len = 0, ti;
+          resp[len++] = 0xFF; /* IAC */
+          resp[len++] = 0xFA; /* SB */
+          resp[len++] = 0x18; /* Terminal Type */
+          resp[len++] = 0x00; /* IS */
+          for (ti = 0; ttype[ti] && len < 58; ti++)
+            resp[len++] = ttype[ti];
+          resp[len++] = 0xFF; /* IAC */
+          resp[len++] = 0xF0; /* SE */
+          send(conn, (const char *)resp, len, 0);
         }
-        if (sb_iter >= 4096) {
-          /* Treat as protocol abuse: drop the connection. */
+        tn_state = TN_DATA;
+      } else {
+        tn_sb_prev = c;
+        if (++tn_sb_iter >= 4096) {
+          /* Unterminated subnegotiation — treat as protocol abuse. */
           net_disconnect();
           return -2;
         }
       }
-      /* Respond to Terminal Type request (option 24, SEND=1) */
-      if (sb_opt == 0x18) {
-        const char *ttype = cfg_termmode == 1 ? "ANSI" : "ANSI";
-        unsigned char resp[64];
-        int len = 0, ti;
-        resp[len++] = 0xFF; /* IAC */
-        resp[len++] = 0xFA; /* SB */
-        resp[len++] = 0x18; /* Terminal Type */
-        resp[len++] = 0x00; /* IS */
-        for (ti = 0; ttype[ti] && len < 58; ti++)
-          resp[len++] = ttype[ti];
-        resp[len++] = 0xFF; /* IAC */
-        resp[len++] = 0xF0; /* SE */
-        send(conn, (const char *)resp, len, 0);
-      }
+      break;
+
+    default:
+      tn_state = TN_DATA;
+      break;
     }
-    /* Otherwise discard the two bytes (IAC + command) and loop */
   }
 }
 
 
 void net_send(unsigned char c) {
   if (ISCONNECTED()) {
-    send(conn, (const char *)&c, 1, 0);
+    if (c == 0xFF && net_telnet_seen) {
+      /* On a Telnet connection a literal 0xFF data byte must be doubled,
+       * otherwise the server interprets it as IAC and corrupts the stream
+       * (PETSCII pi, and 0xFF inside Punter/XMODEM upload blocks). */
+      unsigned char esc[2] = {0xFF, 0xFF};
+      send(conn, (const char *)esc, 2, 0);
+    } else {
+      send(conn, (const char *)&c, 1, 0);
+    }
   }
 }
 
@@ -373,6 +410,7 @@ void net_disconnect(void) {
     CLOSESOCKET(conn);
     conn = INVALID_SOCKET;
     buflen = 0;
+    net_reset_telnet();
     cfg_connect_name[0] = 0;
     gfx_set_title("CGTerm [DISCONNECTED]");
   }

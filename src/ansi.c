@@ -60,6 +60,20 @@ static unsigned char color256_to_16[256];
  * IS the screencode. This includes box-drawing chars (0xB0-0xDF). */
 
 
+/* Reset only the escape-sequence parser state (not colors/cursor/font), so a
+ * sequence left dangling by one BBS — or a scroll region / private mode it set
+ * — cannot carry into the next connection. Called at the start of every
+ * connection from net_connect(). */
+void ansi_reset(void) {
+  state = ANSI_NORMAL;
+  param_count = 0;
+  current_param = 0;
+  private_mode = 0;
+  scroll_top = 0;
+  scroll_bottom = cfg_rows - 1;
+}
+
+
 void ansi_init(void) {
   state = ANSI_NORMAL;
   param_count = 0;
@@ -285,25 +299,24 @@ static void ansi_dispatch(unsigned char cmd) {
     break;
 
   case 'L':  /* Insert lines */
+    /* Per VT spec IL is a no-op when the cursor is outside the scroll region */
+    if (gfx_cursy < scroll_top || gfx_cursy > scroll_bottom) break;
     /* Scroll down from cursor, inserting blank lines */
     for (i = 0; i < n; i++) {
       int y;
       for (y = scroll_bottom; y > gfx_cursy; y--) {
-        gfx_copy_line(
-          gfx_0400 + (y-1) * cfg_columns,
-          gfx_d800 + (y-1) * cfg_columns, y);
+        gfx_scroll_line(y - 1, y);
       }
       gfx_clear_line(gfx_cursy, gfx_get_fgcolor());
     }
     break;
 
   case 'M':  /* Delete lines */
+    if (gfx_cursy < scroll_top || gfx_cursy > scroll_bottom) break;
     for (i = 0; i < n; i++) {
       int y;
       for (y = gfx_cursy; y < scroll_bottom; y++) {
-        gfx_copy_line(
-          gfx_0400 + (y+1) * cfg_columns,
-          gfx_d800 + (y+1) * cfg_columns, y);
+        gfx_scroll_line(y + 1, y);
       }
       gfx_clear_line(scroll_bottom, gfx_get_fgcolor());
     }
@@ -318,9 +331,7 @@ static void ansi_dispatch(unsigned char cmd) {
     for (i = 0; i < n; i++) {
       int y;
       for (y = scroll_bottom; y > scroll_top; y--) {
-        gfx_copy_line(
-          gfx_0400 + (y-1) * cfg_columns,
-          gfx_d800 + (y-1) * cfg_columns, y);
+        gfx_scroll_line(y - 1, y);
       }
       gfx_clear_line(scroll_top, gfx_get_fgcolor());
     }

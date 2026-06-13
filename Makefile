@@ -30,8 +30,31 @@ else
   $(info [*] SDL_mixer not found — music support disabled (optional))
 endif
 
-CFLAGS ?= -O2 -Wall $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -I$(SRCDIR) $(SDL_MIXER_CFLAGS) -I/opt/homebrew/include
-LDFLAGS ?= $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib -lopenmpt -lm
+# User-overridable optimization/warning flags.
+CFLAGS ?= -O2 -Wall
+LDFLAGS ?=
+
+# Security hardening for this network-facing parser (native builds). Disable
+# with `make HARDEN_CFLAGS= HARDEN_LDFLAGS=` if your toolchain lacks support.
+UNAME_S := $(shell uname -s)
+HARDEN_CFLAGS ?= -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
+# macOS links PIE by default and warns on an explicit -pie; only pass it on Linux.
+ifeq ($(UNAME_S),Darwin)
+HARDEN_LDFLAGS ?=
+else
+HARDEN_LDFLAGS ?= -pie
+endif
+
+# Mandatory flags — always applied even when CFLAGS/LDFLAGS are overridden in the
+# environment, otherwise the include path, -DPREFIX and the SDL/openmpt libs
+# would be silently dropped and the build would break.
+REQUIRED_CFLAGS := $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -I$(SRCDIR) $(SDL_MIXER_CFLAGS) -I/opt/homebrew/include
+REQUIRED_LDFLAGS := $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib -lopenmpt -lm
+
+# -MMD -MP emit per-object .d header-dependency files (see -include below) so a
+# changed .h triggers a rebuild of the objects that use it.
+ALL_CFLAGS := $(CFLAGS) $(HARDEN_CFLAGS) $(REQUIRED_CFLAGS) -MMD -MP
+ALL_LDFLAGS := $(HARDEN_LDFLAGS) $(LDFLAGS) $(REQUIRED_LDFLAGS)
 
 COMMON_SRCS := \
 	kernal.c \
@@ -103,10 +126,13 @@ $(BIN_LOCAL_DIR):
 	$(MKDIR_P) $(BIN_LOCAL_DIR)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+# pull in auto-generated header dependencies (.d files from -MMD)
+-include $(wildcard $(OBJDIR)/*.d)
 
 $(BIN_LOCAL_DIR)/cgterm$(EXESUFFIX): $(OBJDIR)/cgterm.o $(COMMON_OBJS) $(TERM_OBJS) | $(BIN_LOCAL_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(ALL_LDFLAGS)
 ifeq ($(HAVE_SDL_MIXER),1)
 	@# macOS: copy libmikmod next to binary (dlopen can't find it otherwise due to SIP)
 	@case "$$(uname)" in Darwin) \
@@ -116,13 +142,13 @@ ifeq ($(HAVE_SDL_MIXER),1)
 endif
 
 $(BIN_LOCAL_DIR)/cgchat$(EXESUFFIX): $(OBJDIR)/cgchat.o $(COMMON_OBJS) $(CHAT_OBJS) | $(BIN_LOCAL_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(ALL_LDFLAGS)
 
 $(BIN_LOCAL_DIR)/cgedit$(EXESUFFIX): $(OBJDIR)/cgedit.o $(COMMON_OBJS) $(EDIT_OBJS) | $(BIN_LOCAL_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(ALL_LDFLAGS)
 
 $(BIN_LOCAL_DIR)/testkbd$(EXESUFFIX): $(OBJDIR)/testkbd.o | $(BIN_LOCAL_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(ALL_LDFLAGS)
 
 assets:
 	@echo "Assets live in $(ASSETDIR)"

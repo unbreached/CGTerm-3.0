@@ -37,7 +37,7 @@ echo "[+] Xcode Command Line Tools found (clang, make, ld)"
 if ! command -v brew >/dev/null 2>&1; then
     echo "[!] Homebrew not found"
     echo "    Install from: https://brew.sh"
-    echo "    Then run: brew install sdl"
+    echo "    Then run: brew install sdl12-compat"
     exit 1
 fi
 echo "[+] Homebrew found"
@@ -49,18 +49,20 @@ if command -v sdl-config >/dev/null 2>&1; then
         echo "[+] SDL $SDL_VERSION found"
     else
         echo "[!] SDL version $SDL_VERSION found, but CGTerm needs SDL 1.2"
-        echo "    Install with: brew install sdl"
+        echo "    Install with: brew install sdl12-compat"
         exit 1
     fi
 else
     echo "[!] SDL 1.2 not found"
     echo "[*] Attempting to install SDL 1.2 via Homebrew..."
-    if brew install sdl 2>/dev/null; then
-        echo "[+] SDL 1.2 installed"
+    if brew install sdl12-compat 2>/dev/null; then
+        echo "[+] SDL 1.2 (sdl12-compat) installed"
     else
         echo "[*] Homebrew install failed, downloading SDL 1.2 from source..."
-        SDL_BUILD_DIR="/tmp/SDL-1.2-build"
-        mkdir -p "$SDL_BUILD_DIR"
+        # Private build dir (mode 0700) instead of a predictable /tmp path that
+        # an attacker could pre-create or tamper with before 'sudo make install'.
+        SDL_SHA256="d8215b571a581be1332d2106f8036fcb03d12a70bae01e20f424976d275432bc"
+        SDL_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cgterm-sdl.XXXXXX")" || { echo "[!] mktemp failed"; exit 1; }
         cd "$SDL_BUILD_DIR"
         if command -v wget >/dev/null 2>&1; then
             wget -q "https://www.libsdl.org/release/SDL-1.2.15.tar.gz" -O SDL-1.2.15.tar.gz
@@ -68,6 +70,13 @@ else
             curl -sL "https://www.libsdl.org/release/SDL-1.2.15.tar.gz" -o SDL-1.2.15.tar.gz
         else
             echo "[!] Neither wget nor curl found, cannot download SDL"
+            exit 1
+        fi
+        # Verify integrity before extracting and building as root.
+        if echo "${SDL_SHA256}  SDL-1.2.15.tar.gz" | shasum -a 256 -c - ; then
+            :
+        else
+            echo "[!] SDL checksum mismatch — aborting"
             exit 1
         fi
         tar xzf SDL-1.2.15.tar.gz

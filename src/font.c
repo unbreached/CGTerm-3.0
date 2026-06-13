@@ -84,6 +84,7 @@ Font *font_load_font(const char *filename, int charw, int charh, int fontw, int 
 
 
 void font_free(Font *font) {
+  if (font == NULL) return;
   SDL_FreeSurface(font->surface);
   free(font);
 }
@@ -259,6 +260,9 @@ void font_draw_char_color_fscale(int ch_code, int x, int y,
 
       if (dstx < 0 || dstx >= dst->w) continue;
       if (src_x >= cw) src_x = cw - 1;
+      /* clamp against the actual source width — a font with fewer than 256
+       * glyphs makes sx_base run past the surface (match the other renderers) */
+      if (sx_base + src_x < 0 || sx_base + src_x >= src->w) continue;
 
       pixel = ((Uint8 *)src->pixels)[src_y * src->pitch + sx_base + src_x];
       if (pixel != 0) {

@@ -89,14 +89,28 @@ else
             ;;
         *)
             echo "[*] Unknown package manager, downloading SDL from source..."
-            SDL_BUILD="/tmp/SDL-1.2-build"
-            mkdir -p "$SDL_BUILD" && cd "$SDL_BUILD"
+            # Private build dir (mode 0700) — never a predictable /tmp path an
+            # attacker could pre-create or tamper with before 'sudo make install'.
+            SDL_SHA256="d8215b571a581be1332d2106f8036fcb03d12a70bae01e20f424976d275432bc"
+            SDL_BUILD="$(mktemp -d "${TMPDIR:-/tmp}/cgterm-sdl.XXXXXX")" || { echo "[!] mktemp failed"; exit 1; }
+            cd "$SDL_BUILD"
             if command -v wget >/dev/null 2>&1; then
                 wget -q "https://www.libsdl.org/release/SDL-1.2.15.tar.gz" -O SDL-1.2.15.tar.gz
             elif command -v curl >/dev/null 2>&1; then
                 curl -sL "https://www.libsdl.org/release/SDL-1.2.15.tar.gz" -o SDL-1.2.15.tar.gz
             else
                 echo "[!] Neither wget nor curl found, cannot download SDL"
+                exit 1
+            fi
+            # Verify integrity before extracting and building as root.
+            if command -v sha256sum >/dev/null 2>&1; then
+                echo "${SDL_SHA256}  SDL-1.2.15.tar.gz" | sha256sum -c - \
+                    || { echo "[!] SDL checksum mismatch — aborting"; exit 1; }
+            elif command -v shasum >/dev/null 2>&1; then
+                echo "${SDL_SHA256}  SDL-1.2.15.tar.gz" | shasum -a 256 -c - \
+                    || { echo "[!] SDL checksum mismatch — aborting"; exit 1; }
+            else
+                echo "[!] No sha256 tool available to verify the SDL download — aborting"
                 exit 1
             fi
             tar xzf SDL-1.2.15.tar.gz && cd SDL-1.2.15
@@ -143,12 +157,21 @@ if ! make -C "$ROOT_DIR" clean all; then
     exit 1
 fi
 
-# Determine if we need sudo
+# Determine if we need sudo. Test the nearest EXISTING ancestor's writability
+# (dirname alone fails for not-yet-created trees like $HOME/.local, which would
+# otherwise force sudo for an unprivileged --prefix=$HOME/.local install).
 NEED_ROOT=0
 SUDO=""
+ancestor_writable() {
+    local d="$1"
+    while [[ ! -e "$d" && "$d" != "/" ]]; do d="$(dirname "$d")"; done
+    [[ -w "$d" ]]
+}
 if [[ -n "$DESTDIR" ]]; then
     NEED_ROOT=0
-elif [[ ! -w "$(dirname "$BINDIR")" ]] || [[ ! -w "$(dirname "$DATADIR")" ]]; then
+elif ancestor_writable "$BINDIR" && ancestor_writable "$DATADIR"; then
+    NEED_ROOT=0
+else
     NEED_ROOT=1
 fi
 
