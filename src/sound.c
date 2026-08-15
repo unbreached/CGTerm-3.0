@@ -114,6 +114,9 @@ void sound_play_sample(int sample) {
     sfx_play_hook(sample);
     return;
   }
+  if (sample < 0 || sample >= MAXSAMPLES) {
+    return;   /* guard sound_buffer[]/sound_length[] indexing */
+  }
   if (sound_initok) {
     if (sound_buffer[sample] && !sound_control.playing) {
       SDL_LockAudio();

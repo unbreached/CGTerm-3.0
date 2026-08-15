@@ -100,6 +100,12 @@ SDL_Surface *gfx_createfont_pal(SDL_Surface *srcsurface, int zoom, SDL_Color *pa
   int c, x, y, z1, z2, col, hzoom;
   Uint32 fg, bg;
 
+  /* The glyph reader assumes a 256-char, 32-col, 8x8 source (min 256x64).
+   * A corrupt/undersized BMP would otherwise be read far out of bounds. */
+  if (srcsurface == NULL || srcsurface->w < 256 || srcsurface->h < 64) {
+    return(NULL);
+  }
+
   if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256 * charwidth, 16 * charheight, 8, 0, 0, 0, 0)) == NULL) {
     return(NULL);
   }
@@ -153,6 +159,11 @@ SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *p
   int c, x, y, z2, col, hzoom;
   Uint32 fg, keycol;
   int src_char_h = 16;  /* source is 8x16 */
+
+  /* Reader assumes a 256-char, 32-col, 8x16 source (min 256x128). */
+  if (srcsurface == NULL || srcsurface->w < 256 || srcsurface->h < 128) {
+    return(NULL);
+  }
 
   if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE, 256 * charwidth, 16 * charheight, 8, 0, 0, 0, 0)) == NULL) {
     return(NULL);

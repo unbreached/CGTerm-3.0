@@ -211,11 +211,14 @@ static int load_xm_file(const char *filename) {
   long file_size;
   unsigned char *file_data;
 
-  /* Clean up any existing module */
+  /* Clean up any existing module. Hold the audio lock so the SDL callback
+   * thread (music_audio_callback) can never observe a freed xm_module. */
   if (xm_module) {
+    SDL_LockAudio();
+    xm_loaded = 0;
     openmpt_module_destroy(xm_module);
     xm_module = NULL;
-    xm_loaded = 0;
+    SDL_UnlockAudio();
   }
 
   /* Open and read the XM file */
@@ -252,18 +255,23 @@ static int load_xm_file(const char *filename) {
   }
   fclose(file);
 
-  /* Create OpenMPT module */
-  xm_module = openmpt_module_create_from_memory2(file_data, file_size,
-                                                 NULL, NULL, NULL, NULL,
-                                                 NULL, NULL, NULL);
-  free(file_data);
+  /* Create OpenMPT module, then publish it to the callback atomically. */
+  {
+    openmpt_module *mod = openmpt_module_create_from_memory2(file_data, file_size,
+                                                   NULL, NULL, NULL, NULL,
+                                                   NULL, NULL, NULL);
+    free(file_data);
 
-  if (!xm_module) {
-    printf("[!] Failed to load XM module: %s\n", filename);
-    return 0;
+    if (!mod) {
+      printf("[!] Failed to load XM module: %s\n", filename);
+      return 0;
+    }
+
+    SDL_LockAudio();
+    xm_module = mod;
+    xm_loaded = 1;
+    SDL_UnlockAudio();
   }
-
-  xm_loaded = 1;
   printf("[+] Loaded XM module: %s\n", filename);
   printf("[+] Title: %s\n", openmpt_module_get_metadata(xm_module, "title"));
   return 1;
