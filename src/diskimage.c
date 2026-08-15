@@ -1133,7 +1133,14 @@ void di_close(ImageFile *imgfile) {
 	  imgfile->ts = imgfile->nextts;
 	  p = get_ts_addr(imgfile->diskimage, imgfile->ts);
 	  p[0] = 0;
-	  p[1] = 0xff;
+	  /* Last block: the link "sector" byte encodes the number of used data
+	   * bytes as (used + 1) — this is how di_read reconstructs the final
+	   * block length (buflen = sector - 1). It was hardcoded to 0xff, which
+	   * reported 254 bytes for every last block, so any file whose size is
+	   * not a multiple of 254 read back too long with the unwritten tail of
+	   * the scratch buffer (uninitialized heap) appended. */
+	  p[1] = (unsigned char)(imgfile->bufptr + 1);
+	  memset(imgfile->buffer + imgfile->bufptr, 0, 254 - imgfile->bufptr);
 	  memcpy(p + 2, imgfile->buffer, 254);
 	  imgfile->bufptr = 0;
 	  if (++(imgfile->rawdirentry->sizelo) == 0) {
@@ -1418,7 +1425,7 @@ unsigned char *di_name_to_rawname(char *name) {
         return(NULL);
     }
     memset(rawname, 0xa0, 16);
-    for (i = 0; name[i]; ++i) {
+    for (i = 0; i < 16 && name[i]; ++i) {
         rawname[i] = name[i];
     }
     return(rawname);
