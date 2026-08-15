@@ -744,7 +744,7 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
     dbg("D64-EXTRACT: FAILED to create temp file '%s'\n", dest);
     di_close(imgfile);
     di_free_image(di);
-    return(-1);
+    return(0);   /* callers test truthiness; -1 would read as success */
   }
 
   while ((l = (int)di_read(imgfile, buffer, 4096))) {
@@ -1206,6 +1206,11 @@ void xfer_send_multipunter(FileSelector *fs) {
       de = de->next;
       continue;
     }
+    if (!de->name) {
+      /* make_name() returns NULL on OOM — skip rather than pass NULL to %s */
+      de = de->next;
+      continue;
+    }
 
     /* Determine if we're sending from a disk image or filesystem */
     deletetmp = 0;
@@ -1237,9 +1242,18 @@ void xfer_send_multipunter(FileSelector *fs) {
         dbg("MP-SEND: announcing '%s' as C64 name '%s' (%d/%d) from_image=%d\n",
             de->name, c64name, filecount + 1, total_tagged, from_image);
         xfer_send_byte(0x09);
+        /* Strip control/reserved bytes from the announced name: 0x09 is the
+         * field delimiter and 0x0D/0x0A/0x00 terminate the name on the BBS
+         * side, so any such byte in a (legal) PETSCII D64 filename would
+         * truncate or split the name. Mirror the receive-side sanitizer,
+         * which drops every byte < 0x20. Printable/high PETSCII is preserved. */
         s = c64name;
         while (*s) {
-          xfer_send_byte(*s++);
+          unsigned char ch = (unsigned char)*s++;
+          if (ch < 0x20) {
+            continue;
+          }
+          xfer_send_byte(ch);
         }
       }
       xfer_send_byte('\r');

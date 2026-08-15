@@ -12,6 +12,28 @@
 static int filesperpage = 23;  /* default, recalculated in fs_new */
 
 
+/* Render a raw-PETSCII disk-image filename into a printable ASCII string for
+ * the selector. The selector draws with a Latin UI font, so a PETSCII graphics
+ * or control byte would otherwise be drawn as an unrelated letter (e.g. 0x72
+ * shows as 'r' although on the C64/BBS it is a graphics glyph). Map anything
+ * outside the ASCII-compatible PETSCII range (0x20-0x5F: space, digits,
+ * punctuation, A-Z, []^_) to '.', so the browser shows an honest approximation
+ * of what the board shows instead of a misleading character. Assumes the
+ * common uppercase/graphics filename mode. Only for disk-image (PETSCII) names;
+ * host-filesystem names are left untouched. */
+static void fs_petscii_name_to_display(const char *src, char *dst, size_t dstsz) {
+  size_t i = 0;
+  if (dstsz == 0) {
+    return;
+  }
+  for (; src[i] && i + 1 < dstsz; ++i) {
+    unsigned char c = (unsigned char)src[i];
+    dst[i] = (c >= 0x20 && c <= 0x5f) ? (char)c : '.';
+  }
+  dst[i] = 0;
+}
+
+
 /* Initialize an empty file selector */
 FileSelector *fs_new(const char *title, const char *path) {
   FileSelector *fs;
@@ -103,10 +125,14 @@ void fs_draw_name(FileSelector *fs, int entry, int line, int selected) {
     de = de->next;
   }
   etype = fs_entry_type(de);
-  if (de->tagged) {
-    snprintf(display, sizeof(display), "*%.29s", de->name);
-  } else {
-    snprintf(display, sizeof(display), " %.29s", de->name);
+  {
+    const char *nm = de->name;
+    char dn[64];
+    if (fs->dir && fs->dir->blocksfree >= 0 && de->name && etype != 3) {
+      fs_petscii_name_to_display(de->name, dn, sizeof(dn));
+      nm = dn;
+    }
+    snprintf(display, sizeof(display), "%c%.29s", de->tagged ? '*' : ' ', nm);
   }
   menu_fs_draw_line(line, display, selected || de->tagged, etype, de->size);
 }
@@ -156,10 +182,14 @@ void fs_draw(FileSelector *fs) {
     l = 0;
     while (de && l < fs->filesperpage) {
       int etype = fs_entry_type(de);
-      if (de->tagged) {
-        snprintf(display, sizeof(display), "*%.29s", de->name);
-      } else {
-        snprintf(display, sizeof(display), " %.29s", de->name);
+      {
+        const char *nm = de->name;
+        char dn[64];
+        if (fs->dir && fs->dir->blocksfree >= 0 && de->name && etype != 3) {
+          fs_petscii_name_to_display(de->name, dn, sizeof(dn));
+          nm = dn;
+        }
+        snprintf(display, sizeof(display), "%c%.29s", de->tagged ? '*' : ' ', nm);
       }
       menu_fs_draw_line(l, display, (l == fs->current), etype, de->size);
       de = de->next;
