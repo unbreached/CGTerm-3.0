@@ -325,15 +325,21 @@ void bm_add_port(char *portstr) {
     /* Editing existing bookmark */
     if (cfg_bookmark_alias[bm_edit_index]) free(cfg_bookmark_alias[bm_edit_index]);
     if (cfg_bookmark_host[bm_edit_index]) free(cfg_bookmark_host[bm_edit_index]);
-    addhost(bm_edit_index, bm_new_alias, bm_new_host, port);
-    bm_rewrite_all();
-    bm_edit_index = -1;
-    menu_draw_message("Bookmark updated!");
+    if (addhost(bm_edit_index, bm_new_alias, bm_new_host, port)) {
+      bm_rewrite_all();
+      bm_edit_index = -1;
+      menu_draw_message("Bookmark updated!");
+    } else {
+      menu_draw_message("Out of memory!");
+    }
   } else if (cfg_numbookmarks < 40) {
-    addhost(cfg_numbookmarks, bm_new_alias, bm_new_host, port);
-    ++cfg_numbookmarks;
-    cfg_save_bookmark(bm_new_alias, bm_new_host, port);
-    menu_draw_message("Bookmark added!");
+    if (addhost(cfg_numbookmarks, bm_new_alias, bm_new_host, port)) {
+      ++cfg_numbookmarks;
+      cfg_save_bookmark(bm_new_alias, bm_new_host, port);
+      menu_draw_message("Bookmark added!");
+    } else {
+      menu_draw_message("Out of memory!");
+    }
   } else {
     menu_draw_message("Bookmark list full!");
   }
@@ -446,10 +452,11 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
         int port = atoi(pt);
         if (port <= 0 || port > 65535) port = 6400;
         if (nm[0] && ht[0] && cfg_numbookmarks < 40) {
-          addhost(cfg_numbookmarks, nm, ht, port);
-          cfg_bookmark_termmode[cfg_numbookmarks] = bm_mode;
-          ++cfg_numbookmarks;
-          cfg_save_bookmark(nm, ht, port);
+          if (addhost(cfg_numbookmarks, nm, ht, port)) {
+            cfg_bookmark_termmode[cfg_numbookmarks] = bm_mode;
+            ++cfg_numbookmarks;
+            cfg_save_bookmark(nm, ht, port);
+          }
         }
       }
       menu_draw_bookmarks_sel(bm_cursor);
@@ -470,8 +477,9 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
         if (port <= 0 || port > 65535) port = 6400;
         if (cfg_bookmark_alias[bm_cursor]) free(cfg_bookmark_alias[bm_cursor]);
         if (cfg_bookmark_host[bm_cursor]) free(cfg_bookmark_host[bm_cursor]);
-        addhost(bm_cursor, nm, ht, port);
-        cfg_bookmark_termmode[bm_cursor] = bm_mode;
+        if (addhost(bm_cursor, nm, ht, port)) {
+          cfg_bookmark_termmode[bm_cursor] = bm_mode;
+        }
         bm_rewrite_all();
       }
       menu_draw_bookmarks_sel(bm_cursor);
@@ -530,10 +538,13 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     /* Add current connection as bookmark */
     if (cfg_host && net_connected()) {
       if (cfg_numbookmarks < 40) {
-        addhost(cfg_numbookmarks, cfg_host, cfg_host, cfg_port);
-        ++cfg_numbookmarks;
-        cfg_save_bookmark(cfg_host, cfg_host, cfg_port);
-        menu_draw_message("Current BBS added to bookmarks!");
+        if (addhost(cfg_numbookmarks, cfg_host, cfg_host, cfg_port)) {
+          ++cfg_numbookmarks;
+          cfg_save_bookmark(cfg_host, cfg_host, cfg_port);
+          menu_draw_message("Current BBS added to bookmarks!");
+        } else {
+          menu_draw_message("Out of memory!");
+        }
       } else {
         menu_draw_message("Bookmark list full!");
       }

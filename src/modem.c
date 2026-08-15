@@ -362,6 +362,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   char phone[32];
   Sint16 *audio_buf;
   int sample_id;
+  int used_mixer = 0;
   int offset;
   int total_samples;
   int ndigits, di;
@@ -741,6 +742,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   sample_id = music_load_sfx_raw(audio_buf, total_samples * sizeof(Sint16));
   if (sample_id >= 0) {
     /* SDL_mixer path */
+    used_mixer = 1;
     music_play_sfx(sample_id);
   } else {
     /* Old sound system fallback */
@@ -779,12 +781,24 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
     timer_delay(20);
   }
 
-  /* Cleanup audio */
-  if (sample_id >= 0) {
-    music_free_sfx(sample_id);
-    /* Buffer is freed by us since music_load_sfx_raw doesn't own it */
+  /* Cleanup audio.
+   * SDL_mixer path: music_free_sfx() does not own audio_buf, so free it here.
+   * Raw-sound path: the buffer was registered with the sound subsystem, whose
+   * callback thread may still be reading it — sound_free_buffer() stops
+   * playback under SDL_LockAudio and frees the buffer, so we must NOT also
+   * free(audio_buf) (that was a wrong-subsystem free + potential UAF/leak). */
+  if (used_mixer) {
+    if (sample_id >= 0) {
+      music_free_sfx(sample_id);
+    }
+    free(audio_buf);
+  } else {
+    if (sample_id >= 0) {
+      sound_free_buffer(sample_id);
+    } else {
+      free(audio_buf);
+    }
   }
-  free(audio_buf);
 
   if (aborted) {
     goto aborted;

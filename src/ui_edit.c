@@ -73,8 +73,12 @@ void ui_selectdirkey(SDL_keysym *keysym) {
     return;
   }
   if (fsel->numentries == 0) {
+    /* Empty/unreadable selector: fsel->dir may be NULL, so falling through
+     * into the switch would deref NULL on SPACE (dir_find(NULL) -> NULL).
+     * Mirror ui_term.c and bail out here. */
     menu_hide();
     kbd_focus = FOCUS_TERM;
+    return;
   }
 
   switch (keysym->sym) {
