@@ -114,7 +114,7 @@ A system-wide `/etc/cgterm.cfg` (or `cgterm.cfg` next to the executable) is read
 
 ## Website
 
-[www.cgterm.se](https://www.cgterm.se) has the downloads, news and the board list.
+[www.cgterm.se](http://www.cgterm.se) has the downloads, news and the board list.
 
 ## Boards to try
 
@@ -133,7 +133,7 @@ tested by......... hedning, Jucke, SkyHawk, Larry
 original code..... MagerValp
 ```
 
-Website: [www.cgterm.se](https://www.cgterm.se)
+Website: [www.cgterm.se](http://www.cgterm.se)
 
 Full greetz list in the classic [README](README).
 

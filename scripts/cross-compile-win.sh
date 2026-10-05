@@ -159,8 +159,8 @@ find "$DIST_DIR" -name ".DS_Store" -delete 2>/dev/null
 # Create portable zip (primary distribution — no SmartScreen warnings)
 echo "[*] Creating distribution zip..."
 cd "$ROOT_DIR/dist"
-rm -f CGTerm-3.0-win32.zip
-zip -r CGTerm-3.0-win32.zip win32/ -x "*/._*" -x "*/.DS_Store"
+rm -f CGTerm-3.1-win32.zip
+zip -r CGTerm-3.1-win32.zip win32/ -x "*/._*" -x "*/.DS_Store"
 
 # Show result
 echo ""
@@ -168,8 +168,8 @@ echo " ============================================"
 echo "  Cross-compilation successful!"
 echo ""
 echo "  Output:"
-ls -lh "$ROOT_DIR/dist/CGTerm-3.0-win32.zip"
+ls -lh "$ROOT_DIR/dist/CGTerm-3.1-win32.zip"
 echo ""
 echo "  dist/win32/              — portable (unzip and run)"
-echo "  dist/CGTerm-3.0-win32.zip — zip for distribution"
+echo "  dist/CGTerm-3.1-win32.zip — zip for distribution"
 echo " ============================================"

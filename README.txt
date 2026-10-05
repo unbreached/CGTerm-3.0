@@ -389,7 +389,7 @@ And everyone still dialing in.
 --------------------------------------------------
 [ FINAL WORDS ]
 --------------------------------------------------
-Website, downloads and news: https://www.cgterm.se
+Website, downloads and news: http://www.cgterm.se
 
 Any bugs, feature requests or random elite spam
 is welcome as a message on the FRoZEN FLoPPY BBS.
