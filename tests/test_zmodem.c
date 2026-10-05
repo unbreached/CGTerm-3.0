@@ -468,8 +468,15 @@ int main(int argc, char **argv) {
   test_rz_send("batch of all three files", 0, 3, "", -1);
   test_rz_send("rz -e: receiver demands ESCCTL", 1, 1, "-e", -1);
   test_rz_send("corrupted byte in our stream -> rz sends ZRPOS", 1, 1, "", 50000);
-  test_rz_send("rz -A 4096: receiver declares a buffer size (ZCRCW each subpacket)", 1, 1, "-A 4096", -1);
-  test_rz_send("rz -A 4096 with a corrupted byte", 1, 1, "-A 4096", 70000);
+  /* "-A" (receiver buffer size) is an lrzsz 0.13 option; the 0.12.21 build
+   * that Debian/Ubuntu and some Homebrew bottles ship rejects it and exits,
+   * which looks like a disconnect. Probe before relying on it. */
+  if (system("rz -A 4096 --help >/dev/null 2>&1") == 0) {
+    test_rz_send("rz -A 4096: receiver declares a buffer size (ZCRCW each subpacket)", 1, 1, "-A 4096", -1);
+    test_rz_send("rz -A 4096 with a corrupted byte", 1, 1, "-A 4096", 70000);
+  } else {
+    puts("  skip rz -A 4096 cases: this rz has no -A option");
+  }
 
   puts("[ZMODEM send: failure paths]");
   peer_reset(); disconnected = 1;

@@ -73,7 +73,7 @@ endif
 # Mandatory flags — always applied even when CFLAGS/LDFLAGS are overridden in the
 # environment, otherwise the include path, -DPREFIX and the SDL/openmpt libs
 # would be silently dropped and the build would break.
-REQUIRED_CFLAGS := $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -DDATADIR=\"$(DATADIR)\" -I$(SRCDIR) $(PLATFORM_CFLAGS) $(SDL_MIXER_CFLAGS) $(OPENMPT_CFLAGS) -I/opt/homebrew/include
+REQUIRED_CFLAGS := $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -DCGTERM_DATADIR=\"$(DATADIR)\" -I$(SRCDIR) $(PLATFORM_CFLAGS) $(SDL_MIXER_CFLAGS) $(OPENMPT_CFLAGS) -I/opt/homebrew/include
 REQUIRED_LDFLAGS := $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib $(OPENMPT_LIBS) -lm
 
 # -MMD -MP emit per-object .d header-dependency files (see -include below) so a
