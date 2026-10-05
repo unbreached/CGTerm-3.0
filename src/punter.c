@@ -11,6 +11,8 @@
 #define PUNTER_MAX_RETRIES 10
 
 int punter_last_filetype = 0;
+int punter_send_filetype = 2;   /* 1 = SEQ, 2 = PRG; set by xfer.c from the file name */
+static int punter_last_block = -1;  /* last data block number saved (duplicate guard) */
 static int punter_scan_for_string(const char *target, int timeout_ms, int max_bytes);
 
 
@@ -81,7 +83,7 @@ int punter_handshake(char *sendstring, char *waitstring) {
   int l = 0;
   int errorcnt = 20;
 
-  while (errorcnt--) {
+  while (errorcnt-- && !xfer_cancel) {
     l = punter_recv_string(sendstring, p);
     if (l == 3) {
       if (strcmp(waitstring, p) == 0) {
@@ -137,7 +139,10 @@ unsigned short punter_next_blocknum(void) {
 }
 
 
-signed int punter_recv_block(int len) {
+/* Receive one Punter block of 'len' bytes (header included). 'save' is 0 for
+ * the two protocol setup blocks (filetype, first header) and 1 for data
+ * blocks; data blocks of any length (even 8 bytes = 1 data byte) are saved. */
+signed int punter_recv_block(int len, int save) {
   signed int c;
   int bytecnt;
   int errorcnt = 10;
@@ -226,9 +231,19 @@ signed int punter_recv_block(int len) {
     }
     menu_update_xfer_progress("Downloading...", xfer_saved_bytes, 0);
     gfx_vbl();
-    if (len <= 8) {
-      //printf("punter_recv_block: short block, returning %d\n", xfer_buffer[4]);
+    if (!save || len <= 7) {
+      /* setup block, or a header-only block: nothing to store */
       return(xfer_buffer[4]);
+    }
+    {
+      int blk = punter_next_blocknum();
+      if (blk < 0xff00 && blk == punter_last_block) {
+        /* The sender missed our GOO/ACK and re-sent the block we already
+         * stored (e.g. we sat in the ESC confirmation prompt). Acknowledge
+         * it again but don't append the data twice. */
+        return(xfer_buffer[4]);
+      }
+      punter_last_block = blk;
     }
     if (xfer_save_data(xfer_buffer + 7, len - 7)) {
       //printf("punter_recv_block: returning %d\n", xfer_buffer[4]);
@@ -292,6 +307,10 @@ int punter_recv(void) {
 
     while (attempts > 0 && !xfer_cancel) {
       c = xfer_recv_byte(1000);
+      if (c == -2) {
+        punter_fail("Disconnected");
+        return(0);
+      }
 
       now = timer_get_ticks();
       if (now > last_goo_time + 2000) {
@@ -323,8 +342,9 @@ int punter_recv(void) {
   }
 
   punter_last_filetype = 0;
+  punter_last_block = -1;
 
-  nextblocksize = punter_recv_block(8);
+  nextblocksize = punter_recv_block(8, 0);
   if (nextblocksize < 0) {
     //punter_fail("Timed out on filetype block");
     return(0);
@@ -360,7 +380,7 @@ int punter_recv(void) {
     return(0);
   }
 
-  nextblocksize = punter_recv_block(7);
+  nextblocksize = punter_recv_block(7, 0);
   if (nextblocksize < 0) {
     // error
     punter_fail("file start timeout");
@@ -368,7 +388,7 @@ int punter_recv(void) {
   }
 
   while (!xfer_cancel && punter_next_blocknum() < 0xff00 && nextblocksize >= 7) {
-    nextblocksize = punter_recv_block(nextblocksize);
+    nextblocksize = punter_recv_block(nextblocksize, 1);
   }
   if (xfer_cancel) {
     /* a cooperating peer can otherwise stream valid short blocks forever and
@@ -469,6 +489,8 @@ static int punter_wait_handshake(char *waitstring, char *sendstring) {
  * Scan incoming bytes for a 3-byte pattern (e.g. "S/B", "GOO", "BAD").
  * More resilient than reading exactly 3 bytes — handles stray bytes in the stream.
  */
+/* Returns 1 when found, 0 on timeout / too much unrelated data, -1 on
+ * disconnect. */
 static int punter_scan_for_string(const char *target, int timeout_ms, int max_bytes) {
   signed int c;
   int pos = 0;
@@ -476,6 +498,9 @@ static int punter_scan_for_string(const char *target, int timeout_ms, int max_by
 
   while (total < max_bytes && !xfer_cancel) {
     c = xfer_recv_byte(timeout_ms);
+    if (c == -2) {
+      return -1;
+    }
     if (c < 0) {
       return 0;
     }
@@ -498,10 +523,27 @@ static int punter_send_block(int len) {
   int retries = PUNTER_MAX_RETRIES;
 
   while (retries-- > 0 && !xfer_cancel) {
-    /* Wait for S/B from receiver — scan stream for pattern */
-    if (!punter_scan_for_string("S/B", 3000, 64)) {
-      punter_fail("Timeout waiting for S/B");
-      return 0;
+    /* Wait for S/B from receiver — scan stream for pattern. A C64 BBS that
+     * writes the previous block to a real 1541 can stay silent for well
+     * over 3 s, so allow up to 20 timeouts (~60 s, like the receive side)
+     * instead of failing the whole upload on the first quiet spell. */
+    {
+      int r = 0, waits = 0;
+      while (!xfer_cancel) {
+        r = punter_scan_for_string("S/B", 3000, 256);
+        if (r != 0 || ++waits >= 20) {
+          break;
+        }
+        punter_retry("Waiting for receiver...");
+      }
+      if (r < 0) {
+        punter_fail("Disconnected");
+        return 0;
+      }
+      if (r != 1) {
+        punter_fail("Timeout waiting for S/B");
+        return 0;
+      }
     }
 
     /* Send the block data */
@@ -623,7 +665,7 @@ static int punter_send_internal(int send_presignal) {
   xfer_buffer[4] = 0;      /* next block size = 0 (matches BBS initsend2) */
   xfer_buffer[5] = 0xff;   /* block number lo = $ff */
   xfer_buffer[6] = 0xff;   /* block number hi = $ff (triggers lastblkflag) */
-  xfer_buffer[7] = 2;      /* filetype: PRG */
+  xfer_buffer[7] = (unsigned char)punter_send_filetype;   /* 1 = SEQ, 2 = PRG */
   punter_build_checksum(xfer_buffer, 8);
 
   /* send_block: waits S/B, sends data, waits GOO, sends ACK */
@@ -685,9 +727,18 @@ static int punter_send_internal(int send_presignal) {
     next_total = next_len + 7;
 
     /* First block: 7-byte header only, byte[4] = size of first real data block */
-    xfer_buffer[4] = (unsigned char)next_total;
-    xfer_buffer[5] = 0;
-    xfer_buffer[6] = 0;
+    if (next_len == 0) {
+      /* Empty file: there is no data block, so this header must already be
+       * the terminating ($ffff) block or the receiver waits for data that
+       * never comes. */
+      xfer_buffer[4] = 0;
+      xfer_buffer[5] = 0xff;
+      xfer_buffer[6] = 0xff;
+    } else {
+      xfer_buffer[4] = (unsigned char)next_total;
+      xfer_buffer[5] = 0;
+      xfer_buffer[6] = 0;
+    }
     punter_build_checksum(xfer_buffer, 7);
 
     if (!punter_send_block(7)) {

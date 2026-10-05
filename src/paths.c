@@ -227,6 +227,14 @@ int path_init(const char *argv0) {
       return 1;
     }
   }
+#ifdef DATADIR
+  /* make DATADIR=... install: probe the configured asset directory first */
+  if (dir_has_asset(DATADIR, "default.kbd")) {
+    snprintf(g_asset_root, sizeof(g_asset_root), "%s", DATADIR);
+    snprintf(g_system_config_dir, sizeof(g_system_config_dir), "/etc");
+    return 1;
+  }
+#endif
 #ifdef PREFIX
   if (dir_has_asset(PREFIX "/share/cgterm/assets", "default.kbd")) {
     snprintf(g_asset_root, sizeof(g_asset_root), PREFIX "/share/cgterm/assets");

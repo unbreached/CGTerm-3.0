@@ -11,7 +11,19 @@
 #include "dir.h"
 
 
-char *dir_type[] = {"DEL", "SEQ", "PRG", "USR", "REL", "CBM", "DIR"};
+/* 8 entries: the type nibble is masked with 7, so index 7 must exist */
+char *dir_type[] = {"DEL", "SEQ", "PRG", "USR", "REL", "CBM", "DIR", "???"};
+
+
+int path_is_disk_image(const char *path) {
+  const char *p;
+
+  if (path == NULL || (p = strrchr(path, '.')) == NULL || strlen(p) != 4) {
+    return 0;
+  }
+  return (p[1] == 'd' || p[1] == 'D') &&
+         isdigit((unsigned char)p[2]) && isdigit((unsigned char)p[3]);
+}
 
 
 /* convert A0 padded petscii name to ascii */
@@ -52,6 +64,10 @@ Dir *dir_read_image(DiskImage *di) {
   dir->title = NULL;
   dir->firstentry = NULL;
   dir->blocksfree = di->blocksfree;
+  memcpy(dir->id, di_id(di), 2);
+  dir->id[2] = 0;
+  memcpy(dir->dostype, di_dostype(di), 2);
+  dir->dostype[2] = 0;
 
   if (di_read(fh, buffer, 254) != 254) {
     printf("BAM read failed\n");
@@ -67,7 +83,7 @@ Dir *dir_read_image(DiskImage *di) {
       use_entry->prev = NULL;
       use_entry->next = NULL;
       if ((use_entry->name = malloc(24))) {
-        strcpy(use_entry->name, "[ SELECT THIS PATH ]");
+        strcpy(use_entry->name, FS_SELECT_ENTRY);
       }
       memset(use_entry->rawname, 0xa0, 16);
       use_entry->type = T_SEQ;
@@ -131,8 +147,8 @@ Dir *dir_read_image(DiskImage *di) {
 	  entry->prev = NULL;
 	  }*/
 	entry->next = NULL;
-	entry->name = make_name(buffer + offset + 5);
-	memcpy(entry->rawname, buffer + offset + 5, 16);
+	entry->name = make_name(buffer + (offset + 5));   /* offset may be -2: keep the index in bounds */
+	memcpy(entry->rawname, buffer + (offset + 5), 16);
 	entry->type = buffer[offset + 2] & 7;
 	entry->closed = buffer[offset + 2] & 0x80;
 	entry->locked = buffer[offset + 2] & 0x40;
@@ -152,12 +168,31 @@ Dir *dir_read_image(DiskImage *di) {
 }
 
 
+/* Sort order: real directories (alphabetical), then disk images
+ * (alphabetical), then files newest first. */
+static int dir_entry_compare(const void *pa, const void *pb) {
+  const DirEntry *a = *(DirEntry *const *)pa;
+  const DirEntry *b = *(DirEntry *const *)pb;
+  int ca = 2, cb = 2;
+
+  if (a->type == T_DIR) ca = path_is_disk_image(a->name) ? 1 : 0;
+  if (b->type == T_DIR) cb = path_is_disk_image(b->name) ? 1 : 0;
+  if (ca != cb) return ca - cb;
+  if (ca < 2) {
+    if (a->name && b->name) return strcasecmp(a->name, b->name);
+    return 0;
+  }
+  if (a->mtime != b->mtime) return (a->mtime > b->mtime) ? -1 : 1;
+  if (a->name && b->name) return strcasecmp(a->name, b->name);
+  return 0;
+}
+
+
 Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
   Dir *dir;
   DirEntry *entry = NULL;
   struct dirent *dirent;
   unsigned namelen;
-  char *p;
 #ifdef WINDOWS
   DIR *d;
   char namebuf[1024];
@@ -183,6 +218,8 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
   dir->title = NULL;
   dir->firstentry = NULL;
   dir->blocksfree = -1;  /* not a disk image */
+  dir->id[0] = 0;
+  dir->dostype[0] = 0;
 
   if ((dir->title = malloc(strlen(path) + 1))) {
     strcpy(dir->title, path);
@@ -195,7 +232,7 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       use_entry->prev = NULL;
       use_entry->next = NULL;
       if ((use_entry->name = malloc(24))) {
-        strcpy(use_entry->name, "[ SELECT THIS PATH ]");
+        strcpy(use_entry->name, FS_SELECT_ENTRY);
       }
       memset(use_entry->rawname, 0xa0, 16);
       use_entry->type = T_SEQ;  /* special type — not DIR, not PRG */
@@ -262,10 +299,14 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       if ((home_entry = malloc(sizeof(*home_entry))) != NULL) {
         home_entry->prev = entry;
         home_entry->next = NULL;
-        entry->next = home_entry;
+        if (entry) {
+          entry->next = home_entry;
+        } else {
+          dir->firstentry = home_entry;
+        }
         entry = home_entry;
         if ((home_entry->name = malloc(16))) {
-          strcpy(home_entry->name, "[ Go to Home ]");
+          strcpy(home_entry->name, FS_HOME_ENTRY);
         }
         memset(home_entry->rawname, 0xa0, 16);
         home_entry->rawname[0] = 'H';
@@ -361,17 +402,20 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
       }
 #else
       entry->type = dirent->d_type == DT_DIR ? T_DIR : T_PRG;
+      if (dirent->d_type != DT_DIR && dirent->d_type != DT_REG) {
+        /* symlink, or a filesystem that reports DT_UNKNOWN (NFS, FUSE,
+         * sshfs, overlayfs): ask stat() what it really is, otherwise a
+         * symlinked directory shows up as a file and can't be entered */
+        struct stat st;
+        char fullpath[512];
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->name ? entry->name : "");
+        if (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
+          entry->type = T_DIR;
+        }
+      }
 #endif
-      if (entry->type == T_PRG) {
-	if ((p = strrchr(entry->name, '.'))) {
-	  if (strlen(p) == 4) {
-	    if (p[1] == 'd' || p[1] == 'D') {
-	      if (isdigit(p[2]) && isdigit(p[3])) {
-		entry->type = T_DIR;
-	      }
-	    }
-	  }
-	}
+      if (entry->type == T_PRG && entry->name && path_is_disk_image(entry->name)) {
+	entry->type = T_DIR;
       }
       entry->closed = 1;
       entry->locked = 0;
@@ -404,64 +448,38 @@ Dir *dir_read_opendir(DIR *dirhandle, const char *path) {
  ReadDirDone:
   /* Sort: directories first, then alphabetically */
   if (dir && dir->numentries > 1) {
-    int swapped;
-    do {
-      DirEntry *a;
-      swapped = 0;
-      a = dir->firstentry;
-      while (a && a->next) {
-        DirEntry *b = a->next;
-        int doswap = 0;
-        /* Never sort special entries ([ Use this folder ], <- Back) */
-        if ((a->name && (a->name[0] == '[' || a->name[0] == '<')) ||
-            (b->name && (b->name[0] == '[' || b->name[0] == '<'))) {
-          a = a->next;
-          continue;
+    /* qsort over an array of entry pointers, then relink: the old bubble
+     * sort over the linked list (O(n^2) strcasecmp) stalled the selector
+     * for seconds in download folders with thousands of files, on every
+     * keypress that re-read the directory. Pseudo entries ("[ ... ]",
+     * "<- Back") stay at the head in their original order. */
+    DirEntry **arr;
+    DirEntry *e, *head = NULL, *tail = NULL;
+    int n = 0, i;
+
+    for (e = dir->firstentry; e; e = e->next) n++;
+    arr = malloc(sizeof(*arr) * n);
+    if (arr) {
+      int nsort = 0;
+      for (e = dir->firstentry; e; e = e->next) {
+        if (e->name && (e->name[0] == '[' || e->name[0] == '<')) {
+          if (tail) tail->next = e; else head = e;
+          e->prev = tail;
+          tail = e;
+        } else {
+          arr[nsort++] = e;
         }
-        /* Sort priority: 0=real dir, 1=disk image, 2=file */
-        {
-          int pa = 2, pb = 2;
-          if (a->type == T_DIR) {
-            char *d = a->name ? strrchr(a->name, '.') : NULL;
-            pa = (d && strlen(d)==4 && (d[1]=='d'||d[1]=='D') && isdigit(d[2]) && isdigit(d[3])) ? 1 : 0;
-          }
-          if (b->type == T_DIR) {
-            char *d = b->name ? strrchr(b->name, '.') : NULL;
-            pb = (d && strlen(d)==4 && (d[1]=='d'||d[1]=='D') && isdigit(d[2]) && isdigit(d[3])) ? 1 : 0;
-          }
-          if (pa != pb) {
-            doswap = (pa > pb);
-          } else if (pa == 0) {
-            /* Both real dirs: alphabetical */
-            if (a->name && b->name)
-              doswap = (strcasecmp(a->name, b->name) > 0);
-          } else if (pa == 1) {
-            /* Both disk images: alphabetical */
-            if (a->name && b->name)
-              doswap = (strcasecmp(a->name, b->name) > 0);
-          } else {
-            /* Both files: newest first (by mtime) */
-            doswap = (a->mtime < b->mtime);
-          }
-        }
-        if (doswap) {
-          /* Swap data fields */
-          char *tn = a->name; a->name = b->name; b->name = tn;
-          unsigned char tr[16];
-          memcpy(tr, a->rawname, 16); memcpy(a->rawname, b->rawname, 16); memcpy(b->rawname, tr, 16);
-          unsigned int ts = a->size; a->size = b->size; b->size = ts;
-          int tt = a->type; a->type = b->type; b->type = tt;
-          tt = a->closed; a->closed = b->closed; b->closed = tt;
-          tt = a->locked; a->locked = b->locked; b->locked = tt;
-          tt = a->track; a->track = b->track; b->track = tt;
-          tt = a->sector; a->sector = b->sector; b->sector = tt;
-          tt = a->tagged; a->tagged = b->tagged; b->tagged = tt;
-          { long tm = a->mtime; a->mtime = b->mtime; b->mtime = tm; }
-          swapped = 1;
-        }
-        a = a->next;
       }
-    } while (swapped);
+      qsort(arr, nsort, sizeof(*arr), dir_entry_compare);
+      for (i = 0; i < nsort; i++) {
+        if (tail) tail->next = arr[i]; else head = arr[i];
+        arr[i]->prev = tail;
+        tail = arr[i];
+      }
+      if (tail) tail->next = NULL;
+      dir->firstentry = head;
+      free(arr);
+    }
   }
 
   return(dir);

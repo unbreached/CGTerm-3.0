@@ -20,21 +20,26 @@
 #include "xmodem.h"
 #include "punter.h"
 #include "rainbow.h"
+#include "zmodem.h"
 #include "diskimage.h"
 #include "dir.h"
 #include "fileselector.h"
 #include "config.h"
 #include "keyboard.h"
+#include "ui.h"
 
 #include <stdarg.h>
+#include <time.h>
 
-/* Debug log file for transfer troubleshooting */
+/* Debug log file for transfer troubleshooting (per-user, not /tmp) */
 static FILE *dbglog = NULL;
 static void dbg(const char *fmt, ...) {
   va_list ap;
   if (!cfg_debugmode) return;
   if (!dbglog) {
-    dbglog = fopen("/tmp/cgterm-debug.log", "a");
+    char path[600];
+    cfg_user_file(path, sizeof(path), "cgterm-debug.log");
+    dbglog = fopen(path, "a");
     if (!dbglog) return;
     fprintf(dbglog, "\n=== NEW SESSION ===\n");
   }
@@ -55,6 +60,50 @@ FILE *xfer_sendfile, *xfer_recvfile;
 Direction xfer_direction;
 Protocol xfer_protocol;
 int xfer_cancel;
+static int xfer_batch_mode = 0;   /* Multi Punter / ZMODEM: never re-prompt for names */
+static int xfer_batch_files = 0;  /* files received so far in a batch (fallback names) */
+static unsigned int xfer_last_elapsed_ms = 0;
+static int xfer_confirm_pending = 0;   /* ESC pressed, waiting for Y/N */
+
+static const char *xfer_protocol_name(Protocol p) {
+  switch (p) {
+  case PROT_XMODEM: return "XMODEM";
+  case PROT_XMODEMCRC: return "XMODEM-CRC";
+  case PROT_XMODEM1K: return "XMODEM-1K";
+  case PROT_PUNTER: return "Punter";
+  case PROT_MULTIPUNTER: return "Multi Punter";
+  case PROT_RAINBOW: return "Rainbow";
+  case PROT_ZMODEM: return "ZMODEM";
+  default: return "?";
+  }
+}
+
+/* One line per completed or failed transfer in the per-user transfer log:
+ * date, host, protocol, direction, name, bytes, seconds, cps, result. */
+void xfer_log_result(const char *direction, const char *name, long bytes, unsigned int ms, const char *result) {
+  FILE *f;
+  char path[600];
+  time_t now = time(NULL);
+  struct tm *tm_info = localtime(&now);
+  double secs = ms / 1000.0;
+
+  if (!cfg_transferlog) return;
+  cfg_user_file(path, sizeof(path), "cgterm-transfers.log");
+  if ((f = fopen(path, "a")) == NULL) return;
+  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d  %-24s %-12s %-4s %-32s %8ld bytes %7.1f s %5.0f cps  %s\n",
+          tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+          tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec,
+          cfg_connect_name[0] ? cfg_connect_name : (cfg_host ? cfg_host : "-"),
+          xfer_protocol_name(xfer_protocol), direction, name ? name : "-",
+          bytes, secs, secs > 0.05 ? bytes / secs : 0.0, result);
+  fclose(f);
+}
+
+/* "1234 bytes, 12.3 s, 100 cps" for the completion messages */
+static void xfer_summary_string(char *out, size_t sz, long bytes, unsigned int ms) {
+  double secs = ms / 1000.0;
+  snprintf(out, sz, "%ld bytes, %.1f s, %.0f cps", bytes, secs, secs > 0.05 ? bytes / secs : 0.0);
+}
 int xfer_saved_bytes;
 int xfer_file_size;
 unsigned char xfer_buffer[4096];
@@ -105,7 +154,7 @@ void xfer_progress(const char *message) {
 }
 
 
-void xfer_save_file(char *filename);
+int xfer_save_file(char *filename);
 void xfer_check_kbd(void);
 static void xfer_fix_filename(char *filename);
 
@@ -158,6 +207,9 @@ static int xfer_create_temp_download(void) {
 }
 
 static int xfer_open_temp_download(void) {
+  /* a previous download that was never saved (prompt abandoned, write
+   * refused) would otherwise be orphaned when its name is overwritten */
+  xfer_cleanup_temp_download();
   if (!xfer_create_temp_download()) {
     menu_draw_message("Couldn't create tempfile!");
     menu_show();
@@ -319,6 +371,9 @@ static void multipunter_sanitize_filename(const char *src, char *dst, size_t dst
     if (c < 32) {
       continue;
     }
+    if (c >= 127) {
+      c = '_';   /* DEL, PETSCII graphics, UTF-8: not a portable file name byte */
+    }
     if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
       c = '_';
     }
@@ -363,6 +418,10 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
   /* Wait for first 0x09 (tab) — BBS sends multiple (typically 10) */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
+    if (c == -2) {
+      xfer_progress("Disconnected!");
+      return 0;
+    }
     if (c < 0) {
       gfx_vbl();
       xfer_check_kbd();
@@ -380,6 +439,10 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
   /* Consume any additional 0x09 bytes and 0x04 (EOT) markers */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
+    if (c == -2) {
+      xfer_progress("Disconnected!");
+      return 0;
+    }
     if (c < 0) {
       continue;
     }
@@ -404,6 +467,10 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
   /* Read rest of filename — terminated by CR, LF, or null (g$ in C*BASE) */
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
+    if (c == -2) {
+      xfer_progress("Disconnected!");
+      return 0;
+    }
     if (c < 0) {
       gfx_vbl();
       continue;
@@ -437,12 +504,14 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
 
 static int multipunter_recv(void) {
   int filecount = 0;
+  int failcount = 0;
   char remote_name[256];
   char local_name[256];
   int batch_end = 0;
   char msg[256];
 
   xfer_filename[0] = 0;
+  xfer_batch_mode = 1;
 
   /* Signal the BBS we're ready. C*BASE bbs.bas line 3690 waits for any
    * byte from the terminal before starting the multi download. */
@@ -451,6 +520,7 @@ static int multipunter_recv(void) {
   while (!xfer_cancel) {
     if (!multipunter_read_announcement(remote_name, sizeof(remote_name), &batch_end)) {
       xfer_cleanup_temp_download();
+      xfer_batch_mode = 0;
       menu_draw_message("Multi Punter failed");
       menu_show();
       gfx_vbl();
@@ -458,13 +528,19 @@ static int multipunter_recv(void) {
     }
 
     if (batch_end) {
-      if (filecount == 0) {
+      xfer_batch_mode = 0;
+      if (filecount == 0 && failcount == 0) {
         menu_draw_message("Multi Punter: empty batch");
         menu_show();
         gfx_vbl();
         return 0;
       }
-      snprintf(msg, sizeof(msg), "Received %d Multi Punter file%s", filecount, filecount == 1 ? "" : "s");
+      if (failcount) {
+        snprintf(msg, sizeof(msg), "Received %d file%s, %d NOT saved (bad name/write error)",
+                 filecount, filecount == 1 ? "" : "s", failcount);
+      } else {
+        snprintf(msg, sizeof(msg), "Received %d Multi Punter file%s", filecount, filecount == 1 ? "" : "s");
+      }
       menu_draw_message(msg);
       menu_show();
       gfx_vbl();
@@ -472,6 +548,7 @@ static int multipunter_recv(void) {
     }
 
     if (!xfer_open_temp_download()) {
+      xfer_batch_mode = 0;
       return 0;
     }
 
@@ -482,9 +559,11 @@ static int multipunter_recv(void) {
 
     xfer_saved_bytes = 0;
     xfer_starttime = timer_get_ticks();
+    xfer_batch_files = 0;
 
     if (!punter_recv()) {
       xfer_cleanup_temp_download();
+      xfer_batch_mode = 0;
       menu_draw_message("Multi Punter receive failed");
       menu_show();
       gfx_vbl();
@@ -494,17 +573,23 @@ static int multipunter_recv(void) {
     fclose(xfer_recvfile);
     xfer_recvfile = NULL;
 
-    multipunter_sanitize_filename(remote_name, local_name, sizeof(local_name), punter_last_filetype, filecount + 1);
+    multipunter_sanitize_filename(remote_name, local_name, sizeof(local_name), punter_last_filetype, filecount + failcount + 1);
     snprintf(xfer_filename, 256, "%s", local_name);
-    xfer_save_file(local_name);
+    xfer_last_elapsed_ms = timer_get_ticks() - xfer_starttime;
+    if (xfer_save_file(local_name) == 1) {
+      ++filecount;
+    } else {
+      ++failcount;
+      printf("Multi Punter: could not save '%s'\n", local_name);
+    }
     /* Reclaim the temp file before the next iteration's mkstemp overwrites the
      * name — the per-file save paths only remove it on success, so a rejected
      * filename or write error would otherwise orphan it in the temp dir. */
     xfer_cleanup_temp_download();
-    ++filecount;
   }
 
   xfer_cleanup_temp_download();
+  xfer_batch_mode = 0;
   menu_draw_message("Multi Punter cancelled");
   menu_show();
   gfx_vbl();
@@ -512,37 +597,34 @@ static int multipunter_recv(void) {
 }
 
 
+/* Polled from the byte I/O functions during a transfer. ESC asks for a
+ * confirmation but does NOT block: the protocol keeps consuming bytes and
+ * answering the peer while the question is on screen, so a slow "N" can no
+ * longer time out the other side. */
 void xfer_check_kbd(void) {
   SDL_Event event;
 
-  if (SDL_PollEvent(&event)) {
+  while (SDL_PollEvent(&event)) {
     switch (event.type) {
     case SDL_QUIT:
       exit(1);
       break;
     case SDL_KEYDOWN:
-      if (event.key.keysym.sym == SDLK_ESCAPE) {
-        /* Ask for confirmation before cancelling */
+      if (xfer_confirm_pending) {
+        xfer_confirm_pending = 0;
+        if (event.key.keysym.sym == SDLK_y) {
+          xfer_cancel = 1;
+        } else {
+          /* any other key = keep going: put the progress window back */
+          menu_draw_xfer_progress(xfer_filename, xfer_direction, xfer_protocol);
+          menu_show();
+          gfx_vbl();
+        }
+      } else if (event.key.keysym.sym == SDLK_ESCAPE) {
+        xfer_confirm_pending = 1;
         menu_draw_message("Cancel transfer? (Y/N)");
         menu_show();
         gfx_vbl();
-        {
-          SDL_Event confirm;
-          int waiting = 1;
-          while (waiting) {
-            if (SDL_PollEvent(&confirm)) {
-              if (confirm.type == SDL_KEYDOWN) {
-                if (confirm.key.keysym.sym == SDLK_y) {
-                  xfer_cancel = 1;
-                  waiting = 0;
-                } else {
-                  waiting = 0;  /* any other key = no */
-                }
-              }
-            }
-            SDL_Delay(10);
-          }
-        }
       }
       break;
     }
@@ -584,6 +666,9 @@ signed int xfer_recv_byte(int timeout) {
     }
   }
 
+  if (c < 0) {
+    return(c);   /* -2: disconnected (don't feed it to the hex display) */
+  }
   if (xfer_recv_debug_count < 5) {
     dbg(" xfer_recv_byte: got 0x%02x (%d bytes so far)\n", c, xfer_recv_debug_count + 1);
   }
@@ -661,6 +746,7 @@ int xfer_recv(void) {
 
   xfer_filename[0] = 0;
   xfer_cancel = 0;
+  xfer_confirm_pending = 0;
   xfer_saved_bytes = 0;
   xfer_starttime = timer_get_ticks();
   menu_draw_xfer_progress("No filename", xfer_direction, xfer_protocol);
@@ -694,8 +780,27 @@ int xfer_recv(void) {
   } else if (xfer_protocol == PROT_RAINBOW) {
     dbg(" starting rainbow_recv\n");
     status = rainbow_recv();
+  } else if (xfer_protocol == PROT_ZMODEM) {
+    /* batch receive: files are opened, streamed and saved by the protocol
+     * through xfer_begin_file()/xfer_end_file(); nothing to prompt for */
+    int files;
+    xfer_cleanup_temp_download();   /* the generic temp file is not used */
+    files = zmodem_recv();
+    xfer_batch_mode = 0;
+    if (files > 0) {
+      char msg[96];
+      snprintf(msg, sizeof(msg), "Received %d ZMODEM file%s", files, files == 1 ? "" : "s");
+      menu_draw_message(msg);
+    } else {
+      menu_draw_message(xfer_cancel ? "ZMODEM cancelled" : "ZMODEM receive failed");
+    }
+    menu_show();
+    gfx_vbl();
+    xfer_last_elapsed_ms = timer_get_ticks() - xfer_starttime;
+    return files > 0;
   }
   dbg(" xfer_recv result: status=%d\n", status);
+  xfer_last_elapsed_ms = timer_get_ticks() - xfer_starttime;
 
   if (xfer_recvfile != NULL) {
     fclose(xfer_recvfile);
@@ -703,15 +808,66 @@ int xfer_recv(void) {
   }
 
   if (!status) {
+    xfer_log_result("recv", xfer_filename[0] ? xfer_filename : NULL, xfer_saved_bytes,
+                    xfer_last_elapsed_ms, xfer_cancel ? "cancelled" : "FAILED");
     xfer_cleanup_temp_download();
   }
 
   return(status);
 }
 
-int xfer_copy_from_image(char *imgname, char *src, char *dest) {
+
+/* ---- per-file hooks for batch protocols (ZMODEM) ----
+ * The protocol opens a temp file, streams data through xfer_save_data() and
+ * ends the file with the remote name; the name is sanitised and saved
+ * without prompting, exactly like a Multi Punter file. */
+static unsigned int xfer_file_start = 0;
+
+int xfer_begin_file(void) {
+  xfer_batch_mode = 1;
+  xfer_saved_bytes = 0;
+  xfer_file_start = timer_get_ticks();
+  return xfer_open_temp_download();
+}
+
+int xfer_end_file(const char *remote_name) {
+  char local_name[256];
+  int rc;
+  unsigned int ms = timer_get_ticks() - xfer_file_start;
+
+  if (xfer_recvfile) {
+    fclose(xfer_recvfile);
+    xfer_recvfile = NULL;
+  }
+  /* file type 0: a ZMODEM name is a host name already, don't append .prg */
+  multipunter_sanitize_filename(remote_name ? remote_name : "", local_name, sizeof(local_name), 0, ++xfer_batch_files);
+  snprintf(xfer_filename, 256, "%s", local_name);
+  xfer_last_elapsed_ms = ms;
+  rc = (xfer_save_file(local_name) == 1);
+  if (!rc) {
+    xfer_log_result("recv", local_name, xfer_saved_bytes, ms, "NOT SAVED");
+  }
+  xfer_cleanup_temp_download();
+  return rc;
+}
+
+void xfer_abort_file(void) {
+  if (xfer_recvfile) {
+    fclose(xfer_recvfile);
+    xfer_recvfile = NULL;
+  }
+  xfer_log_result("recv", xfer_filename[0] ? xfer_filename : NULL, xfer_saved_bytes,
+                  timer_get_ticks() - xfer_file_start, xfer_cancel ? "cancelled" : "FAILED");
+  xfer_cleanup_temp_download();
+}
+
+/* Extract 'src' from the image into 'dest'. When exactraw is given it is the
+ * entry's own 16-byte PETSCII name (from the directory listing) and is
+ * matched byte-for-byte, so names with '*', '?' or graphics characters work
+ * and any file type (PRG/SEQ/USR) is accepted. */
+int xfer_copy_from_image(char *imgname, const char *src, const unsigned char *exactraw, char *dest) {
   DiskImage *di;
-  ImageFile *imgfile;
+  ImageFile *imgfile = NULL;
   unsigned char rawname[16];
   FILE *outh;
   unsigned char buffer[4096];
@@ -725,19 +881,20 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
     return(0);
   }
 
-  di_rawname_from_name(rawname, src);
-  dbg("D64-EXTRACT: rawname=[%02x %02x %02x %02x ...]\n",
-      rawname[0], rawname[1], rawname[2], rawname[3]);
-
-  if ((imgfile = di_open(di, rawname, T_PRG, "rb")) == NULL) {
-    dbg("D64-EXTRACT: FAILED to open '%s' as PRG in image\n", src);
-    /* Try as SEQ */
-    if ((imgfile = di_open(di, rawname, T_SEQ, "rb")) == NULL) {
-      dbg("D64-EXTRACT: FAILED to open '%s' as SEQ either\n", src);
+  if (exactraw) {
+    imgfile = di_open_exact(di, exactraw);
+  }
+  if (imgfile == NULL) {
+    di_rawname_from_name(rawname, (char *)src);
+    dbg("D64-EXTRACT: rawname=[%02x %02x %02x %02x ...]\n",
+        rawname[0], rawname[1], rawname[2], rawname[3]);
+    if ((imgfile = di_open(di, rawname, T_PRG, "rb")) == NULL &&
+        (imgfile = di_open(di, rawname, T_SEQ, "rb")) == NULL &&
+        (imgfile = di_open(di, rawname, T_USR, "rb")) == NULL) {
+      dbg("D64-EXTRACT: FAILED to open '%s' in image\n", src);
       di_free_image(di);
       return(0);
     }
-    dbg("D64-EXTRACT: opened as SEQ\n");
   }
 
   if ((outh = fopen(dest, "wb")) == NULL) {
@@ -765,28 +922,44 @@ int xfer_copy_from_image(char *imgname, char *src, char *dest) {
   return(1);
 }
 
-void xfer_send(char *filename) {
+/* Punter filetype byte for an upload, from the local name: ",s"/".seq" is
+ * SEQ (1), everything else PRG (2). */
+static int punter_filetype_from_name(const char *name) {
+  size_t len = strlen(name);
+
+  if (len >= 2 && name[len - 2] == ',' && (name[len - 1] == 's' || name[len - 1] == 'S')) {
+    return 1;
+  }
+  if (len >= 4 && strcasecmp(name + len - 4, ".seq") == 0) {
+    return 1;
+  }
+  return 2;
+}
+
+int xfer_send(const char *filename, const unsigned char *rawname) {
   char name[1088];
-  char *p;
   int deletetmp = 0;
+  int ok = 0;
 
   xfer_cancel = 0;
+  xfer_confirm_pending = 0;
   xfer_starttime = timer_get_ticks();
-  menu_draw_xfer_progress(filename, xfer_direction, xfer_protocol);
+  menu_draw_xfer_progress((char *)filename, xfer_direction, xfer_protocol);
   menu_show();
   gfx_vbl();
 
-  if ((p = strrchr(cfg_xferdir, '.')) && strlen(p) == 4 && (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3])) {
+  if (path_is_disk_image(cfg_xferdir)) {
     /* Create secure temporary file for upload */
-    if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, filename, xfer_tempulname)) {
+    if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, filename, rawname, xfer_tempulname)) {
       snprintf(name, sizeof(name), "%s", xfer_tempulname);
       deletetmp = 1;
     } else {
+      xfer_cleanup_temp_upload();   /* mkstemp may already have created it */
       menu_draw_message("Couldn't open file!");
       menu_show();
       printf("Attempt to open file (%s) failed in xfer_send()\n", filename);
       gfx_vbl();
-      return;
+      return 0;
     }
   } else {
     snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
@@ -801,31 +974,43 @@ void xfer_send(char *filename) {
   if ((xfer_sendfile = fopen(name, "rb"))) {
     if (fseek(xfer_sendfile, 0, SEEK_END)) {
       fclose(xfer_sendfile);
+      if (deletetmp) xfer_cleanup_temp_upload();
       menu_draw_message("Couldn't read file size!");
       menu_show();
       gfx_vbl();
-      return;
+      return 0;
     }
     xfer_file_size = (int)ftell(xfer_sendfile);
     fseek(xfer_sendfile, 0, SEEK_SET);
+    punter_send_filetype = punter_filetype_from_name(filename);
 
     if (xfer_protocol == PROT_XMODEM) {
-      xmodem_send(0);
+      ok = xmodem_send(0);
     } else if (xfer_protocol == PROT_XMODEMCRC) {
-      xmodem_send(0);
+      ok = xmodem_send(0);
     } else if (xfer_protocol == PROT_XMODEM1K) {
-      xmodem_send(1);
+      ok = xmodem_send(1);
     } else if (xfer_protocol == PROT_PUNTER) {
-      punter_send();
+      ok = punter_send();
     } else if (xfer_protocol == PROT_RAINBOW) {
-      rainbow_send(filename);
+      ok = rainbow_send(filename);
     } else if (xfer_protocol == PROT_MULTIPUNTER) {
       /* Multi Punter send is handled by xfer_send_multipunter() */
     }
     fclose(xfer_sendfile);
 
-    /* Show completion message with auto-dismiss */
-    menu_draw_message_timed("Upload complete!", 5000);
+    xfer_last_elapsed_ms = timer_get_ticks() - xfer_starttime;
+    xfer_log_result("send", filename, ok ? (long)xfer_file_size : (long)xfer_saved_bytes,
+                    xfer_last_elapsed_ms, ok ? "ok" : (xfer_cancel ? "cancelled" : "FAILED"));
+    /* Show completion message with auto-dismiss; say so when it failed */
+    if (ok) {
+      char sum[96], msg[200];
+      xfer_summary_string(sum, sizeof(sum), xfer_file_size, xfer_last_elapsed_ms);
+      snprintf(msg, sizeof(msg), "Upload complete: %s", sum);
+      menu_draw_message_timed(msg, 5000);
+    } else {
+      menu_draw_message_timed(xfer_cancel ? "Upload cancelled" : "Upload FAILED", 5000);
+    }
   } else {
     menu_draw_message("Couldn't open file!");
     menu_show();
@@ -833,12 +1018,13 @@ void xfer_send(char *filename) {
   }
 
   if (deletetmp) {
-    remove(name);
     xfer_cleanup_temp_upload();
   }
+  return ok;
 }
 
-void xfer_save_file_in_image(char *filename) {
+/* Returns 1 when the file is in the image and the temp file is gone. */
+int xfer_save_file_in_image(char *filename) {
   FILE *from;
   DiskImage *di;
   ImageFile *to;
@@ -848,6 +1034,7 @@ void xfer_save_file_in_image(char *filename) {
   unsigned char rawname[16];
   FileType ftype = T_PRG;
   char cleanname[256];
+  int ok = 0;
 
   dbg("D64-SAVE: filename='%s' dldir='%s' bytes=%d\n", filename, cfg_dldir, xfer_saved_bytes);
   char *comma;
@@ -878,7 +1065,7 @@ void xfer_save_file_in_image(char *filename) {
     menu_draw_message("Couldn't open disk image");
     menu_show();
     gfx_vbl();
-    return;
+    return 0;
   }
 
   /* Check disk space before writing */
@@ -895,7 +1082,7 @@ void xfer_save_file_in_image(char *filename) {
       menu_show();
       gfx_vbl();
       /* Don't remove temp file — user can change disk and retry save */
-      return;
+      return 0;
     }
   }
 
@@ -905,19 +1092,20 @@ void xfer_save_file_in_image(char *filename) {
     menu_show();
     xfer_log_errno("Could not open temp file", xfer_tempdlname);
     gfx_vbl();
-    return;
+    return 0;
   }
 
   di_rawname_from_name(rawname, cleanname);
 
   to = di_open(di, rawname, ftype, "wb");
   if (to == NULL) {
+    int st = di->status;
     fclose(from);
     di_free_image(di);
-    menu_draw_message("Couldn't write file!");
+    menu_draw_message(st == 63 ? "File exists in image! Use another name." : "Couldn't write file!");
     menu_show();
     gfx_vbl();
-    return;
+    return 0;
   }
 
   bytesleft = xfer_saved_bytes;
@@ -936,30 +1124,50 @@ void xfer_save_file_in_image(char *filename) {
     bytesleft -= l;
   }
 
+  fclose(from);
+  di_close(to);
+  /* Only now is the data really on disk; a failed write-back keeps the
+   * temp file so the user can retry with another image. */
+  if (di_free_image(di) != 0) {
+    menu_draw_message("Could not write disk image! Download kept.");
+    menu_show();
+    gfx_vbl();
+    xfer_log_errno("Could not write disk image", cfg_dldir);
+    return 0;
+  }
   remove(xfer_tempdlname);
   xfer_tempdlname[0] = 0;
 
   dbg("D64-SAVE: SUCCESS - saved '%s' (%d bytes) into '%s'\n", cleanname, xfer_saved_bytes, cfg_dldir);
-  snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", cleanname);
-  fclose(from);
-  di_close(to);
-  di_free_image(di);
+  {
+    char sum[96];
+    xfer_summary_string(sum, sizeof(sum), xfer_saved_bytes, xfer_last_elapsed_ms);
+    snprintf(msgbuf, sizeof(msgbuf), "Saved %s to image (%s)", cleanname, sum);
+  }
+  xfer_log_result("recv", cleanname, xfer_saved_bytes, xfer_last_elapsed_ms, "ok (disk image)");
   menu_draw_message_timed(msgbuf, 5000);
-  return;
+  return 1;
 
  done:
   menu_show();
   gfx_vbl();
   fclose(from);
-  di_close(to);
+  di_close(to);   /* rolls back the incomplete entry and its blocks */
   di_free_image(di);
+  return ok;
 }
 
 static int xfer_ensure_dldir(void) {
   struct stat st;
 
   if (stat(cfg_dldir, &st) == 0) {
-    return 1;  /* exists */
+    if (S_ISDIR(st.st_mode)) {
+      return 1;  /* exists */
+    }
+    printf("Download path is not a directory: %s\n", cfg_dldir);
+    getcwd(cfg_dldir, 256);
+    printf("Using fallback: %s\n", cfg_dldir);
+    return 1;
   }
 
   /* Directory doesn't exist — try to create it */
@@ -1002,7 +1210,8 @@ static int xfer_validate_filename(const char *filename) {
 
   /* Block null bytes and control characters */
   for (p = filename; *p; p++) {
-    if (*p < 32 || *p == 127) {
+    unsigned char ch = (unsigned char)*p;   /* char is signed on x86/arm64 macOS */
+    if (ch < 32 || ch == 127) {
       return 0;
     }
   }
@@ -1034,7 +1243,8 @@ static int xfer_validate_filename(const char *filename) {
   return 1;
 }
 
-void xfer_save_file_in_dir(char *filename) {
+/* Returns 1 saved, 0 failed, -1 when the user has been re-prompted. */
+int xfer_save_file_in_dir(char *filename) {
   FILE *from, *to;
   char msgbuf[4096];
   char name[1088];
@@ -1044,16 +1254,24 @@ void xfer_save_file_in_dir(char *filename) {
     menu_draw_message("No download directory!");
     menu_show();
     gfx_vbl();
-    return;
+    return 0;
   }
 
   /* Validate and sanitize filename */
   if (!xfer_validate_filename(filename)) {
-    snprintf(msgbuf, sizeof(msgbuf), "Invalid filename blocked: %.240s", filename);
-    menu_draw_message(msgbuf);
-    menu_show();
-    gfx_vbl();
-    return;
+    if (xfer_batch_mode) {
+      snprintf(msgbuf, sizeof(msgbuf), "Invalid filename blocked: %.240s", filename);
+      menu_draw_message(msgbuf);
+      menu_show();
+      gfx_vbl();
+      return 0;
+    }
+    /* Interactive: ask again instead of silently losing the download. */
+    xfer_filename[0] = 0;
+    ui_inputcall(30, "Bad name (no / \\ ..). File name:", xfer_filename,
+                 (void (*)(char *))&xfer_save_file, FOCUS_REQUESTER);
+    ui_inputcall_on_cancel(&xfer_discard_download);
+    return -1;
   }
 
   /* Create safe copy of filename */
@@ -1064,7 +1282,7 @@ void xfer_save_file_in_dir(char *filename) {
     menu_show();
     xfer_log_errno("Could not open temp file", xfer_tempdlname);
     gfx_vbl();
-    return;
+    return 0;
   }
 
   snprintf(name, sizeof(name), "%s%c%s", cfg_dldir,
@@ -1096,7 +1314,7 @@ void xfer_save_file_in_dir(char *filename) {
         menu_draw_message("File exists, too many duplicates!");
         menu_show();
         gfx_vbl();
-        return;
+        return 0;
       }
     }
   }
@@ -1108,25 +1326,30 @@ void xfer_save_file_in_dir(char *filename) {
     menu_show();
     xfer_log_errno("Could not open destination file", name);
     gfx_vbl();
-    return;
+    return 0;
   }
 
-  if (!xfer_copy_file(from, to, xfer_saved_bytes)) {
+  if (!xfer_copy_file(from, to, xfer_saved_bytes) || fclose(to) != 0) {
     menu_draw_message("Write error!");
     menu_show();
     gfx_vbl();
     fclose(from);
-    fclose(to);
-    return;
+    remove(name);   /* don't leave a truncated file behind */
+    return 0;
   }
 
-  fclose(to);
   fclose(from);
   remove(xfer_tempdlname);
   xfer_tempdlname[0] = 0;
 
-  snprintf(msgbuf, sizeof(msgbuf), "Saved %-24s", filename);
+  {
+    char sum[96];
+    xfer_summary_string(sum, sizeof(sum), xfer_saved_bytes, xfer_last_elapsed_ms);
+    snprintf(msgbuf, sizeof(msgbuf), "Saved %s (%s)", filename, sum);
+  }
+  xfer_log_result("recv", filename, xfer_saved_bytes, xfer_last_elapsed_ms, "ok");
   menu_draw_message_timed(msgbuf, 5000);
+  return 1;
 }
 
 /*
@@ -1150,7 +1373,8 @@ static void xfer_fix_filename(char *filename) {
     case 'p': case 'P': ext = ".prg"; break;
     case 's': case 'S': ext = ".seq"; break;
     case 'u': case 'U': ext = ".usr"; break;
-    case 'l': case 'L': ext = ".rel"; break;
+    case 'l': case 'L':
+    case 'r': case 'R': ext = ".rel"; break;
     }
     if (ext) {
       /* Replace ",X" with ".ext" */
@@ -1161,29 +1385,34 @@ static void xfer_fix_filename(char *filename) {
   }
 }
 
-void xfer_save_file(char *filename) {
-  char *p;
+int xfer_save_file(char *filename) {
+  int rc;
 
   /* Check if download target is a disk image (.d64/.d71/.d81) */
-  if ((p = strrchr(cfg_dldir, '.'))) {
-    if (strlen(p) == 4) {
-      if (p[1] == 'd' || p[1] == 'D') {
-        if (isdigit(p[2]) && isdigit(p[3])) {
-          /* Save into D64 — use C64 name, don't apply PC extensions */
-          xfer_save_file_in_image(filename);
-          goto post_save;
-        }
-      }
-    }
+  if (path_is_disk_image(cfg_dldir)) {
+    /* Save into D64 — use C64 name, don't apply PC extensions */
+    rc = xfer_save_file_in_image(filename);
+  } else {
+    /* Save to filesystem — convert C64 filetype to PC extension */
+    xfer_fix_filename(filename);
+    rc = xfer_save_file_in_dir(filename);
   }
 
-  /* Save to filesystem — convert C64 filetype to PC extension */
-  xfer_fix_filename(filename);
-  xfer_save_file_in_dir(filename);
+  if (rc >= 0) {
+    /* Return focus to terminal so the main loop processes BBS responses
+     * (not when a new name prompt has just been opened) */
+    kbd_focus = FOCUS_TERM;
+  }
+  return rc;
+}
 
-post_save:
-  /* Return focus to terminal so the main loop processes BBS responses */
-  kbd_focus = FOCUS_TERM;
+
+void xfer_discard_download(void) {
+  if (xfer_tempdlname[0]) {
+    printf("Download discarded: %s\n", xfer_tempdlname);
+  }
+  xfer_cleanup_temp_download();
+  menu_draw_message_timed("Download discarded", 3000);
 }
 
 
@@ -1197,11 +1426,15 @@ void xfer_send_multipunter(FileSelector *fs) {
   int deletetmp;
 
   xfer_cancel = 0;
+  xfer_confirm_pending = 0;
   xfer_starttime = timer_get_ticks();
 
   /* Loop through all entries, send tagged ones */
   de = fs->dir->firstentry;
   while (de && !xfer_cancel) {
+    int from_image;
+    int aborted = 0;
+
     if (!de->tagged) {
       de = de->next;
       continue;
@@ -1214,19 +1447,61 @@ void xfer_send_multipunter(FileSelector *fs) {
 
     /* Determine if we're sending from a disk image or filesystem */
     deletetmp = 0;
-    p = strrchr(cfg_xferdir, '.');
-    {
-      int from_image = (p && strlen(p) == 4 &&
-                        (p[1] == 'd' || p[1] == 'D') && isdigit(p[2]) && isdigit(p[3]));
+    from_image = path_is_disk_image(cfg_xferdir);
+    (void)p;
+
+    snprintf(msg, sizeof(msg), "Multi Punter: %s (%d/%d)",
+             de->name, filecount + 1, total_tagged);
+    menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
+    menu_show();
+    gfx_vbl();
+
+    /* Open the file FIRST. Announcing a name and then failing to open the
+     * file would leave the BBS inside a Punter receive that never starts,
+     * and the next announcement would land in the middle of it. */
+    dbg("MP-SEND: cfg_xferdir='%s'\n", cfg_xferdir);
+    if (from_image) {
+      dbg("MP-SEND: extracting '%s' from image '%s'\n", de->name, cfg_xferdir);
+      /* Create secure temporary file for upload */
+      if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, de->name, de->rawname, xfer_tempulname)) {
+        snprintf(name, sizeof(name), "%s", xfer_tempulname);
+        deletetmp = 1;
+      } else {
+        xfer_cleanup_temp_upload();
+        snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
+        menu_draw_message(msg);
+        menu_show();
+        gfx_vbl();
+        de = de->next;
+        continue;
+      }
+    } else {
+      snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
+#ifdef WINDOWS
+        '\\',
+#else
+        '/',
+#endif
+        de->name);
+    }
+
+    dbg(" MP-SEND: opening file '%s'\n", name);
+    if ((xfer_sendfile = fopen(name, "rb"))) {
+      int send_result;
+
+      if (fseek(xfer_sendfile, 0, SEEK_END)) {
+        dbg(" MP-SEND: fseek failed!\n");
+        fclose(xfer_sendfile);
+        if (deletetmp) xfer_cleanup_temp_upload();
+        de = de->next;
+        continue;
+      }
+      xfer_file_size = (int)ftell(xfer_sendfile);
+      fseek(xfer_sendfile, 0, SEEK_SET);
+      xfer_saved_bytes = 0;
+      punter_send_filetype = punter_filetype_from_name(de->name);
 
       /* Send file announcement: 0x09 + filename + \r */
-      snprintf(msg, sizeof(msg), "Multi Punter: %s (%d/%d)",
-               de->name, filecount + 1, total_tagged);
-      menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
-      menu_show();
-      gfx_vbl();
-
-      /* Build the C64 filename for the announcement */
       {
         char c64name[256];
         const char *s;
@@ -1257,57 +1532,21 @@ void xfer_send_multipunter(FileSelector *fs) {
         }
       }
       xfer_send_byte('\r');
-      dbg("MP-SEND: announcement sent, opening file\n");
-
-      /* Open the file */
-      dbg("MP-SEND: cfg_xferdir='%s'\n", cfg_xferdir);
-      if (from_image) {
-        dbg("MP-SEND: extracting '%s' from image '%s'\n", de->name, cfg_xferdir);
-        /* Create secure temporary file for upload */
-        if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, de->name, xfer_tempulname)) {
-          snprintf(name, sizeof(name), "%s", xfer_tempulname);
-          deletetmp = 1;
-        } else {
-          snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
-          menu_draw_message(msg);
-          menu_show();
-          gfx_vbl();
-          de = de->next;
-          continue;
-        }
-      } else {
-        snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
-#ifdef WINDOWS
-          '\\',
-#else
-          '/',
-#endif
-          de->name);
-      }
-    } /* end from_image block */
-
-    dbg(" MP-SEND: opening file '%s'\n", name);
-    if ((xfer_sendfile = fopen(name, "rb"))) {
-      if (fseek(xfer_sendfile, 0, SEEK_END)) {
-        dbg(" MP-SEND: fseek failed!\n");
-        fclose(xfer_sendfile);
-        de = de->next;
-        continue;
-      }
-      xfer_file_size = (int)ftell(xfer_sendfile);
-      fseek(xfer_sendfile, 0, SEEK_SET);
-      xfer_saved_bytes = 0;
       dbg(" MP-SEND: file size=%d, calling punter_send_no_presignal\n", xfer_file_size);
 
       /* Punter send without the GOO pre-signal — the BBS already started
        * initrecv2 after reading our filename announcement (bbs.bas line 3677) */
-      {
-        int send_result = punter_send_no_presignal();
-        dbg(" MP-SEND: punter_send_no_presignal returned %d\n", send_result);
-      }
+      send_result = punter_send_no_presignal();
+      dbg(" MP-SEND: punter_send_no_presignal returned %d\n", send_result);
 
       fclose(xfer_sendfile);
-      filecount++;
+      if (send_result) {
+        filecount++;
+      } else {
+        /* The BBS state is unknown after a failed Punter session; stop the
+         * batch instead of announcing the next file into it. */
+        aborted = 1;
+      }
 
       /* Wait for BBS to finish writing file and return to the
        * get#5 loop (bbs.bas line 3610-3620). Drain any stray
@@ -1332,9 +1571,12 @@ void xfer_send_multipunter(FileSelector *fs) {
     }
 
     if (deletetmp) {
-      remove(name);
+      xfer_cleanup_temp_upload();
     }
 
+    if (aborted) {
+      break;
+    }
     de = de->next;
   }
 
@@ -1348,7 +1590,12 @@ void xfer_send_multipunter(FileSelector *fs) {
   timer_delay(2000);
   while (net_receive_raw() >= 0) { /* drain */ }
 
-  if (filecount > 0) {
+  if (filecount < total_tagged) {
+    snprintf(msg, sizeof(msg), "Multi Punter: %d of %d file%s sent%s",
+             filecount, total_tagged, total_tagged == 1 ? "" : "s",
+             xfer_cancel ? " (cancelled)" : " (a transfer failed)");
+    menu_draw_message_timed(msg, 5000);
+  } else if (filecount > 0) {
     snprintf(msg, sizeof(msg), "Sent %d Multi Punter file%s",
              filecount, filecount == 1 ? "" : "s");
     menu_draw_message_timed(msg, 5000);
@@ -1357,3 +1604,104 @@ void xfer_send_multipunter(FileSelector *fs) {
   }
 }
 
+
+
+/* ZMODEM batch upload of every tagged file (or the selected one). Each file
+ * is opened on xfer_sendfile like the other protocols; files inside a disk
+ * image are extracted to a temp file first. */
+void xfer_send_zmodem(FileSelector *fs) {
+  DirEntry *de;
+  char name[1088];
+  char msg[256];
+  int filecount = 0, total_tagged = fs->numtagged, ok = 1;
+  int from_image = path_is_disk_image(cfg_xferdir);
+
+  xfer_cancel = 0;
+  xfer_confirm_pending = 0;
+  xfer_starttime = timer_get_ticks();
+  xfer_protocol = PROT_ZMODEM;
+  xfer_direction = DIR_SEND;
+  menu_draw_xfer_progress("ZMODEM", xfer_direction, xfer_protocol);
+  menu_show();
+  gfx_vbl();
+
+  if (total_tagged == 0 && fs->selectedfile && fs->selectedfile->name && fs->selectedfile->type != T_DIR) {
+    fs->selectedfile->tagged = 1;
+    total_tagged = 1;
+  }
+
+  if (!zmodem_send_begin()) {
+    menu_draw_message_timed("ZMODEM: receiver did not answer", 5000);
+    xfer_log_result("send", NULL, 0, timer_get_ticks() - xfer_starttime, "FAILED (no ZRINIT)");
+    return;
+  }
+
+  for (de = fs->dir->firstentry; de && !xfer_cancel && ok; de = de->next) {
+    int deletetmp = 0;
+    unsigned int t0;
+
+    if (!de->tagged || !de->name || de->type == T_DIR) continue;
+
+    if (from_image) {
+      if (xfer_create_temp_upload() && xfer_copy_from_image(cfg_xferdir, de->name, de->rawname, xfer_tempulname)) {
+        snprintf(name, sizeof(name), "%s", xfer_tempulname);
+        deletetmp = 1;
+      } else {
+        xfer_cleanup_temp_upload();
+        snprintf(msg, sizeof(msg), "Couldn't open %s", de->name);
+        menu_draw_message(msg);
+        menu_show();
+        gfx_vbl();
+        continue;
+      }
+    } else {
+      snprintf(name, sizeof(name), "%s%c%s", cfg_xferdir,
+#ifdef WINDOWS
+        '\\',
+#else
+        '/',
+#endif
+        de->name);
+    }
+
+    if ((xfer_sendfile = fopen(name, "rb")) == NULL) {
+      if (deletetmp) xfer_cleanup_temp_upload();
+      continue;
+    }
+    fseek(xfer_sendfile, 0, SEEK_END);
+    xfer_file_size = (int)ftell(xfer_sendfile);
+    fseek(xfer_sendfile, 0, SEEK_SET);
+    xfer_saved_bytes = 0;
+    t0 = timer_get_ticks();
+    menu_draw_xfer_progress(de->name, xfer_direction, xfer_protocol);
+    menu_show();
+    gfx_vbl();
+
+    {
+      /* announce PC names with their C64 suffix converted (file.prg -> file.prg is
+       * fine for ZMODEM receivers; keep the host name as is) */
+      int r = zmodem_send_file(de->name);
+      fclose(xfer_sendfile);
+      xfer_sendfile = NULL;
+      xfer_log_result("send", de->name, r ? (long)xfer_file_size : (long)xfer_saved_bytes,
+                      timer_get_ticks() - t0, r ? "ok" : (xfer_cancel ? "cancelled" : "FAILED"));
+      if (r) {
+        filecount++;
+      } else {
+        ok = 0;
+      }
+    }
+    if (deletetmp) xfer_cleanup_temp_upload();
+  }
+
+  if (ok) {
+    zmodem_send_end();
+  }
+  if (filecount == total_tagged && filecount > 0) {
+    snprintf(msg, sizeof(msg), "Sent %d ZMODEM file%s", filecount, filecount == 1 ? "" : "s");
+  } else {
+    snprintf(msg, sizeof(msg), "ZMODEM: %d of %d file%s sent%s", filecount, total_tagged,
+             total_tagged == 1 ? "" : "s", xfer_cancel ? " (cancelled)" : "");
+  }
+  menu_draw_message_timed(msg, 5000);
+}

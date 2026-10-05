@@ -292,15 +292,27 @@ int rainbow_recv(void) {
   rainbow_total_blocks = 0;
   rainbow_status("Rainbow: starting receive");
 
-  while (!xfer_cancel) {
-    if (retries++ >= RB_MAX_RETRIES) {
-      rainbow_fail("Rainbow: start handshake failed");
-      return 0;
+  /* Purge whatever the board printed before we got here (prompt text, an
+   * echoed RETURN); every such byte used to burn one of the ten retries. */
+  {
+    int drained = 0;
+    while (xfer_recv_byte(50) >= 0 && ++drained < 4096) {
     }
+  }
 
+  while (!xfer_cancel) {
     xfer_send_byte(RB_GOO);
     c = xfer_recv_byte(RB_START_TIMEOUT);
+    if (c == -2) {
+      rainbow_fail("Rainbow: disconnected");
+      return 0;
+    }
     if (c < 0) {
+      /* only a real timeout counts against the retry budget */
+      if (++retries >= RB_MAX_RETRIES) {
+        rainbow_fail("Rainbow: start handshake failed");
+        return 0;
+      }
       continue;
     }
     if ((unsigned char)c == RB_CAN) {
@@ -308,7 +320,19 @@ int rainbow_recv(void) {
       return 0;
     }
     if ((unsigned char)c != RB_SOH) {
-      continue;
+      /* stray text byte: wait for the next one without re-sending GOO */
+      {
+        int t;
+        while ((t = xfer_recv_byte(RB_BYTE_TIMEOUT)) >= 0 && (unsigned char)t != RB_SOH && !xfer_cancel) {
+        }
+        if (t == -2) {
+          rainbow_fail("Rainbow: disconnected");
+          return 0;
+        }
+        if (t < 0) {
+          continue;
+        }
+      }
     }
 
     xfer_send_byte(RB_ACK);

@@ -167,6 +167,7 @@ void music_shutdown(void) {
 
 #include <SDL.h>
 #include <libopenmpt/libopenmpt.h>
+#include "sound.h"
 #define HAVE_OPENMPT
 
 static int music_initok = 0;
@@ -267,13 +268,19 @@ static int load_xm_file(const char *filename) {
       return 0;
     }
 
+    openmpt_module_set_repeat_count(mod, -1);   /* gapless loop, no seek glitch */
+
     SDL_LockAudio();
     xm_module = mod;
     xm_loaded = 1;
     SDL_UnlockAudio();
   }
   printf("[+] Loaded XM module: %s\n", filename);
-  printf("[+] Title: %s\n", openmpt_module_get_metadata(xm_module, "title"));
+  {
+    const char *title = openmpt_module_get_metadata(xm_module, "title");
+    printf("[+] Title: %s\n", title ? title : "");
+    openmpt_free_string(title);
+  }
   return 1;
 }
 #else
@@ -288,6 +295,8 @@ static void music_audio_callback(void *userdata, Uint8 *stream, int len) {
   /* Clear the audio buffer first */
   memset(stream, 0, len);
 
+  /* Sound effects (bell, modem dial) are mixed in at the end, so they play
+   * with or without music; the device is therefore never paused. */
   if (music_playing) {
     Sint16 *samples = (Sint16*)stream;
     int sample_count = len / 2; /* 16-bit samples */
@@ -358,6 +367,8 @@ static void music_audio_callback(void *userdata, Uint8 *stream, int len) {
       }
     }
   }
+
+  sound_mix_into((Sint16 *)stream, len / 2);
 }
 
 int music_init(void) {
@@ -374,17 +385,18 @@ int music_init(void) {
   want.callback = music_audio_callback;
   want.userdata = NULL;
 
-  if (SDL_OpenAudio(&want, &have) < 0) {
+  /* obtained == NULL: SDL converts to whatever the backend really gives us,
+   * so the callback can always render 22050 Hz / S16 / mono. */
+  if (SDL_OpenAudio(&want, NULL) < 0) {
     printf("SDL audio init failed: %s\n", SDL_GetError());
     return 1;
   }
-
-  /* Print audio configuration for debugging */
-  printf("[+] Audio opened: %dHz, format=0x%x, %d channel(s), %d samples\n",
-         have.freq, have.format, have.channels, have.samples);
+  (void)have;
 
   music_initok = 1;
-  printf("[+] Simple audio initialized (C64-style sounds)\n");
+  sound_attach_to_music_device();
+  SDL_PauseAudio(0);   /* run the device so sound effects work before any music */
+  printf("[+] Audio initialized (22050 Hz mono, XM via libopenmpt, SFX mixed)\n");
   return 0;
 }
 
@@ -410,25 +422,6 @@ int music_play(const char *filename) {
   SDL_PauseAudio(0); /* Unpause audio - start playback */
 
   printf("[+] Audio playback started (volume: %d/128)\n", current_volume);
-
-  /* Log to file for debugging */
-  {
-    FILE *mlog = fopen("/tmp/cgterm-music.log", "a");
-    if (!mlog) mlog = fopen("cgterm-music.log", "a");
-    if (mlog) {
-#ifdef HAVE_OPENMPT
-      if (xm_loaded) {
-        fprintf(mlog, "Started native XM playback: %s (vol=%d)\n", filename, current_volume);
-      } else {
-        fprintf(mlog, "Started melody fallback: %s (vol=%d)\n", filename, current_volume);
-      }
-#else
-      fprintf(mlog, "Started melody fallback: %s (vol=%d)\n", filename, current_volume);
-#endif
-      fclose(mlog);
-    }
-  }
-
   return 0;
 }
 
@@ -436,8 +429,8 @@ int music_play(const char *filename) {
 void music_stop(void) {
   if (!music_initok) return;
 
+  /* keep the device running: sound effects are mixed by the same callback */
   music_playing = 0;
-  SDL_PauseAudio(1); /* Pause audio */
   printf("[+] Music stopped\n");
 }
 
@@ -454,47 +447,48 @@ int music_is_playing(void) {
 }
 
 
-/* Sound effects - simplified implementation */
+/* Sound effects: samples live in sound.c's table and are mixed into this
+ * device's callback (sound_mix_into). These used to be printf-only stubs,
+ * which left the bell and the whole modem dial soundtrack silent on
+ * macOS/Linux. */
 int music_load_sfx(const char *filename) {
   if (!music_initok) return -1;
-
-  printf("[+] SFX load requested: %s (simplified)\n", filename);
-  return 0; /* Return dummy ID */
+  return sound_load_sample(filename);
 }
 
+/* buf stays owned by the caller (modem.c frees it after music_free_sfx) */
 int music_load_sfx_raw(void *buf, unsigned int len) {
   if (!music_initok) return -1;
-
-  printf("[+] Raw SFX load requested (%u bytes)\n", len);
-  return 0; /* Return dummy ID */
+  return sound_register_buffer((Uint8 *)buf, len);
 }
 
 void music_free_sfx(int id) {
   if (!music_initok) return;
-  printf("[+] SFX free requested: %d\n", id);
+  sound_unregister_buffer(id);
 }
 
 void music_play_sfx(int id) {
   if (!music_initok) return;
-  printf("[+] SFX play requested: %d\n", id);
-
-  /* Could implement simple beep here */
+  sound_start_sample(id);
 }
 
 int music_sfx_playing(void) {
   if (!music_initok) return 0;
-  return 0; /* No SFX currently playing */
+  return sound_is_playing();
 }
 
 void music_shutdown(void) {
   music_stop();
 
-  /* Clean up XM module */
+  /* Clean up XM module under the audio lock: classic SDL 1.2 may still be
+   * inside the callback rendering it. */
 #ifdef HAVE_OPENMPT
   if (xm_module) {
+    SDL_LockAudio();
+    xm_loaded = 0;
     openmpt_module_destroy(xm_module);
     xm_module = NULL;
-    xm_loaded = 0;
+    SDL_UnlockAudio();
   }
 #endif
 

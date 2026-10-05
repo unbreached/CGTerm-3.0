@@ -49,7 +49,8 @@
     CGTERM 3.0 ::: C64 SCENE EDiTiON //scene code by...... m00p
                                      //support by......... mermaid
                                      //ideas by........... Larry
-                                     //tested by.......... hedning
+                                     //tested by.......... hedning, Jucke,
+                                     //                    SkyHawk, Larry
                                      //original code by... MagerValp
 
 
@@ -115,6 +116,28 @@ is  for example:
 
 
 + Rainbow Protocol Support
+OCTOBER 2026 UPDATE
+-----------------------------
+- ZMODEM batch upload/download (names, sizes, crash recovery),
+  auto-started when a board begins sending
+- Status line, capture-to-file toggle, copy screen text
+- Connection history with redial, per-bookmark auto-login scripts
+- Options panel: sound, music volume, baud emulation, zoom,
+  status line, auto ZMODEM, transfer log, capture, local echo
+- Transfer log and on-screen summary (bytes, seconds, cps);
+  the last protocol is preselected so T + Return repeats
+- Disk tools: validate, lock/unlock, rename disk/ID, extract to
+  host, insert into image, CBM-style listing with splat/lock
+  markers, error-table images, D81 directories fixed
+- ANSI emulation completed for Mystic/Synchronet/Enigma boards
+- IPv6, proactive Telnet negotiation, SIGPIPE/EAGAIN safety
+- Sound effects and modem audio now play on macOS/Linux
+- Keyboard menu lists every .kbd in the assets folder
+- Dozens of protocol, disk-image and UI bug fixes (see
+  REVIEW-2026-10.md), regression tests and a fuzzer (make test,
+  make fuzz), GitHub Actions CI for Linux, macOS and MinGW
+- Windows keeps its files under %APPDATA%\CGTerm
+
 -----------------------------
 - Added Rainbow transfer protocol implementation
 - Integrated into the CGTerm transfer system
@@ -366,6 +389,8 @@ And everyone still dialing in.
 --------------------------------------------------
 [ FINAL WORDS ]
 --------------------------------------------------
+Website, downloads and news: https://www.cgterm.se
+
 Any bugs, feature requests or random elite spam
 is welcome as a message on the FRoZEN FLoPPY BBS.
 

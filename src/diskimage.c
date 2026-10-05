@@ -137,6 +137,17 @@ int interleave(ImageType type) {
 
 
 /* return number of tracks for image type */
+/* number of data blocks by geometry (excludes any trailing error table) */
+int di_blocks(ImageType type) {
+  switch (type) {
+  case D64: return(683);
+  case D71: return(1366);
+  case D81: return(3200);
+  default:  return(0);
+  }
+}
+
+
 int di_tracks(ImageType type) {
   switch (type) {
   case D64:
@@ -235,7 +246,7 @@ int di_ts_valid(DiskImage *di, TrackSector ts) {
     return(0);
   }
   blk = get_block_num(di->type, ts);
-  if (blk < 0 || (blk + 1) * 256 > di->size) {
+  if (blk < 0 || blk >= di_blocks(di->type)) {
     return(0);
   }
   return(1);
@@ -248,7 +259,7 @@ int di_ts_valid(DiskImage *di, TrackSector ts) {
    di_ts_valid(), but this is the last line of defence for every caller. */
 unsigned char *get_ts_addr(DiskImage *di, TrackSector ts) {
   int blk = get_block_num(di->type, ts);
-  int maxblk = di->size / 256;
+  int maxblk = di_blocks(di->type);
 
   if (blk < 0) {
     blk = 0;
@@ -450,9 +461,19 @@ TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
     break;
   }
 
-  bam = get_ts_addr(di, di->bam);
+  (void)bam; (void)bpt; (void)boff;
+  /* Gate each track on di_track_blocks_free(), which knows where every
+   * image type keeps its per-track free count. Indexing the BAM sector
+   * directly was wrong for the D71 second side (its counts live in 18/0,
+   * not 53/0), which made tracks 62-70 unreachable and reported "disk
+   * full" with ~170 blocks free. CBM DOS never puts file data on the
+   * directory track, so skip it: blocks_free() excludes it from the total
+   * and the directory must be able to grow. */
   for (ts.track = s1; ts.track <= t1; ++ts.track) {
-    if  (bam[ts.track * bpt + boff]) {
+    if (ts.track == di->dir.track) {
+      continue;
+    }
+    if (di_track_blocks_free(di, ts.track)) {
       spt = di_sectors_per_track(di->type, ts.track);
       ts.sector = (prevts.sector + interleave(di->type)) % spt;
       /* bound the scan: a crafted BAM can claim free blocks (count byte)
@@ -467,9 +488,11 @@ TrackSector alloc_next_ts(DiskImage *di, TrackSector prevts) {
   }
 
   if (di->type == D71 || di->type == D81) {
-    bam = get_ts_addr(di, di->bam2);
     for (ts.track = s2; ts.track <= t2; ++ts.track) {
-      if  (bam[(ts.track - t1) * bpt + boff]) {
+      if (ts.track == di->dir.track || (di->type == D71 && ts.track == 53)) {
+	continue;
+      }
+      if (di_track_blocks_free(di, ts.track)) {
 	spt = di_sectors_per_track(di->type, ts.track);
 	ts.sector = (prevts.sector + interleave(di->type)) % spt;
 	for (i = 0; i < spt; ++i, ts.sector = (ts.sector + 1) % spt) {
@@ -503,13 +526,13 @@ TrackSector alloc_next_dir_ts(DiskImage *di) {
       ts = next_ts_in_chain(di, ts);
     }
     ts.track = lastts.track;
-    ts.sector = lastts.sector + 3;
     spt = di_sectors_per_track(di->type, ts.track);
     if (spt <= 0) {
       ts.track = 0;
       ts.sector = 0;
       return(ts);
     }
+    ts.sector = (lastts.sector + 3) % spt;
     for (hops = 0; hops < di->size / 256; ts.sector = (ts.sector + 1) % spt, hops++) {
       if (di_is_ts_free(di, ts)) {
 	di_alloc_ts(di, ts);
@@ -540,6 +563,11 @@ void di_free_ts(DiskImage *di, TrackSector ts) {
   unsigned char mask;
   unsigned char *bam;
 
+  if (di_is_ts_free(di, ts)) {
+    /* already free (looped or overlapping chain): freeing it again would
+     * wrap the per-track count byte past the number of sectors */
+    return;
+  }
   di->modified = 1;
   switch (di->type) {
   case D64:
@@ -584,7 +612,10 @@ void free_chain(DiskImage *di, TrackSector ts) {
   /* validate the first link too — di_delete() passes a raw, possibly
    * hostile directory startts straight in (next_ts_in_chain validates
    * every subsequent link, but the first was unchecked) */
-  for (hops = 0; ts.track && di_ts_valid(di, ts) && hops < di->size / 256; hops++) {
+  for (hops = 0; ts.track && di_ts_valid(di, ts) && hops < di_blocks(di->type); hops++) {
+    if (di_is_ts_free(di, ts)) {
+      break;   /* chain loops back into freed blocks, or runs into free space */
+    }
     di_free_ts(di, ts);
     ts = next_ts_in_chain(di, ts);
   }
@@ -617,15 +648,20 @@ DiskImage *di_load_image(char *name) {
     return(NULL);
   }
 
-  /* check image type */
+  /* check image type. Images with a trailing per-block error-info table
+   * (one byte per block: 175531 / 351062 / 822400) are very common in
+   * online archives; keep the full file length in di->size so di_sync()
+   * preserves the table, and address blocks by geometry (di_blocks). */
   switch (filesize) {
   case 174848: // standard D64
+  case 174848 + 683:
     di->type = D64;
     di->bam.track = 18;
     di->bam.sector = 0;
     di->dir = di->bam;
     break;
   case 349696:
+  case 349696 + 1366:
     di->type = D71;
     di->bam.track = 18;
     di->bam.sector = 0;
@@ -634,6 +670,7 @@ DiskImage *di_load_image(char *name) {
     di->dir = di->bam;
     break;
   case 819200:
+  case 819200 + 3200:
     di->type = D81;
     di->bam.track = 40;
     di->bam.sector = 1;
@@ -746,27 +783,27 @@ DiskImage *di_create_image(char *name, int size) {
 }
 
 
-void di_sync(DiskImage *di) {
+int di_sync(DiskImage *di) {
   FILE *file;
   int l, left;
   unsigned char *image;
   char *tmpname;
   size_t namelen;
 
-  if (di->filename == NULL) return;
+  if (di->filename == NULL) return(-1);
 
   /* Write to a sibling temp file and only rename it over the original on full
    * success. Opening the original "wb" truncates it to zero immediately, so a
    * mid-write failure (disk full, media removed) would otherwise destroy the
    * user's existing .d64/.d71/.d81 with no recovery. */
   namelen = strlen(di->filename);
-  if ((tmpname = malloc(namelen + 5)) == NULL) return;
+  if ((tmpname = malloc(namelen + 5)) == NULL) return(-1);
   memcpy(tmpname, di->filename, namelen);
   memcpy(tmpname + namelen, ".tmp", 5);   /* copies the trailing NUL too */
 
   if ((file = fopen(tmpname, "wb")) == NULL) {
     free(tmpname);
-    return;   /* original left intact */
+    return(-1);   /* original left intact */
   }
   image = di->image;
   left = di->size;
@@ -776,7 +813,7 @@ void di_sync(DiskImage *di) {
       fclose(file);
       remove(tmpname);
       free(tmpname);
-      return;   /* write failed — original left intact */
+      return(-1);   /* write failed — original left intact */
     }
     left -= l;
     image += l;
@@ -784,7 +821,7 @@ void di_sync(DiskImage *di) {
   if (fclose(file) != 0) {
     remove(tmpname);
     free(tmpname);
-    return;
+    return(-1);
   }
 
   /* Replace the original with the fully-written temp. */
@@ -797,23 +834,30 @@ void di_sync(DiskImage *di) {
     if (rename(tmpname, di->filename) != 0) {
       remove(tmpname);
       free(tmpname);
-      return;   /* leave di->modified set so a later close can retry */
+      return(-1);   /* leave di->modified set so a later close can retry */
     }
   }
   di->modified = 0;
   free(tmpname);
+  return(0);
 }
 
 
-void di_free_image(DiskImage *di) {
+/* Flush (if modified) and free. Returns 0 on success, -1 when the image
+ * could not be written back - callers must not delete their source data
+ * (e.g. a downloaded temp file) before checking this. */
+int di_free_image(DiskImage *di) {
+  int rc = 0;
+
   if (di->modified) {
-    di_sync(di);
+    rc = di_sync(di);
   }
   if (di->filename) {
     free(di->filename);
   }
   free(di->image);
   free(di);
+  return(rc);
 }
 
 
@@ -841,14 +885,18 @@ int match_pattern(const unsigned char *rawpattern, const unsigned char *rawname)
 }
 
 
+/* The directory chain hangs off the directory header block (18/0, or 40/0
+ * on a D81). Walking it from di->bam only worked on D64/D71 where the two
+ * coincide; on a D81 that walked the BAM sectors 40/1 -> 40/2 instead and
+ * never reached the real directory. */
 RawDirEntry *find_file_entry(DiskImage *di, const unsigned char *rawpattern, FileType type) {
   unsigned char *buffer;
   TrackSector ts;
   RawDirEntry *rde;
   int offset, hops;
 
-  ts = next_ts_in_chain(di, di->bam);
-  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
+  ts = next_ts_in_chain(di, di->dir);
+  for (hops = 0; ts.track && hops < di_blocks(di->type); hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -864,6 +912,31 @@ RawDirEntry *find_file_entry(DiskImage *di, const unsigned char *rawpattern, Fil
 }
 
 
+/* Exact (byte-for-byte) name match of any non-deleted entry, closed or
+ * not. Used by the UI for delete/rename/extract of an entry the user picked
+ * from a listing: those names are raw PETSCII and may legitimately contain
+ * '*' or '?', which the wildcard matcher would expand to other files. */
+RawDirEntry *find_file_entry_exact(DiskImage *di, const unsigned char *rawname) {
+  unsigned char *buffer;
+  TrackSector ts;
+  RawDirEntry *rde;
+  int offset, hops;
+
+  ts = next_ts_in_chain(di, di->dir);
+  for (hops = 0; ts.track && hops < di_blocks(di->type); hops++) {
+    buffer = get_ts_addr(di, ts);
+    for (offset = 0; offset < 256; offset += 32) {
+      rde = (RawDirEntry *)(buffer + offset);
+      if (rde->type != 0 && memcmp(rde->rawname, rawname, 16) == 0) {
+	return(rde);
+      }
+    }
+    ts = next_ts_in_chain(di, ts);
+  }
+  return(NULL);
+}
+
+
 RawDirEntry *alloc_file_entry(DiskImage *di, const unsigned char *rawname, FileType type) {
   unsigned char *buffer;
   TrackSector ts;
@@ -871,8 +944,8 @@ RawDirEntry *alloc_file_entry(DiskImage *di, const unsigned char *rawname, FileT
   int offset, hops;
 
   /* check if file already exists */
-  ts = next_ts_in_chain(di, di->bam);
-  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
+  ts = next_ts_in_chain(di, di->dir);
+  for (hops = 0; ts.track && hops < di_blocks(di->type); hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -888,8 +961,8 @@ RawDirEntry *alloc_file_entry(DiskImage *di, const unsigned char *rawname, FileT
   }
 
   /* allocate empty slot */
-  ts = next_ts_in_chain(di, di->bam);
-  for (hops = 0; ts.track && hops < di->size / 256; hops++) {
+  ts = next_ts_in_chain(di, di->dir);
+  for (hops = 0; ts.track && hops < di_blocks(di->type); hops++) {
     buffer = get_ts_addr(di, ts);
     for (offset = 0; offset < 256; offset += 32) {
       rde = (RawDirEntry *)(buffer + offset);
@@ -952,6 +1025,13 @@ ImageFile *di_open(DiskImage *di, const unsigned char *rawname, FileType type, c
 	return(NULL);
       }
       imgfile->mode = 'r';
+      if (!di_ts_valid(di, rde->startts)) {
+	/* entry points outside the image (damaged dump, or a 0-block
+	 * file): refuse rather than silently read block 1/0 */
+	set_status(di, 66, rde->startts.track, rde->startts.sector);
+	free(imgfile);
+	return(NULL);
+      }
       imgfile->ts = rde->startts;
       p = get_ts_addr(di, rde->startts);
       imgfile->buffer = p + 2;
@@ -971,7 +1051,7 @@ ImageFile *di_open(DiskImage *di, const unsigned char *rawname, FileType type, c
       return(NULL);
     }
     if ((imgfile = malloc(sizeof(*imgfile))) == NULL) {
-      //puts("malloc failed");
+      rde->type = 0;   /* don't leave a half-made entry in the directory */
       return(NULL);
     }
     imgfile->mode = 'w';
@@ -979,7 +1059,7 @@ ImageFile *di_open(DiskImage *di, const unsigned char *rawname, FileType type, c
     imgfile->ts.sector = 0;
     if ((imgfile->buffer = malloc(254)) == NULL) {
       free(imgfile);
-      //puts("malloc failed");
+      rde->type = 0;
       return(NULL);
     }
     imgfile->buflen = 254;
@@ -1018,6 +1098,13 @@ int di_read(ImageFile *imgfile, unsigned char *buffer, int len) {
 	return(counter);
       }
       imgfile->ts = next_ts_in_chain(imgfile->diskimage, imgfile->ts);
+      if (imgfile->ts.track == 0) {
+	/* the link pointed outside the image: end the file here with an
+	 * error status instead of reading block 1/0 (another file) */
+	set_status(imgfile->diskimage, 66, 0, 0);
+	imgfile->nextts.track = 0;
+	return(counter);
+      }
       p = get_ts_addr(imgfile->diskimage, imgfile->ts);
       imgfile->buffer = p + 2;
       imgfile->nextts.track = p[0];
@@ -1116,7 +1203,31 @@ void di_close(ImageFile *imgfile) {
   unsigned char *p;
 
   if (imgfile->mode == 'w') {
-    if (imgfile->bufptr) {
+    if (imgfile->bufptr == 0 && imgfile->ts.track == 0) {
+      /* Nothing was ever written: CBM DOS still gives an empty file one
+       * block with link 00 01, otherwise the entry has startts 0/0 and a
+       * later read would alias block 1/0. Writing a zero-length buffer
+       * through the normal path below does exactly that. */
+      if (imgfile->diskimage->blocksfree) {
+	imgfile->bufptr = 0;
+	memset(imgfile->buffer, 0, 254);
+	/* fall into the "bufptr" branch by forcing one (empty) last block */
+	imgfile->nextts = alloc_next_ts(imgfile->diskimage, imgfile->ts);
+	if (imgfile->nextts.track != 0) {
+	  imgfile->rawdirentry->startts = imgfile->nextts;
+	  imgfile->ts = imgfile->nextts;
+	  p = get_ts_addr(imgfile->diskimage, imgfile->ts);
+	  p[0] = 0;
+	  p[1] = 1;
+	  memset(p + 2, 0, 254);
+	  if (++(imgfile->rawdirentry->sizelo) == 0) {
+	    ++(imgfile->rawdirentry->sizehi);
+	  }
+	  --(imgfile->diskimage->blocksfree);
+	  imgfile->rawdirentry->type |= 0x80;
+	}
+      }
+    } else if (imgfile->bufptr) {
       if (imgfile->diskimage->blocksfree) {
 	imgfile->nextts = alloc_next_ts(imgfile->diskimage, imgfile->ts);
 	if (imgfile->nextts.track == 0) {
@@ -1152,6 +1263,20 @@ void di_close(ImageFile *imgfile) {
       }
     } else {
       imgfile->rawdirentry->type |= 0x80;
+    }
+    if (!(imgfile->rawdirentry->type & 0x80)) {
+      /* The write ran out of blocks (status 72) and the file is incomplete.
+       * Don't leave a splat entry that owns every free block and can
+       * neither be deleted nor overwritten: give the blocks back and drop
+       * the entry, exactly like VALIDATE would. The caller keeps its source
+       * data and can retry on another disk. */
+      if (imgfile->rawdirentry->startts.track) {
+	free_chain(imgfile->diskimage, imgfile->rawdirentry->startts);
+      }
+      memset((unsigned char *)imgfile->rawdirentry + 2, 0, 30);
+      imgfile->rawdirentry->type = 0;
+      imgfile->diskimage->blocksfree = blocks_free(imgfile->diskimage);
+      imgfile->diskimage->modified = 1;
     }
     free(imgfile->buffer);
   }
@@ -1305,7 +1430,7 @@ int di_format(DiskImage *di, const unsigned char *rawname, const unsigned char *
     }
 
     /* clear bam */
-    memset(p + 7, 0, 0xfa);
+    memset(p + 7, 0, 0xf9);
 
     /* get ptr to bam2 */
     p = get_ts_addr(di, di->bam2);
@@ -1323,7 +1448,7 @@ int di_format(DiskImage *di, const unsigned char *rawname, const unsigned char *
     }
 
     /* clear bam2 */
-    memset(p + 7, 0, 0xfa);
+    memset(p + 7, 0, 0xf9);
 
     /* free blocks */
     for (ts.track = 1; ts.track <= di_tracks(di->type); ++ts.track) {
@@ -1345,6 +1470,14 @@ int di_format(DiskImage *di, const unsigned char *rawname, const unsigned char *
 
     /* get ptr to dir */
     p = get_ts_addr(di, di->dir);
+
+    /* header: link to the first directory block (40/3), DOS version 'D'.
+     * Without this link every "New disk image" D81 had an unreachable,
+     * empty directory. */
+    p[0] = 40;
+    p[1] = 3;
+    p[2] = 'D';
+    p[3] = 0;
 
     /* copy name */
     memcpy(p + 4, rawname, 16);
@@ -1383,13 +1516,18 @@ int di_delete(DiskImage *di, const unsigned char *rawpattern, FileType type) {
   case T_SEQ:
   case T_PRG:
   case T_USR:
+  case T_REL:
     while ((rde = find_file_entry(di, rawpattern, type))) {
       free_chain(di, rde->startts);
+      if (type == T_REL && rde->relsidets.track) {
+	free_chain(di, rde->relsidets);   /* side-sector chain */
+      }
       rde->type = 0;
       di->modified = 1;
       ++delcount;
     }
     if (delcount) {
+      di->blocksfree = blocks_free(di);   /* keep the cached count in step with the BAM */
       return(set_status(di, 1, delcount, 0));
     } else {
       return(set_status(di, 62, 0, 0));
@@ -1407,12 +1545,99 @@ int di_delete(DiskImage *di, const unsigned char *rawpattern, FileType type) {
 int di_rename(DiskImage *di, const unsigned char *oldrawname, const unsigned char *newrawname, FileType type) {
   RawDirEntry *rde;
 
+  if (find_file_entry_exact(di, newrawname)) {
+    return(set_status(di, 63, 0, 0));   /* file exists */
+  }
   if ((rde = find_file_entry(di, oldrawname, type))) {
     memcpy(rde->rawname, newrawname, 16);
     di->modified = 1;
     return(set_status(di, 0, 0, 0));
   } else {
     return(set_status(di, 62, 0, 0));
+  }
+}
+
+
+/* Delete the one entry whose raw name matches exactly (no wildcards, any
+ * file type, splat entries included so a damaged image can be cleaned). */
+int di_delete_exact(DiskImage *di, const unsigned char *rawname) {
+  RawDirEntry *rde;
+
+  if ((rde = find_file_entry_exact(di, rawname)) == NULL) {
+    return(set_status(di, 62, 0, 0));
+  }
+  if (rde->startts.track) {
+    free_chain(di, rde->startts);
+  }
+  if ((rde->type & 7) == T_REL && rde->relsidets.track) {
+    free_chain(di, rde->relsidets);
+  }
+  rde->type = 0;
+  di->modified = 1;
+  di->blocksfree = blocks_free(di);
+  return(set_status(di, 1, 1, 0));
+}
+
+
+int di_rename_exact(DiskImage *di, const unsigned char *oldrawname, const unsigned char *newrawname) {
+  RawDirEntry *rde;
+
+  if (find_file_entry_exact(di, newrawname)) {
+    return(set_status(di, 63, 0, 0));
+  }
+  if ((rde = find_file_entry_exact(di, oldrawname)) == NULL) {
+    return(set_status(di, 62, 0, 0));
+  }
+  memcpy(rde->rawname, newrawname, 16);
+  di->modified = 1;
+  return(set_status(di, 0, 0, 0));
+}
+
+
+/* Open an entry by exact raw name for reading, whatever its type. */
+ImageFile *di_open_exact(DiskImage *di, const unsigned char *rawname) {
+  RawDirEntry *rde;
+
+  if ((rde = find_file_entry_exact(di, rawname)) == NULL) {
+    set_status(di, 62, 0, 0);
+    return(NULL);
+  }
+  /* di_open("rb") matches on (type | 0x80); reuse it with the entry's own
+   * type and exact name - the wildcard matcher is exact for names without
+   * '*' / '?' and those are handled by the direct lookup below. */
+  if (memchr(rawname, '*', 16) == NULL && memchr(rawname, '?', 16) == NULL) {
+    return(di_open(di, rawname, (FileType)(rde->type & 7), "rb"));
+  }
+  {
+    /* name contains wildcard characters: build the ImageFile by hand */
+    ImageFile *imgfile;
+    unsigned char *p;
+
+    if (!di_ts_valid(di, rde->startts)) {
+      set_status(di, 66, rde->startts.track, rde->startts.sector);
+      return(NULL);
+    }
+    if ((imgfile = malloc(sizeof(*imgfile))) == NULL) {
+      return(NULL);
+    }
+    imgfile->mode = 'r';
+    imgfile->ts = rde->startts;
+    p = get_ts_addr(di, rde->startts);
+    imgfile->buffer = p + 2;
+    imgfile->nextts.track = p[0];
+    imgfile->nextts.sector = p[1];
+    if (imgfile->nextts.track == 0) {
+      imgfile->buflen = (imgfile->nextts.sector >= 1) ? imgfile->nextts.sector - 1 : 0;
+    } else {
+      imgfile->buflen = 254;
+    }
+    imgfile->diskimage = di;
+    imgfile->rawdirentry = rde;
+    imgfile->position = 0;
+    imgfile->bufptr = 0;
+    ++(di->openfiles);
+    set_status(di, 0, 0, 0);
+    return(imgfile);
   }
 }
 
@@ -1429,4 +1654,181 @@ unsigned char *di_name_to_rawname(char *name) {
         rawname[i] = name[i];
     }
     return(rawname);
+}
+
+
+/* ---- disk tools --------------------------------------------------------- */
+
+/* Header byte layout (CBM DOS):
+ *   D64/D71 header = BAM block 18/0:  0x90 name[16]  0xA2 id[2]  0xA5 dos[2]
+ *   D81 header block 40/0:            0x04 name[16]  0x16 id[2]  0x19 dos[2]
+ * The two BAM sectors of a D81 (40/1, 40/2) repeat the ID at offset 4. */
+unsigned char *di_id(DiskImage *di) {
+  unsigned char *p = get_ts_addr(di, di->dir);
+  return(di->type == D81 ? p + 0x16 : p + 0xa2);
+}
+
+
+unsigned char *di_dostype(DiskImage *di) {
+  unsigned char *p = get_ts_addr(di, di->dir);
+  return(di->type == D81 ? p + 0x19 : p + 0xa5);
+}
+
+
+int di_rename_disk(DiskImage *di, const unsigned char *rawname16, const unsigned char *rawid2) {
+  unsigned char *p = get_ts_addr(di, di->dir);
+
+  if (rawname16) {
+    memcpy(p + (di->type == D81 ? 0x04 : 0x90), rawname16, 16);
+  }
+  if (rawid2) {
+    memcpy(di_id(di), rawid2, 2);
+    if (di->type == D81) {
+      /* 1581 DOS compares the ID stored in each BAM sector with the header
+       * and reports a DOS mismatch when they differ, so change all three */
+      memcpy(get_ts_addr(di, di->bam) + 4, rawid2, 2);
+      memcpy(get_ts_addr(di, di->bam2) + 4, rawid2, 2);
+    }
+  }
+  di->modified = 1;
+  return(set_status(di, 0, 0, 0));
+}
+
+
+int di_set_locked(DiskImage *di, const unsigned char *rawname, int locked) {
+  RawDirEntry *rde;
+
+  if ((rde = find_file_entry_exact(di, rawname)) == NULL) {
+    return(set_status(di, 62, 0, 0));
+  }
+  if (locked) {
+    rde->type |= 0x40;
+  } else {
+    rde->type &= ~0x40;
+  }
+  di->modified = 1;
+  return(set_status(di, 0, 0, 0));
+}
+
+
+int di_entry_info(DiskImage *di, const unsigned char *rawname, int *type, int *blocks, int *closed, int *locked) {
+  RawDirEntry *rde;
+
+  if ((rde = find_file_entry_exact(di, rawname)) == NULL) {
+    return(set_status(di, 62, 0, 0));
+  }
+  if (type)   *type = rde->type & 7;
+  if (blocks) *blocks = rde->sizehi << 8 | rde->sizelo;
+  if (closed) *closed = (rde->type & 0x80) ? 1 : 0;
+  if (locked) *locked = (rde->type & 0x40) ? 1 : 0;
+  return(set_status(di, 0, 0, 0));
+}
+
+
+/* Allocate every block of a chain in the (freshly cleared) BAM. The chain
+ * ends at the first link that is invalid, or at a block that is already
+ * allocated: that is a cross-link into another file or a loop back into
+ * this one, and CBM DOS would stop there too (71, DIR ERROR). Returns the
+ * number of blocks allocated. */
+static int validate_alloc_chain(DiskImage *di, TrackSector ts) {
+  int n = 0;
+
+  while (ts.track && di_ts_valid(di, ts) && n < di_blocks(di->type)) {
+    if (!di_is_ts_free(di, ts)) {
+      break;
+    }
+    di_alloc_ts(di, ts);
+    ++n;
+    ts = next_ts_in_chain(di, ts);
+  }
+  return(n);
+}
+
+
+int di_validate(DiskImage *di, int *fixed_blocks, int *removed_entries) {
+  unsigned char *p;
+  TrackSector ts;
+  RawDirEntry *rde;
+  int before, ndir, hops, offset, removed = 0;
+
+  before = blocks_free(di);
+
+  /* 1. Clear the allocation maps so every block reads as "allocated" with
+   *    a zero free count, then free every data block by geometry. Going
+   *    through di_free_ts() keeps the per-track counts exact whatever
+   *    garbage the old BAM held (a zeroed, or an all-0xFF, BAM). */
+  switch (di->type) {
+  case D64:
+    p = get_ts_addr(di, di->bam);
+    memset(p + 4, 0, 35 * 4);          /* tracks 1-35: count + 3 bitmap bytes */
+    break;
+  case D71:
+    p = get_ts_addr(di, di->bam);
+    memset(p + 4, 0, 35 * 4);          /* side 0 */
+    memset(p + 0xdd, 0, 35);           /* side 1 free counts (tracks 36-70) */
+    p = get_ts_addr(di, di->bam2);
+    memset(p, 0, 35 * 3);              /* side 1 bitmaps in 53/0 */
+    break;
+  case D81:
+    p = get_ts_addr(di, di->bam);
+    memset(p + 16, 0, 40 * 6);         /* tracks 1-40: count + 5 bitmap bytes */
+    p = get_ts_addr(di, di->bam2);
+    memset(p + 16, 0, 40 * 6);         /* tracks 41-80 */
+    break;
+  }
+  for (ts.track = 1; ts.track <= di_tracks(di->type); ++ts.track) {
+    if (di->type == D71 && ts.track == 53) {
+      continue;   /* 1571 keeps the whole second-side BAM track reserved */
+    }
+    for (ts.sector = 0; ts.sector < di_sectors_per_track(di->type, ts.track); ++ts.sector) {
+      di_free_ts(di, ts);
+    }
+  }
+
+  /* 2. Re-allocate the system blocks: the BAM sectors of a D81 live apart
+   *    from the directory header (on D64/D71 header and BAM are the same
+   *    block, allocated with the directory chain below). */
+  if (di->type == D81) {
+    di_alloc_ts(di, di->bam);
+    di_alloc_ts(di, di->bam2);
+  }
+
+  /* 3. Header block plus the directory chain hanging off it. ndir bounds
+   *    the entry walk below to exactly the blocks that were reachable. */
+  ndir = validate_alloc_chain(di, di->dir);
+
+  /* 4. Every closed entry keeps its data chain (and REL side sectors);
+   *    unclosed entries were left by an interrupted write and are dropped,
+   *    their blocks simply stay free. */
+  ts = next_ts_in_chain(di, di->dir);
+  for (hops = 1; ts.track && hops < ndir; hops++) {
+    p = get_ts_addr(di, ts);
+    for (offset = 0; offset < 256; offset += 32) {
+      rde = (RawDirEntry *)(p + offset);
+      if (rde->type == 0) {
+	continue;
+      }
+      if (!(rde->type & 0x80)) {
+	memset((unsigned char *)rde + 2, 0, 30);   /* keep the block link in bytes 0-1 */
+	rde->type = 0;
+	++removed;
+	continue;
+      }
+      validate_alloc_chain(di, rde->startts);
+      if ((rde->type & 7) == T_REL && rde->relsidets.track) {
+	validate_alloc_chain(di, rde->relsidets);
+      }
+    }
+    ts = next_ts_in_chain(di, ts);
+  }
+
+  di->blocksfree = blocks_free(di);
+  di->modified = 1;
+  if (fixed_blocks) {
+    *fixed_blocks = di->blocksfree - before;
+  }
+  if (removed_entries) {
+    *removed_entries = removed;
+  }
+  return(set_status(di, 0, 0, 0));
 }

@@ -8,6 +8,7 @@
 #include "macro.h"
 #include "ui.h"
 #include "clipboard.h"
+#include "login.h"
 #include "net.h"
 
 
@@ -418,6 +419,7 @@ int kbd_getkey() {
                     /* ESC alone opens menu */
                     if (event.key.keysym.sym == SDLK_ESCAPE) {
                         clipboard_paste_clear();   /* ESC cancels an in-progress paste */
+                        login_abort();             /* ...and a running login script */
                         ui_menu();
                         return 0;
                     } else if (((event.key.keysym.mod & KMOD_CTRL) || (event.key.keysym.mod & KMOD_META))
@@ -430,7 +432,12 @@ int kbd_getkey() {
                     } else if (event.key.keysym.mod & KMOD_META) {
                         ui_metakey(&event.key.keysym);
                     } else if (cfg_termmode == 1) {
-                        /* ANSI mode: send ASCII/escape sequences for special keys */
+                        /* ANSI mode: send ASCII/escape sequences for special keys.
+                         * The sequences are the xterm/SyncTERM ones that Mystic,
+                         * Synchronet, Enigma and WWIV decode. */
+                        int kshift = (event.key.keysym.mod & KMOD_SHIFT) ? 1 : 0;
+                        int kalt = (event.key.keysym.mod & KMOD_ALT) ? 1 : 0;
+                        int kctrl = (event.key.keysym.mod & KMOD_CTRL) ? 1 : 0;
                         switch (event.key.keysym.sym) {
                         case SDLK_UP:    net_send_string((const unsigned char *)"\033[A"); return 0;
                         case SDLK_DOWN:  net_send_string((const unsigned char *)"\033[B"); return 0;
@@ -438,11 +445,53 @@ int kbd_getkey() {
                         case SDLK_LEFT:  net_send_string((const unsigned char *)"\033[D"); return 0;
                         case SDLK_HOME:  net_send_string((const unsigned char *)"\033[H"); return 0;
                         case SDLK_END:   net_send_string((const unsigned char *)"\033[F"); return 0;
-                        case SDLK_BACKSPACE: return 8;
-                        case SDLK_DELETE:    return 127;
+                        case SDLK_INSERT: net_send_string((const unsigned char *)"\033[2~"); return 0;
+                        case SDLK_DELETE: net_send_string((const unsigned char *)"\033[3~"); return 0;
+                        case SDLK_PAGEUP:
+                            /* Shift+PgUp/PgDn browse the local scrollback; plain
+                             * PgUp/PgDn go to the BBS (message readers use them). */
+                            if (kshift) { ui_pageup(); return 0; }
+                            net_send_string((const unsigned char *)"\033[5~"); return 0;
+                        case SDLK_PAGEDOWN:
+                            if (kshift) { ui_pagedown(); return 0; }
+                            net_send_string((const unsigned char *)"\033[6~"); return 0;
+                        /* F1-F4 use the VT100 PF keys (SS3), F5-F12 the xterm forms */
+                        case SDLK_F1:  net_send_string((const unsigned char *)"\033OP"); return 0;
+                        case SDLK_F2:  net_send_string((const unsigned char *)"\033OQ"); return 0;
+                        case SDLK_F3:  net_send_string((const unsigned char *)"\033OR"); return 0;
+                        case SDLK_F4:  net_send_string((const unsigned char *)"\033OS"); return 0;
+                        case SDLK_F5:  net_send_string((const unsigned char *)"\033[15~"); return 0;
+                        case SDLK_F6:  net_send_string((const unsigned char *)"\033[17~"); return 0;
+                        case SDLK_F7:  net_send_string((const unsigned char *)"\033[18~"); return 0;
+                        case SDLK_F8:  net_send_string((const unsigned char *)"\033[19~"); return 0;
+                        case SDLK_F9:  net_send_string((const unsigned char *)"\033[20~"); return 0;
+                        case SDLK_F10: net_send_string((const unsigned char *)"\033[21~"); return 0;
+                        case SDLK_F11: net_send_string((const unsigned char *)"\033[23~"); return 0;
+                        case SDLK_F12: net_send_string((const unsigned char *)"\033[24~"); return 0;
+                        case SDLK_BACKSPACE: return 8;    /* BBS software expects ^H here */
                         case SDLK_RETURN:
                         case SDLK_KP_ENTER: return 13;
+                        case SDLK_TAB:
+                            if (kshift) { net_send_string((const unsigned char *)"\033[Z"); return 0; }
+                            return 9;
                         default:
+                            /* Ctrl+A..Z -> control byte (Ctrl-X/Ctrl-Z in BBS editors) */
+                            if (kctrl &&
+                                event.key.keysym.sym >= SDLK_a && event.key.keysym.sym <= SDLK_z) {
+                                return (unsigned char)(event.key.keysym.sym - SDLK_a + 1);
+                            }
+                            /* Alt+letter -> ESC letter (Synchronet / Mystic hotkeys).
+                             * Only plain letters: Option+digit on macOS and AltGr
+                             * combinations still produce their unicode character. */
+                            if (kalt && !kctrl &&
+                                event.key.keysym.sym >= SDLK_a && event.key.keysym.sym <= SDLK_z) {
+                                unsigned char seq[3];
+                                seq[0] = 27;
+                                seq[1] = (unsigned char)(event.key.keysym.sym - SDLK_a + (kshift ? 'A' : 'a'));
+                                seq[2] = 0;
+                                net_send_string(seq);
+                                return 0;
+                            }
                             /* For printable ASCII, use unicode value directly */
                             if (event.key.keysym.unicode >= 32 && event.key.keysym.unicode < 127) {
                                 return (unsigned char)event.key.keysym.unicode;
@@ -463,6 +512,15 @@ int kbd_getkey() {
                             case 0x00D1: return 165;  /* Ñ */
                             case 0x00DF: return 225;  /* ß */
                             case 0x00A3: return 156;  /* £ */
+                            case 0x00E8: return 138;  /* è */
+                            case 0x00EA: return 136;  /* ê */
+                            case 0x00E0: return 133;  /* à */
+                            case 0x00F8: return 237;  /* ø */
+                            case 0x00D8: return 237;  /* Ø (CP437 has only one slashed O) */
+                            case 0x00E6: return 145;  /* æ */
+                            case 0x00C6: return 146;  /* Æ */
+                            case 0x00A7: return 21;   /* § */
+                            case 0x00B0: return 248;  /* degree */
                             }
                             break;
                         }
@@ -476,36 +534,37 @@ int kbd_getkey() {
                         ctrl = (event.key.keysym.mod & KMOD_CTRL) ? 1 : 0;
                         cbm = (event.key.keysym.mod & KMOD_ALT) ? 1 : 0;
 
-                        /* Special keys always use keytable */
+                        /* Special keys: fixed PETSCII codes. They go through petscii_done so
+                         * macro recording captures RETURN, cursor keys, DEL, F-keys and space. */
                         switch (event.key.keysym.sym) {
                         case SDLK_RETURN: case SDLK_KP_ENTER:
-                            return shift ? 0x8D : 0x0D;
+                            key = shift ? 0x8D : 0x0D; goto petscii_done;
                         case SDLK_BACKSPACE:
-                            return 0x14;  /* C64 DEL */
+                            key = 0x14; goto petscii_done;  /* C64 DEL */
                         case SDLK_DELETE:
-                            return 0x94;  /* C64 INSERT */
+                            key = 0x94; goto petscii_done;  /* C64 INSERT */
                         case SDLK_HOME:
-                            return shift ? 0x93 : 0x13;
+                            key = shift ? 0x93 : 0x13; goto petscii_done;
                         case SDLK_UP:
-                            return 0x91;  /* cursor up */
+                            key = 0x91; goto petscii_done;  /* cursor up */
                         case SDLK_DOWN:
-                            return 0x11;  /* cursor down */
+                            key = 0x11; goto petscii_done;  /* cursor down */
                         case SDLK_LEFT:
-                            return 0x9D;  /* cursor left */
+                            key = 0x9D; goto petscii_done;  /* cursor left */
                         case SDLK_RIGHT:
-                            return 0x1D;  /* cursor right */
+                            key = 0x1D; goto petscii_done;  /* cursor right */
                         case SDLK_TAB:
-                            return 0x09;  /* RUN/STOP */
-                        case SDLK_F1:  return shift ? 0x89 : 0x85;
-                        case SDLK_F2:  return 0x89;
-                        case SDLK_F3:  return shift ? 0x8A : 0x86;
-                        case SDLK_F4:  return 0x8A;
-                        case SDLK_F5:  return shift ? 0x8B : 0x87;
-                        case SDLK_F6:  return 0x8B;
-                        case SDLK_F7:  return shift ? 0x8C : 0x88;
-                        case SDLK_F8:  return 0x8C;
+                            key = 0x09; goto petscii_done;  /* RUN/STOP */
+                        case SDLK_F1:  key = shift ? 0x89 : 0x85; goto petscii_done;
+                        case SDLK_F2:  key = 0x89; goto petscii_done;
+                        case SDLK_F3:  key = shift ? 0x8A : 0x86; goto petscii_done;
+                        case SDLK_F4:  key = 0x8A; goto petscii_done;
+                        case SDLK_F5:  key = shift ? 0x8B : 0x87; goto petscii_done;
+                        case SDLK_F6:  key = 0x8B; goto petscii_done;
+                        case SDLK_F7:  key = shift ? 0x8C : 0x88; goto petscii_done;
+                        case SDLK_F8:  key = 0x8C; goto petscii_done;
                         case SDLK_SPACE:
-                            return 0x20;
+                            key = 0x20; goto petscii_done;
                         case SDLK_PAGEUP:
                             ui_pageup(); return 0;
                         case SDLK_PAGEDOWN:

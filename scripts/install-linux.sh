@@ -130,20 +130,22 @@ else
     echo "[+] SDL installed successfully"
 fi
 
-# Check for SDL_mixer (optional)
-if pkg-config --exists SDL_mixer 2>/dev/null; then
-    echo "[+] SDL_mixer found (music support enabled)"
-elif [ -f /usr/include/SDL/SDL_mixer.h ] || [ -f /usr/local/include/SDL/SDL_mixer.h ]; then
-    echo "[+] SDL_mixer found (music support enabled)"
+# libopenmpt is REQUIRED on Linux/macOS (XM music; the Makefile links it)
+if pkg-config --exists libopenmpt 2>/dev/null || [ -f /usr/include/libopenmpt/libopenmpt.h ] || [ -f /usr/local/include/libopenmpt/libopenmpt.h ]; then
+    echo "[+] libopenmpt found"
 else
-    echo "[*] SDL_mixer not found — music support disabled (optional)"
-    echo "[*] Attempting to install SDL_mixer..."
+    echo "[*] libopenmpt not found — installing..."
     case "$PKG_MGR" in
-        apt)    sudo apt install -y libsdl-mixer1.2-dev 2>/dev/null && echo "[+] SDL_mixer installed" || echo "[*] SDL_mixer install failed, continuing without music" ;;
-        dnf)    sudo dnf install -y SDL_mixer-devel 2>/dev/null && echo "[+] SDL_mixer installed" || echo "[*] SDL_mixer install failed, continuing without music" ;;
-        pacman) sudo pacman -S --noconfirm sdl_mixer 2>/dev/null && echo "[+] SDL_mixer installed" || echo "[*] SDL_mixer install failed, continuing without music" ;;
-        *)      echo "[*] Install SDL_mixer manually for XM/MOD music support" ;;
+        apt)    sudo apt install -y libopenmpt-dev ;;
+        dnf)    sudo dnf install -y libopenmpt-devel ;;
+        pacman) sudo pacman -S --noconfirm libopenmpt ;;
+        *)      echo "[!] Please install the libopenmpt development package and re-run"; exit 1 ;;
     esac
+    if ! pkg-config --exists libopenmpt 2>/dev/null && [ ! -f /usr/include/libopenmpt/libopenmpt.h ]; then
+        echo "[!] libopenmpt still not found — cannot build"
+        exit 1
+    fi
+    echo "[+] libopenmpt installed"
 fi
 
 echo ""

@@ -8,3 +8,4 @@ dist/
 ._*
 .DS_Store
 scripts/signing/
+cgterm-capture-*.txt

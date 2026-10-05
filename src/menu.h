@@ -45,3 +45,6 @@ int menu_set_paths(void);
 int menu_select_post_speed(void);
 int menu_edit_bookmark(char *name, int namesz, char *host, int hostsz, char *port, int portsz, int *mode);
 void menu_show_help(const char *filename);
+
+int menu_choose_list(const char *title, const char **items, int count, int initial);
+int menu_options(const char *capture_state);

@@ -53,7 +53,7 @@ CGTERM 3.0 ::: ULTiMATE C64 BBS WAREZ SCENE EDiTiON
     music by........... Mr.Death
     support by......... mermaid
     ideas by........... Larry
-    tested by.......... hedning
+    tested by.......... hedning, Jucke, SkyHawk, Larry
     original code by... MagerValp
 
 
@@ -102,8 +102,15 @@ Oldschool terminal. Modern systems.
   TRANSFER PROTOCOLS
   - Punter upload and download (verified against C*BASE 3.3.8)
   - Multi Punter batch upload and download
+  - ZMODEM batch upload and download with file names, sizes
+    and crash recovery; a board that starts sending is
+    answered automatically
   - Rainbow protocol upload and download
-  - XMODEM, XMODEM-CRC, XMODEM-1K
+  - XMODEM, XMODEM-CRC, XMODEM-1K (CRC falls back to checksum)
+  - Last protocol remembered: T + Return repeats a transfer
+  - Transfer log (~/.cgterm-transfers.log) and on-screen
+    summary with bytes, seconds and cps
+  - Cancel asks Y/N without stalling the other side
   - Filename conversion: .prg <-> ,p  .seq <-> ,s  .usr <-> ,u
   - Upload files directly from D64/D71/D81 disk images
   - Download files into D64/D71/D81 disk images
@@ -113,9 +120,25 @@ Oldschool terminal. Modern systems.
   DiSK IMAGE SUPPORT
   - Create new D64 (170K), D71 (340K), D81 (800K) images
   - Browse and select files inside disk images
+  - CBM-style listing: blocks, name, type, * splat, < locked,
+    disk header line with name, ID and DOS type
+  - Validate (rebuild the BAM), lock/unlock files
+  - Rename disk and ID, extract files to the host folder,
+    insert host files into the download image
+  - Images with error tables (175531 / 351062 / 822400 bytes)
   - Set disk images as upload/download target
   - PETSCII-correct disk labels
   - Disk space checking before download
+
+  SESSiON & STATUS
+  - Status line: board, PETSCII/ANSI, 40/80, capture, macro
+  - Capture to file at any time (Options), timestamped lines
+  - Copy screen text to the clipboard
+  - Connection history with one-key redial
+  - Per-bookmark auto-login scripts in the bookmark notes:
+      login=w:Handle;s:name;cr;w:Password;s:pw;cr
+  - Options panel: sound, music volume, send/receive delay,
+    zoom, status line, auto ZMODEM, transfer log, capture
 
   FONT SYSTEM
   - 10 header fonts and 9 menu body fonts included
@@ -148,18 +171,29 @@ Oldschool terminal. Modern systems.
   - Authentic 8x8 C64 font rendering in preview window
 
   NETWORKiNG
+  - IPv4 and IPv6, every address of a host tried in turn
   - Non-blocking connect (UI stays responsive during connection)
   - ESC to cancel connection attempts
-  - Telnet IAC filtering for clean terminal display
-  - Raw byte mode for transfer protocols (no IAC interference)
+  - Telnet negotiation (terminal type, window size, SGA);
+    raw-TCP boards and PETSCII pi (0xFF) handled transparently
+  - Transfer protocols see the un-escaped byte stream on
+    Telnet links and the raw stream on plain TCP boards
   - Connection history logging
-  - Auto-reconnect support
+  - Auto-reconnect after a dropped carrier (reconnect = N)
   - Screen cleared automatically before new connections
 
+  ANSi EMULATiON
+  - Scroll regions, auto-wrap with pending wrap, DECSC/DECRC
+  - Insert/delete character and line, erase with background
+  - iCE colours (blink = bright background), 256 and truecolour
+  - DEC line drawing, xterm function keys, Alt+letter hotkeys
+
   KEYBOARD & INPUT
-  - C64 keyboard layout profiles (SE/US for Mac/Linux/Windows)
-  - Clipboard paste support (Cmd-V / Ctrl-V)
-  - Macro recording and playback
+  - Any .kbd file in the assets folder selectable from the menu
+  - Clipboard paste support (Cmd-V / Ctrl-V), paced to baud,
+    UTF-8 and accented letters transliterated for PETSCII
+  - Macro recording and playback (RETURN, cursor keys and
+    function keys included)
 
   PLATFORM SUPPORT
   - macOS (native .app bundle, arm64 + x86_64)
@@ -197,6 +231,10 @@ and everyone still dialing in.
 ==================================================
   CONTACT
 ==================================================
+
+Website, downloads and news:
+
+    https://www.cgterm.se
 
 Bugs, feature requests or random elite spam:
 

@@ -44,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>CGTerm</string>
   <key>CFBundleExecutable</key><string>CGTerm</string>
   <key>CFBundleIdentifier</key><string>com.cgterm.app</string>
-  <key>CFBundleVersion</key><string>3.0.0</string>
-  <key>CFBundleShortVersionString</key><string>3.0.0</string>
+  <key>CFBundleVersion</key><string>3.1.0</string>
+  <key>CFBundleShortVersionString</key><string>3.1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -54,6 +54,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+command -v dylibbundler >/dev/null 2>&1 || { echo "[!] dylibbundler not found: brew install dylibbundler"; exit 1; }
 echo "[*] Bundling linked libraries with dylibbundler..."
 dylibbundler -of -b \
   -x "$MACOS/CGTerm" -x "$MACOS/cgchat" -x "$MACOS/cgedit" \
@@ -66,6 +67,22 @@ chmod u+w "$LIBS/libSDL2-2.0.0.dylib"
 # sdl12-compat dlopens "@loader_path/libSDL2-2.0.0.dylib" (relative to the
 # bundled libSDL-1.2.0.dylib in Contents/libs), so this id makes it resolve.
 install_name_tool -id "@loader_path/libSDL2-2.0.0.dylib" "$LIBS/libSDL2-2.0.0.dylib"
+
+# Since late 2025 Homebrew's "sdl2" is sdl2-compat: an SDL2 API on top of
+# SDL3 that dlopens "@loader_path/libSDL3.dylib" at load time and shows a
+# modal "could not load SDL3" dialog (the app never starts) when it is
+# missing. Bundle SDL3 next to it whenever the copied libSDL2 refers to it.
+if strings "$LIBS/libSDL2-2.0.0.dylib" | grep -q "libSDL3.dylib"; then
+  SDL3_SRC="$(readlink -f /opt/homebrew/lib/libSDL3.0.dylib 2>/dev/null || echo /opt/homebrew/lib/libSDL3.0.dylib)"
+  if [ ! -f "$SDL3_SRC" ]; then
+    echo "[!] libSDL2 is sdl2-compat but libSDL3 was not found (brew install sdl3)"
+    exit 1
+  fi
+  echo "[*] Adding libSDL3 (dlopen'd by sdl2-compat)..."
+  cp "$SDL3_SRC" "$LIBS/libSDL3.dylib"
+  chmod u+w "$LIBS/libSDL3.dylib"
+  install_name_tool -id "@loader_path/libSDL3.dylib" "$LIBS/libSDL3.dylib"
+fi
 
 echo "[*] Ad-hoc code signing (inside-out)..."
 # Sign each bundled dylib explicitly. They live in Contents/libs (non-standard),

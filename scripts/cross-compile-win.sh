@@ -24,7 +24,7 @@ echo "[+] Found i686-w64-mingw32-gcc (32-bit, matches SDL 1.2)"
 if [ ! -f "$SDL_DIR/include/SDL/SDL.h" ]; then
     echo "[*] Downloading SDL 1.2.15 Windows development files..."
     cd /tmp
-    curl -L -o SDL-devel-1.2.15-mingw32.tar.gz \
+    curl -fL -o SDL-devel-1.2.15-mingw32.tar.gz \
         "https://www.libsdl.org/release/SDL-devel-1.2.15-mingw32.tar.gz"
     tar xzf SDL-devel-1.2.15-mingw32.tar.gz
     echo "[+] SDL 1.2.15 downloaded"
@@ -39,11 +39,15 @@ if [ ! -f "$SDL_MIXER_DIR/include/SDL_mixer.h" ]; then
     echo "[*] Downloading SDL_mixer 1.2.12 Windows dev files..."
     cd /tmp
     # optional download — don't let a network failure abort the build (set -e)
-    curl -L --connect-timeout 10 --max-time 30 -o SDL_mixer-devel-1.2.12-VC.zip \
+    curl -fL --connect-timeout 10 --max-time 30 -o SDL_mixer-devel-1.2.12-VC.zip \
         "https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-devel-1.2.12-VC.zip" 2>/dev/null || true
     if [ -f SDL_mixer-devel-1.2.12-VC.zip ]; then
-        unzip -o SDL_mixer-devel-1.2.12-VC.zip >/dev/null 2>&1
-        echo "[+] SDL_mixer 1.2.12 downloaded"
+        if unzip -o SDL_mixer-devel-1.2.12-VC.zip >/dev/null 2>&1; then
+            echo "[+] SDL_mixer 1.2.12 downloaded"
+        else
+            rm -f SDL_mixer-devel-1.2.12-VC.zip
+            echo "[*] SDL_mixer archive unusable — continuing without music"
+        fi
     fi
 fi
 if [ -f "$SDL_MIXER_DIR/include/SDL_mixer.h" ]; then
@@ -72,8 +76,8 @@ fi
 OBJDIR="$ROOT_DIR/build/obj-win32"
 SRCDIR="$ROOT_DIR/src"
 
-COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard modem music music_preload ansi cp437font"
-TERM="xfer xmodem punter rainbow diskimage dir fileselector ui_term"
+COMMON="kernal gfx net config paths keyboard menu font timer crc sound macro ui clipboard modem music music_preload ansi cp437font login"
+TERM="xfer xmodem punter rainbow zmodem diskimage dir fileselector session ui_term"
 
 # Compile common objects
 echo "[*] Compiling common sources..."

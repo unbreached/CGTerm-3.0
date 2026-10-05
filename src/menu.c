@@ -7,6 +7,7 @@
 #include "gfx.h"
 #include "keyboard.h"
 #include "menu.h"
+#include <dirent.h>
 
 
 SDL_bool menu_visible;
@@ -600,6 +601,7 @@ void menu_update_xfer(int direction, int protocol) {
   font_draw_string(80, 138, " P  ");
   font_draw_string(80, 150, " W  ");
   font_draw_string(80, 162, " M  ");
+  font_draw_string(80, 174, " Z  ");
   font_set_font(menu_font[0]);
   font_draw_string(112, 102, "Xmodem");
   font_draw_string(112, 114, "Xmodem/CRC");
@@ -607,11 +609,12 @@ void menu_update_xfer(int direction, int protocol) {
   font_draw_string(112, 138, "Punter");
   font_draw_string(112, 150, "Rainbow");
   font_draw_string(112, 162, "Multi Punter");
+  font_draw_string(112, 174, "Zmodem (batch)");
 
   font_set_font(menu_font[1]);
-  font_draw_string(84, 183, "Return");
+  font_draw_string(84, 195, "Return");
   font_set_font(menu_font[0]);
-  font_draw_string(154, 183, "to start");
+  font_draw_string(154, 195, "to start (last choice preselected)");
 }
 
 
@@ -629,7 +632,8 @@ char *proto[] = {
   "Xmodem-1k",
   "Punter",
   "Rainbow",
-  "Multi Punter"
+  "Multi Punter",
+  "Zmodem"
 };
 
 char *dir[] = {
@@ -1817,6 +1821,22 @@ static int font_selector(const char *title,
 }
 
 
+/* menu_font[] slots may alias each other (a missing font file makes a slot
+ * reuse another); free a font only when no other slot still points at it. */
+static void menu_font_release(int slot) {
+  int i;
+  Font *f = menu_font[slot];
+  if (!f) return;
+  for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
+    if (i != slot && menu_font[i] == f) {
+      menu_font[slot] = NULL;
+      return;      /* still referenced elsewhere */
+    }
+  }
+  font_free(f);
+  menu_font[slot] = NULL;
+}
+
 int menu_select_splash_font(void) {
   int sel = font_selector("Select header font:",
     splash_font_files, splash_font_names, NUM_SPLASH_FONTS,
@@ -1827,8 +1847,13 @@ int menu_select_splash_font(void) {
     path_build_asset(fname, sizeof(fname), splash_font_files[sel]);
     newf = font_load_font(fname, 24, 32, 16, 16);
     if (newf) {
-      if (menu_font[2] != menu_font[0] && menu_font[2] != menu_font[1])
-        font_free(menu_font[2]);
+      Font *old = menu_font[2];
+      int i;
+      menu_font_release(2);
+      /* slots that aliased the old header font follow it to the new one */
+      for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
+        if (menu_font[i] == old && old != NULL) menu_font[i] = newf;
+      }
       menu_font[2] = newf;
       cfg_splashfont = sel;
     }
@@ -1847,7 +1872,13 @@ int menu_select_menu_font(void) {
     path_build_asset(fname, sizeof(fname), menu_font_files[sel]);
     newf = font_load_font(fname, 10, 12, 16, 16);
     if (newf) {
-      if (menu_font[0] != menu_font[1]) font_free(menu_font[0]);
+      Font *old = menu_font[0];
+      int i;
+      menu_font[1] = NULL;          /* [1] always aliases [0] */
+      menu_font_release(0);
+      for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
+        if (menu_font[i] == old && old != NULL) menu_font[i] = newf;
+      }
       menu_font[0] = newf;
       menu_font[1] = newf;
       cfg_menufont = sel;
@@ -2112,27 +2143,26 @@ void menu_keyboard_test(void) {
   char kbd_names[MAX_KBD_FILES][64];
   int num_kbd = 0;
 
-  /* Scan for C64 keyboard profiles (the ones with -c64 in the name) */
+  /* Every *.kbd in the asset directory is a selectable layout; the display
+   * name is the file name without extension (default.kbd first). */
   {
-    const char *profiles[] = {
-      "default.kbd",
-      NULL
-    };
-    const char *names[] = {
-      "Default (Unicode)",
-      NULL
-    };
-    int pi;
-    for (pi = 0; profiles[pi] && num_kbd < MAX_KBD_FILES; pi++) {
-      FILE *test;
-      path_build_asset(fname, sizeof(fname), profiles[pi]);
-      test = fopen(fname, "r");
-      if (test) {
-        fclose(test);
-        strncpy(kbd_files[num_kbd], profiles[pi], 63);
-        strncpy(kbd_names[num_kbd], names[pi], 63);
-        num_kbd++;
+    DIR *d = opendir(path_asset_root());
+    struct dirent *de;
+    strncpy(kbd_files[0], "default.kbd", 63);
+    strncpy(kbd_names[0], "Default (Unicode)", 63);
+    num_kbd = 1;
+    if (d) {
+      while ((de = readdir(d)) != NULL && num_kbd < MAX_KBD_FILES) {
+        size_t l = strlen(de->d_name);
+        if (l > 4 && l < 60 && strcmp(de->d_name + l - 4, ".kbd") == 0 &&
+            strcmp(de->d_name, "default.kbd") != 0) {
+          strncpy(kbd_files[num_kbd], de->d_name, 63);
+          kbd_files[num_kbd][63] = 0;
+          snprintf(kbd_names[num_kbd], 64, "%.*s", (int)(l - 4), de->d_name);
+          num_kbd++;
+        }
       }
+      closedir(d);
     }
   }
 
@@ -2294,7 +2324,11 @@ void menu_keyboard_test(void) {
             /* Load selected layout */
             path_build_asset(fname, sizeof(fname), kbd_files[selection]);
             if (kbd_reload(fname) == 0) {
-              cfg_keyboard = kbd_files[selection];
+              /* kbd_files[] is a stack array of this function: keep the
+               * name in config.c's persistent buffer instead of dangling */
+              extern char keyboard[256];
+              snprintf(keyboard, sizeof(keyboard), "%s", fname);
+              cfg_keyboard = keyboard;
               cfg_save_setting("keyboard", kbd_files[selection]);
               menu_draw_message_timed("Keyboard layout loaded!", 2000);
             } else {
@@ -2952,11 +2986,53 @@ void menu_fs_clear(void) {
 }
 
 
-/* entrytype: 0=file, 1=dir, 2=disk image, 3=special (Use this folder, <- Back) */
+/* entrytype: 0=file, 1=dir, 2=disk image, 3=special (Use this folder, <- Back),
+ *            4=CBM directory entry, 5=CBM directory header (both inside a
+ *            disk image; fileselector.c lays the text out in fixed columns,
+ *            see fs_format_entry / fs_format_header there) */
 void menu_fs_draw_blocks_free(const char *text) {
   int len = (int)strlen(text);
   font_set_font(menu_font[0]);
   font_draw_string_color(menu_width - len * 10 - 15, 14, text, 0x00, 0xff, 0x66);
+}
+
+
+/* Draw columns [from, from+len) of a fixed-layout line at character column
+ * `from` (10 px per character); stops early at the end of the text. */
+static void menu_fs_draw_cols(int x, int y, const char *text, int from, int len, int r, int g, int b) {
+  char buf[32];
+  int tl = (int)strlen(text), i;
+
+  if (from >= tl || len <= 0) {
+    return;
+  }
+  if (len > (int)sizeof(buf) - 1) len = (int)sizeof(buf) - 1;
+  for (i = 0; i < len && from + i < tl; i++) {
+    buf[i] = text[from + i];
+  }
+  buf[i] = 0;
+  font_draw_string_color(x + from * 10, y, buf, r, g, b);
+}
+
+
+/* The 3-letter CBM file type at columns 24-26 of a directory entry line,
+ * in the same colours the extension-based host listing uses. */
+static void menu_fs_draw_cbm_type(int x, int y, const char *text) {
+  const char *t = strlen(text) >= 27 ? text + 24 : "";
+
+  if (strncmp(t, "PRG", 3) == 0) {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0x60, 0xff, 0x60);
+  } else if (strncmp(t, "SEQ", 3) == 0) {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0xff, 0xcc, 0x60);
+  } else if (strncmp(t, "USR", 3) == 0) {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0xff, 0x60, 0xff);
+  } else if (strncmp(t, "REL", 3) == 0) {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0x00, 0xee, 0xff);
+  } else if (strncmp(t, "DEL", 3) == 0) {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0xa0, 0xa0, 0xa0);
+  } else {
+    menu_fs_draw_cols(x, y, text, 24, 3, 0x60, 0x80, 0xff);
+  }
 }
 
 
@@ -3034,6 +3110,33 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
     font_draw_string_color(x, y + 1, "IMG:", 0xff, 0x88, 0x00);
     font_draw_string_color(x + 40, y + 1, text, 0xff, 0xaa, 0x44);
     break;
+  case 4:
+    /* CBM directory entry:  BBBB "NAME"             *PRG<
+     * blocks muted, name light blue, '*' (splat) red, type by kind,
+     * '<' (locked) yellow */
+    menu_fs_draw_cols(x, y + 1, text, 0, 4, 0x40, 0x80, 0x90);
+    menu_fs_draw_cols(x, y + 1, text, 4, 18, 0x60, 0x80, 0xff);
+    if (strlen(text) > 23 && text[23] == '*') {
+      menu_fs_draw_cols(x, y + 1, text, 23, 1, 0xff, 0x40, 0x40);
+    }
+    menu_fs_draw_cbm_type(x, y + 1, text);
+    if (strlen(text) > 27 && text[27] == '<') {
+      menu_fs_draw_cols(x, y + 1, text, 27, 1, 0xff, 0xff, 0x54);
+    }
+    break;
+  case 5:
+    /* CBM directory header:  0 "DISK NAME       " ID 2A  — drawn in
+     * reverse video like the C64 does, name white, the rest cyan */
+    {
+      SDL_Rect hr;
+      int hl = (int)strlen(text);
+      hr.x = x; hr.y = y; hr.w = hl * 10 + 4; hr.h = 14;
+      SDL_FillRect(menu_surface, &hr, SDL_MapRGBA(menu_surface->format, 0x20, 0x30, 0x70, 0xf0));
+    }
+    menu_fs_draw_cols(x, y + 1, text, 0, 2, 0x00, 0xee, 0xff);
+    menu_fs_draw_cols(x, y + 1, text, 2, 18, 0xff, 0xff, 0xff);
+    menu_fs_draw_cols(x, y + 1, text, 20, 8, 0x00, 0xee, 0xff);
+    break;
   case 3:
     /* Special entries */
     font_set_font(menu_font[0]);
@@ -3085,4 +3188,146 @@ void menu_fs_draw_line(int line, const char *text, int selected, int entrytype, 
   }
 
   menu_dirty = 1;
+}
+
+
+/* ---- generic list chooser ----
+ * Draws a titled list with a cursor; Up/Down, PgUp/PgDn, Enter selects,
+ * Esc returns -1. Blocks like the other panels. */
+int menu_choose_list(const char *title, const char **items, int count, int initial) {
+  SDL_Event ev;
+  int cursor = (initial >= 0 && initial < count) ? initial : 0;
+  int top = 0;
+  int result = -2;
+  int redraw = 1;
+  int rows;
+
+  if (count <= 0) {
+    menu_draw_message("Nothing to show");
+    menu_show();
+    gfx_vbl();
+    return -1;
+  }
+  rows = (menu_height - 90) / 16;
+  if (rows < 4) rows = 4;
+
+  while (result == -2) {
+    if (redraw) {
+      int lx = 30, ty = 30, i;
+      Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+
+      if (cursor < top) top = cursor;
+      if (cursor >= top + rows) top = cursor - rows + 1;
+
+      SDL_FillRect(menu_surface, NULL, solidbg);
+      menu_draw_borderbox(10, 10, menu_width - 11, menu_height - 11);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(lx, ty, "[ ", 0x00, 0xee, 0xff);
+      font_draw_string_color(lx + 20, ty, title, 0xff, 0x40, 0x80);
+      font_draw_string_color(lx + 20 + (int)strlen(title) * 12, ty, " ]", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[0]);
+      for (i = 0; i < rows && top + i < count; i++) {
+        int y = ty + 32 + i * 16;
+        char line[96];
+        snprintf(line, sizeof(line), "%c %.*s", top + i == cursor ? '>' : ' ',
+                 (menu_width - lx - 40) / 10, items[top + i]);
+        if (top + i == cursor) {
+          font_draw_string_color(lx, y, line, 0xff, 0xff, 0xff);
+        } else {
+          font_draw_string_color(lx, y, line, 0x00, 0xff, 0x66);
+        }
+      }
+      font_draw_string_color(lx, menu_height - 30, "Up/Down, Enter selects, Esc backs out", 0x60, 0x80, 0xff);
+      menu_dirty = SDL_TRUE;
+      menu_show();
+      gfx_vbl();
+      redraw = 0;
+    }
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN) {
+        switch (ev.key.keysym.sym) {
+        case SDLK_ESCAPE: case SDLK_q: result = -1; break;
+        case SDLK_RETURN: case SDLK_KP_ENTER: result = cursor; break;
+        case SDLK_UP: if (cursor > 0) cursor--; redraw = 1; break;
+        case SDLK_DOWN: if (cursor < count - 1) cursor++; redraw = 1; break;
+        case SDLK_PAGEUP: cursor -= rows; if (cursor < 0) cursor = 0; redraw = 1; break;
+        case SDLK_PAGEDOWN: cursor += rows; if (cursor >= count) cursor = count - 1; redraw = 1; break;
+        case SDLK_HOME: cursor = 0; redraw = 1; break;
+        case SDLK_END: cursor = count - 1; redraw = 1; break;
+        default: break;
+        }
+      }
+    }
+    SDL_Delay(20);
+    gfx_vbl();
+  }
+  return result;
+}
+
+
+/* ---- options panel ----
+ * Shows the live values and returns the key the user pressed (lower case)
+ * so ui_term.c can apply and persist the change, then calls again. 0 = Esc. */
+int menu_options(const char *capture_state) {
+  SDL_Event ev;
+  int result = 0;
+  int redraw = 1;
+
+  while (!result) {
+    if (redraw) {
+      int lx = 30, ty = 30, line_h = 20, i;
+      char rows[10][96];
+      Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+
+      SDL_FillRect(menu_surface, NULL, solidbg);
+      menu_draw_borderbox(10, 10, menu_width - 11, menu_height - 11);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(lx, ty, "[ ", 0x00, 0xee, 0xff);
+      font_draw_string_color(lx + 20, ty, "OPTIONS", 0xff, 0x40, 0x80);
+      font_draw_string_color(lx + 110, ty, " ]", 0x00, 0xee, 0xff);
+
+      snprintf(rows[0], 96, "[S] Sound effects ........ %s", cfg_sound ? "on" : "off");
+      snprintf(rows[1], 96, "[+] [-] Music volume ..... %d/128", cfg_musicvolume);
+      snprintf(rows[2], 96, "[D] Send delay (baud) .... %d ms/char", cfg_senddelay);
+      snprintf(rows[3], 96, "[R] Receive delay ........ %d ms/char", cfg_recvdelay);
+      snprintf(rows[4], 96, "[Z] Zoom ................. %dx", cfg_zoom);
+      snprintf(rows[5], 96, "[L] Status line .......... %s", cfg_statusline ? "on" : "off");
+      snprintf(rows[6], 96, "[A] Auto-start ZMODEM .... %s", cfg_autozmodem ? "on" : "off");
+      snprintf(rows[7], 96, "[T] Transfer log ......... %s", cfg_transferlog ? "on" : "off");
+      snprintf(rows[8], 96, "[C] Capture to file ...... %s", capture_state);
+      snprintf(rows[9], 96, "[E] Local echo ........... %s", cfg_localecho ? "on" : "off");
+      font_set_font(menu_font[0]);
+      for (i = 0; i < 10; i++) {
+        font_draw_string_color(lx, ty + 40 + i * line_h, rows[i], 0x00, 0xff, 0x66);
+      }
+      font_draw_string_color(lx, menu_height - 30, "Press a key to change, Esc to back", 0x60, 0x80, 0xff);
+      menu_dirty = SDL_TRUE;
+      menu_show();
+      gfx_vbl();
+      redraw = 0;
+    }
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN) {
+        int uc = ev.key.keysym.unicode;
+        if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+          uc = ev.key.keysym.sym;
+        if (ev.key.keysym.sym == SDLK_ESCAPE) {
+          result = -1;
+        } else if (ev.key.keysym.sym == SDLK_KP_PLUS || uc == '+' || uc == '=') {
+          result = '+';
+        } else if (ev.key.keysym.sym == SDLK_KP_MINUS || uc == '-') {
+          result = '-';
+        } else if (uc >= 'a' && uc <= 'z') {
+          result = uc;
+        } else if (uc >= 'A' && uc <= 'Z') {
+          result = uc + 32;
+        }
+      }
+    }
+    SDL_Delay(20);
+    gfx_vbl();
+  }
+  return (result == -1) ? 0 : result;
 }

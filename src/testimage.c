@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
   DiskImage *di;
   Dir *dir;
   DirEntry *entry;
-  char quotename[19];
+  char quotename[40];
   TrackSector ts;
   ImageFile *imgfile;
   int i, l;
@@ -43,6 +43,10 @@ int main(int argc, char **argv) {
   }
 
   rawname = di_name_to_rawname(argv[3]);
+  if (rawname == NULL) {
+    puts("out of memory");
+    return(1);
+  }
   for (i = 0; i < 16; ++i) {
     printf("%02x ", rawname[i]);
   }
@@ -70,6 +74,7 @@ int main(int argc, char **argv) {
 
   if ((in = fopen(argv[2], "rb")) == NULL) {
     puts("fopen failed");
+    di_close(imgfile);
     goto end;
   }
 
@@ -82,12 +87,15 @@ int main(int argc, char **argv) {
   fclose(in);
   di_close(imgfile);
 
-  dir = dir_read(argv[1]);
-  printf("0 \"%-16s\"\n", dir->title);
+  if ((dir = dir_read(argv[1])) == NULL) {
+    puts("dir_read failed");
+    goto end;
+  }
+  printf("0 \"%-16s\"\n", dir->title ? dir->title : "");
   entry = dir->firstentry;
   while (entry) {
-    sprintf(quotename, "\"%s\"", entry->name);
-    printf("%-4d %-18s %c%s%c\n", entry->size, quotename, entry->closed ? ' ' : '*', dir_type[entry->type], entry->locked ? '<' : ' ');
+    snprintf(quotename, sizeof(quotename), "\"%s\"", entry->name ? entry->name : "");
+    printf("%-4d %-18s %c%s%c\n", entry->size, quotename, entry->closed ? ' ' : '*', dir_type[entry->type & 7], entry->locked ? '<' : ' ');
     entry = entry->next;
   }
 

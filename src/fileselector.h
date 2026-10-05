@@ -28,3 +28,7 @@ signed char fs_select(FileSelector *fs);
 
 /* Toggle tag on entry, returns new tagged count */
 int fs_toggle_tag(FileSelector *fs, int entry);
+
+/* Render a raw-PETSCII (disk image) name as printable ASCII for the UI;
+ * bytes outside 0x20-0x5F become '.' */
+void fs_petscii_name_to_display(const char *src, char *dst, size_t dstsz);

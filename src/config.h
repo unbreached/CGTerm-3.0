@@ -37,6 +37,13 @@ extern int cfg_termmode;
 extern int cfg_bookmark_termmode[];
 extern char cfg_connect_name[];
 extern int cfg_charset;  /* 0=standard, 1=swedish, 2=german */
+extern int cfg_statusline;    /* show the status row under the terminal */
+extern int cfg_autozmodem;    /* start a ZMODEM receive when the board sends ZRQINIT */
+extern int cfg_lastprotocol;  /* Protocol enum value preselected in the transfer menu */
+extern int cfg_lastdirection; /* Direction enum value preselected in the transfer menu */
+extern int cfg_musicvolume;   /* 0-128 */
+extern int cfg_transferlog;   /* append a line per transfer to the transfer log */
+extern char *cfg_userdir;     /* per-user data directory (Windows: %APPDATA%\CGTerm) */
 
 
 int cfg_init(char *argv0);
@@ -55,3 +62,17 @@ void cfg_resolve_bookmarkfile(char *resolved, size_t size);
 void cfg_log_connection(const char *host, int port);
 const char *cfg_get_bookmark_note(const char *host, int port);
 void cfg_set_bookmark_note(const char *host, int port, const char *note);
+/* "login=" / "login:" line of the bookmark note, or "" */
+const char *cfg_get_bookmark_login(const char *host, int port);
+
+/* Per-user data file: Unix "$HOME/.<name>", Windows "%APPDATA%\CGTerm\<name>". */
+void cfg_user_file(char *out, size_t size, const char *name);
+char *cfg_user_path(char *out, size_t size, const char *name);   /* same, returns out */
+
+typedef struct cfg_history_entry {
+  char when[20];
+  char host[200];
+  int port;
+} CfgHistoryEntry;
+/* Newest-first list of distinct host:port from the connection history. */
+int cfg_read_history(CfgHistoryEntry *entries, int max);

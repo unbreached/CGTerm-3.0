@@ -79,7 +79,12 @@ echo [+] Build successful
 :: ---------------------------------------------------
 echo [*] Preparing installer files...
 
-if not exist "%ROOT%\dist\staging" mkdir "%ROOT%\dist\staging"
+if not exist "%ROOT%\dist\win32" mkdir "%ROOT%\dist\win32"
+:: The NSIS script (cgterm-installer.nsi) reads everything from dist\win32,
+:: the same layout cross-compile-win.sh produces.
+copy /Y "%ROOT%\bin\cgterm.exe" "%ROOT%\dist\win32\cgterm.exe" >nul
+if exist "%ROOT%\bin\cgchat.exe" copy /Y "%ROOT%\bin\cgchat.exe" "%ROOT%\dist\win32\cgchat.exe" >nul
+if exist "%ROOT%\bin\cgedit.exe" copy /Y "%ROOT%\bin\cgedit.exe" "%ROOT%\dist\win32\cgedit.exe" >nul
 
 :: Find and copy SDL.dll
 :: Check common locations where MinGW puts SDL.dll
@@ -117,7 +122,7 @@ if "!SDL_DLL!"=="" (
 
 if "!SDL_DLL!"=="" (
     echo [!] Could not find SDL.dll
-    echo     Please copy SDL.dll to: %ROOT%\dist\staging\SDL.dll
+    echo     Please copy SDL.dll to: %ROOT%\dist\win32\SDL.dll
     echo     Then re-run this script.
     echo.
     echo     SDL.dll is usually in your MinGW bin directory, e.g.:
@@ -126,7 +131,7 @@ if "!SDL_DLL!"=="" (
 )
 
 echo [+] Found SDL.dll: !SDL_DLL!
-copy /Y "!SDL_DLL!" "%ROOT%\dist\staging\SDL.dll" >nul
+copy /Y "!SDL_DLL!" "%ROOT%\dist\win32\SDL.dll" >nul
 
 :: ---------------------------------------------------
 :: Check for .ico file (create from .icns if missing)
