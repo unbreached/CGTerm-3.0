@@ -159,6 +159,9 @@ int xmodem_recv(int usecrc) {
   int c;
   int blocknum, bufctr, errorcnt, blocksize;
   int nexthandshake;
+  int started = 0;      /* a valid block has been accepted */
+  int handshakes = 0;   /* opening handshakes sent without any block arriving */
+  int garbage = 0;      /* non-header bytes seen since the last valid block */
 
   xmodem_buffer_len = 0;
   xmodem_recv_bytes = 0;
@@ -168,23 +171,54 @@ int xmodem_recv(int usecrc) {
   XMDBG("[XMODEM] recv start mode=%s initial_handshake=%s\n",
         usecrc ? "CRC" : "CHECKSUM", xm_name(nexthandshake));
 
+  /* Purge any bytes buffered before the transfer begins (e.g. the board's
+   * echoed RETURN, or a trailing prompt CR) so they can't be mistaken for a
+   * block header.  The X-modem spec makes the receiver responsible for
+   * clearing the line before it sends its opening NAK/'C'. */
+  {
+    int drained = 0;
+    while (xfer_recv_byte(50) >= 0) {
+      ++drained;
+      if (drained > 4096) break;   /* don't spin forever on a live stream */
+    }
+    if (drained) XMDBG("[XMODEM] purged %d stale byte(s) before start\n", drained);
+  }
+
   xm_send_byte_dbg(nexthandshake);
+  handshakes = 1;
   xfer_progress_status("Starting...", 0, 0);
 
+  /* errorcnt counts consecutive 10 s timeouts and is only reset by a valid
+   * block or EOT, so a host that keeps echoing junk can't keep us here
+   * forever (the loop below no longer resets it on every pass). */
+  errorcnt = 0;
   for (;;) {
     if (xfer_cancel) {
       xmodem_fail("Cancelling...");
       return 0;
     }
 
-    errorcnt = 0;
     while ((c = xm_recv_byte_dbg(10000)) == -1 && errorcnt < 10) {
-      XMDBG("[XMODEM] recv handshake timeout retry=%d resend=%s\n", errorcnt + 1, xm_name(nexthandshake));
-      xfer_progress_status("Waiting for data...", xfer_saved_bytes, 0);
-      xm_send_byte_dbg(nexthandshake);
       ++errorcnt;
+      if (!started && usecrc && handshakes >= 3) {
+        /* Three unanswered 'C's: the sender is probably checksum-only
+         * (old C64 XMODEM). Fall back as the X-modem spec recommends. */
+        XMDBG("[XMODEM] no reply to 'C', falling back to checksum mode\n");
+        usecrc = 0;
+        nexthandshake = XM_NAK;
+        xfer_progress_status("No CRC reply, trying checksum...", 0, 0);
+      }
+      XMDBG("[XMODEM] recv handshake timeout retry=%d resend=%s\n", errorcnt, xm_name(nexthandshake));
+      if (started || handshakes >= 3) {
+        xfer_progress_status("Waiting for data...", xfer_saved_bytes, 0);
+      }
+      xm_send_byte_dbg(nexthandshake);
+      if (!started) ++handshakes;
     }
-    nexthandshake = XM_NAK;
+    /* Keep re-sending the opening handshake ('C' for CRC, NAK for checksum)
+     * until an actual block arrives. After the first block a timeout sends
+     * NAK (= "resend the last block"), which the duplicate path below
+     * absorbs; sending ACK there would let the sender run a block ahead. */
 
     switch (c) {
     case -2:
@@ -247,6 +281,10 @@ getblock:
         if (is_duplicate) {
           xm_send_byte_dbg(XM_ACK);
           XMDBG("[XMODEM] ACK duplicate block=%d expected still=%d\n", blockid, blocknum & 0xff);
+          nexthandshake = XM_NAK;
+          started = 1;
+          errorcnt = 0;
+          garbage = 0;
           continue;
         }
 
@@ -262,7 +300,10 @@ getblock:
         }
 
         xm_send_byte_dbg(XM_ACK);
-        nexthandshake = XM_ACK;
+        nexthandshake = XM_NAK;
+        started = 1;
+        errorcnt = 0;
+        garbage = 0;
         ++blocknum;
         XMDBG("[XMODEM] ACK sent next_expected=%d\n", blocknum & 0xff);
       }
@@ -277,9 +318,18 @@ getblock:
       xfer_progress_status("Transfer complete", xfer_saved_bytes, xfer_saved_bytes);
       return 1;
     default:
-      XMDBG("[XMODEM] unexpected start byte=%d (%02X)\n", c, c & 0xff);
-      xmodem_fail("Wtf!?");
-      return 0;
+      /* Not a block header.  A compliant receiver ignores leading/interblock
+       * garbage (an echoed CR, stray prompt bytes) and keeps waiting for
+       * SOH/STX/EOT rather than aborting the whole transfer - but a host
+       * that just streams text (user picked Receive at a menu prompt) must
+       * not keep us here forever. */
+      XMDBG("[XMODEM] ignoring unexpected byte=%d (%02X), still waiting for block\n",
+            c, c >= 0 ? (c & 0xff) : 0);
+      if (++garbage > 2048) {
+        xmodem_fail("No XMODEM data from remote");
+        return 0;
+      }
+      break;
     }
   }
 }
@@ -334,11 +384,28 @@ int xmodem_send(int send1k) {
 
   XMDBG("[XMODEM] send start allow1k=%d waiting for receiver handshake\n", send1k);
   c = 0;
-  while (c != XM_C && c != XM_NAK) {
-    c = xm_recv_byte_dbg(1000);
-    if (xfer_cancel) {
-      xfer_progress_status("Canceled", 0, xfer_file_size);
-      return 0;
+  {
+    int waited = 0;
+    while (c != XM_C && c != XM_NAK) {
+      c = xm_recv_byte_dbg(1000);
+      if (c == -2) {
+        xmodem_fail("Disconnected!");
+        return 0;
+      }
+      if (c == XM_CAN) {
+        xfer_progress_status("Canceled by remote!", 0, xfer_file_size);
+        return 0;
+      }
+      if (xfer_cancel) {
+        xfer_progress_status("Canceled", 0, xfer_file_size);
+        return 0;
+      }
+      if (c == -1 && ++waited >= 60) {
+        /* The receiver never sent NAK/'C' (user picked Send at the wrong
+         * prompt). Don't wait forever. */
+        xmodem_fail("Receiver did not start");
+        return 0;
+      }
     }
   }
 
@@ -352,22 +419,43 @@ int xmodem_send(int send1k) {
   xfer_progress_status("Uploading...", 0, xfer_file_size);
 
   blocksize = (bytesleft > 896 && send1k && usecrc) ? 1024 : 128;
-  if (xmodem_load_block(blocksize) == 0) {
-    xfer_progress_status("Read error", 0, xfer_file_size);
-    return 0;
+  if (bytesleft > 0) {
+    if (xmodem_load_block(blocksize) == 0) {
+      xfer_progress_status("Read error", 0, xfer_file_size);
+      return 0;
+    }
+    xmodem_send_block(blocknum, blocksize, usecrc);
   }
-  xmodem_send_block(blocknum, blocksize, usecrc);
+  /* (a 0-byte file sends just EOT, which yields an empty file at the receiver) */
 
+  {
+  int timeouts = 0;
   while (bytesleft > 0) {
+    if (xfer_cancel) {
+      xmodem_fail("Cancelling...");
+      return 0;
+    }
     c = xm_recv_byte_dbg(10000);
     switch (c) {
     case -2:
       xmodem_fail("Disconnected!");
       return 0;
+    case -1:
+      /* No ACK/NAK within 10 s: resend the outstanding block (spec), give
+       * up after 10 tries so a dead receiver can't pin the UI forever. */
+      if (++timeouts >= 10) {
+        xmodem_fail("Timeout!");
+        return 0;
+      }
+      XMDBG("[XMODEM] send timeout %d, resending block=%u\n", timeouts, blocknum);
+      xfer_progress_status("No reply, resending...", sentbytes, xfer_file_size);
+      xmodem_send_block(blocknum, blocksize, usecrc);
+      break;
     case XM_CAN:
       xfer_progress_status("Canceled by remote!", sentbytes, xfer_file_size);
       return 0;
     case XM_ACK:
+      timeouts = 0;
       if (blocknum != 0) {
         sentbytes += xmodem_last_payload_len;
         bytesleft -= xmodem_last_payload_len;
@@ -399,6 +487,7 @@ int xmodem_send(int send1k) {
       XMDBG("[XMODEM] send ignoring byte=%d (%02X)\n", c, c >= 0 ? (c & 0xff) : 0);
       break;
     }
+  }
   }
 
   xfer_progress_status("Finishing...", sentbytes, xfer_file_size);

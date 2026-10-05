@@ -11,7 +11,8 @@ typedef enum protocol {
   PROT_XMODEM1K,
   PROT_PUNTER,
   PROT_RAINBOW,
-  PROT_MULTIPUNTER
+  PROT_MULTIPUNTER,
+  PROT_ZMODEM
 } Protocol;
 
 
@@ -33,9 +34,22 @@ extern int xfer_debug;
 struct fileselector;
 
 int xfer_recv(void);
-void xfer_send(char *filename);
+/* rawname: exact 16-byte PETSCII name when sending from inside a disk
+ * image (may be NULL). Returns 1 on success. */
+int xfer_send(const char *filename, const unsigned char *rawname);
 void xfer_send_multipunter(struct fileselector *fs);
-void xfer_save_file(char *filename);
+void xfer_send_zmodem(struct fileselector *fs);
+/* Returns 1 saved, 0 failed, -1 re-prompting the user for another name. */
+int xfer_save_file(char *filename);
+/* Drop the completed-but-unsaved download (user abandoned the name prompt). */
+void xfer_discard_download(void);
+
+/* Batch-protocol file hooks (ZMODEM): open a temp file, stream data with
+ * xfer_save_data(), then save it under the (sanitised) remote name. */
+int xfer_begin_file(void);
+int xfer_end_file(const char *remote_name);
+void xfer_abort_file(void);
+void xfer_log_result(const char *direction, const char *name, long bytes, unsigned int ms, const char *result);
 
 void xfer_send_byte(unsigned char c);
 signed int xfer_recv_byte(int timeout);

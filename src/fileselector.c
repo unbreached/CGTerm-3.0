@@ -21,7 +21,7 @@ static int filesperpage = 23;  /* default, recalculated in fs_new */
  * of what the board shows instead of a misleading character. Assumes the
  * common uppercase/graphics filename mode. Only for disk-image (PETSCII) names;
  * host-filesystem names are left untouched. */
-static void fs_petscii_name_to_display(const char *src, char *dst, size_t dstsz) {
+void fs_petscii_name_to_display(const char *src, char *dst, size_t dstsz) {
   size_t i = 0;
   if (dstsz == 0) {
     return;
@@ -79,6 +79,7 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
     fs->dir = NULL;
     fs->numentries = 0;
   }
+  fs->filesperpage = filesperpage;
   if ((fs->dir = dir_read(path)) == NULL) {
     /* couldn't read device... */
     char errmsg[256];
@@ -86,6 +87,11 @@ signed int fs_read_dir(FileSelector *fs, const char *path) {
     menu_draw_message(errmsg);
     menu_show();
     return(-1);
+  }
+  if (fs->dir->blocksfree >= 0) {
+    /* inside a disk image the first list line is the CBM directory header
+     * (0 "DISK NAME" ID 2A), so one entry fewer fits on a page */
+    fs->filesperpage = filesperpage - 1;
   }
   if (fs->dir->numentries) {
     fs->numentries = fs->dir->numentries;
@@ -105,15 +111,67 @@ static int fs_entry_type(DirEntry *de) {
   if (de->name && (de->name[0] == '<' || de->name[0] == '[')) return 3;
   if (de->type == T_DIR) {
     /* Check if it's a disk image (.d64/.d71/.d81) shown as dir */
-    char *dot = de->name ? strrchr(de->name, '.') : NULL;
-    if (dot && strlen(dot) == 4 && (dot[1] == 'd' || dot[1] == 'D') &&
-        isdigit(dot[2]) && isdigit(dot[3])) {
+    if (path_is_disk_image(de->name)) {
       return 2;  /* disk image */
     }
     return 1;  /* regular directory */
   }
   return 0;  /* file */
 }
+
+/* 1 while the selector shows the contents of a .d64/.d71/.d81 */
+static int fs_in_image(FileSelector *fs) {
+  return fs->dir && fs->dir->blocksfree >= 0;
+}
+
+
+/* Build the display text (tag column first) and the entrytype handed to
+ * menu_fs_draw_line for one entry.
+ *
+ * Inside a disk image a file is laid out like a line of the C64 directory
+ * listing, in fixed columns that menu_fs_draw_line colours separately
+ * (offsets after the tag character):
+ *    0-3   block count, left aligned as the drive prints it
+ *    4-21  "NAME" in quotes, padded to 18
+ *    22    space
+ *    23    '*' for an unclosed (splat) file, else space
+ *    24-26 file type PRG/SEQ/USR/REL/DEL
+ *    27    '<' for a locked file, else space
+ * e.g.  12   "GAME"             PRG<    -> 28 characters, 29 with the tag. */
+static int fs_format_entry(FileSelector *fs, DirEntry *de, char *display, size_t sz) {
+  int etype = fs_entry_type(de);
+  const char *nm = de->name ? de->name : "";
+  char dn[64];
+  char tag = de->tagged ? '*' : ' ';
+
+  if (fs_in_image(fs) && etype != 3) {
+    fs_petscii_name_to_display(nm, dn, sizeof(dn));
+    nm = dn;
+  }
+  if (fs_in_image(fs) && etype == 0) {
+    char quoted[20];
+    unsigned int blocks = de->size > 9999 ? 9999 : de->size;
+    snprintf(quoted, sizeof(quoted), "\"%.16s\"", nm);
+    snprintf(display, sz, "%c%-4u%-18s %c%s%c", tag, blocks, quoted,
+             de->closed ? ' ' : '*', dir_type[de->type & 7], de->locked ? '<' : ' ');
+    return 4;   /* CBM directory entry */
+  }
+  snprintf(display, sz, "%c%.29s", tag, nm);
+  return etype;
+}
+
+
+/* The CBM directory header line:  0 "DISK NAME       " ID 2A
+ * (tag column, then "0 ", the quoted 16-character name, ID and DOS type). */
+static void fs_format_header(FileSelector *fs, char *display, size_t sz) {
+  char name[64], id[4], dos[4];
+
+  fs_petscii_name_to_display(fs->dir->title ? fs->dir->title : "", name, sizeof(name));
+  fs_petscii_name_to_display((const char *)fs->dir->id, id, sizeof(id));
+  fs_petscii_name_to_display((const char *)fs->dir->dostype, dos, sizeof(dos));
+  snprintf(display, sz, " 0 \"%-16.16s\" %-2s %-2s", name, id, dos);
+}
+
 
 void fs_draw_name(FileSelector *fs, int entry, int line, int selected) {
   DirEntry *de;
@@ -124,17 +182,9 @@ void fs_draw_name(FileSelector *fs, int entry, int line, int selected) {
   while (entry--) {
     de = de->next;
   }
-  etype = fs_entry_type(de);
-  {
-    const char *nm = de->name;
-    char dn[64];
-    if (fs->dir && fs->dir->blocksfree >= 0 && de->name && etype != 3) {
-      fs_petscii_name_to_display(de->name, dn, sizeof(dn));
-      nm = dn;
-    }
-    snprintf(display, sizeof(display), "%c%.29s", de->tagged ? '*' : ' ', nm);
-  }
-  menu_fs_draw_line(line, display, selected || de->tagged, etype, de->size);
+  etype = fs_format_entry(fs, de, display, sizeof(display));
+  /* line 0 holds the directory header inside an image */
+  menu_fs_draw_line(line + (fs_in_image(fs) ? 1 : 0), display, selected || de->tagged, etype, de->size);
 }
 
 int fs_toggle_tag(FileSelector *fs, int entry) {
@@ -144,8 +194,8 @@ int fs_toggle_tag(FileSelector *fs, int entry) {
   while (entry--) {
     de = de->next;
   }
-  if (de->type == T_DIR) {
-    return fs->numtagged;  /* don't tag directories */
+  if (de->type == T_DIR || fs_entry_type(de) == 3) {
+    return fs->numtagged;  /* don't tag directories or the pseudo entries */
   }
   de->tagged = !de->tagged;
   if (de->tagged) {
@@ -174,6 +224,12 @@ void fs_draw(FileSelector *fs) {
   }
 
   if (fs->numentries) {
+    int hdr = 0;
+    if (fs_in_image(fs)) {
+      fs_format_header(fs, display, sizeof(display));
+      menu_fs_draw_line(0, display, 0, 5, 0);   /* CBM directory header */
+      hdr = 1;
+    }
     de = fs->dir->firstentry;
     l = fs->offset;
     while (l--) {
@@ -181,17 +237,8 @@ void fs_draw(FileSelector *fs) {
     }
     l = 0;
     while (de && l < fs->filesperpage) {
-      int etype = fs_entry_type(de);
-      {
-        const char *nm = de->name;
-        char dn[64];
-        if (fs->dir && fs->dir->blocksfree >= 0 && de->name && etype != 3) {
-          fs_petscii_name_to_display(de->name, dn, sizeof(dn));
-          nm = dn;
-        }
-        snprintf(display, sizeof(display), "%c%.29s", de->tagged ? '*' : ' ', nm);
-      }
-      menu_fs_draw_line(l, display, (l == fs->current), etype, de->size);
+      int etype = fs_format_entry(fs, de, display, sizeof(display));
+      menu_fs_draw_line(l + hdr, display, (l == fs->current), etype, de->size);
       de = de->next;
       ++l;
     }

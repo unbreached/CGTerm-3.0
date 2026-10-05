@@ -62,8 +62,9 @@ typedef struct imagefile {
 
 DiskImage *di_load_image(char *name);
 DiskImage *di_create_image(char *name, int size);
-void di_free_image(DiskImage *di);
-void di_sync(DiskImage *di);
+int di_free_image(DiskImage *di);   /* 0 ok, -1 if the image could not be written */
+int di_sync(DiskImage *di);
+int di_blocks(ImageType type);      /* data blocks by geometry (683 / 1366 / 3200) */
 
 int di_status(DiskImage *di, char *status);
 
@@ -75,6 +76,30 @@ int di_write(ImageFile *imgfile, unsigned char *buffer, int len);
 int di_format(DiskImage *di, const unsigned char *rawname, const unsigned char *rawid);
 int di_delete(DiskImage *di, const unsigned char *rawpattern, FileType type);
 int di_rename(DiskImage *di, const unsigned char *oldrawname, const unsigned char *newrawname, FileType type);
+int di_delete_exact(DiskImage *di, const unsigned char *rawname);
+int di_rename_exact(DiskImage *di, const unsigned char *oldrawname, const unsigned char *newrawname);
+ImageFile *di_open_exact(DiskImage *di, const unsigned char *rawname);
+
+/* Disk tools (file selector V / L / I keys). All take exact 16-byte
+ * 0xA0-padded PETSCII names; none of them write the image file, the caller
+ * flushes with di_free_image() / di_sync(). */
+
+/* Rebuild the BAM from the directory like CBM DOS VALIDATE. fixed_blocks
+ * gets (blocks free after) - (blocks free before), removed_entries the
+ * number of unclosed (splat) entries dropped. Either may be NULL. 0 ok. */
+int di_validate(DiskImage *di, int *fixed_blocks, int *removed_entries);
+/* set (locked != 0) or clear the 0x40 lock bit; 0 ok, 62 not found */
+int di_set_locked(DiskImage *di, const unsigned char *rawname, int locked);
+/* rewrite the header name (16 bytes, 0xA0 padded) and/or 2-byte ID; pass
+ * NULL to leave one of them unchanged. 0 ok. */
+int di_rename_disk(DiskImage *di, const unsigned char *rawname16, const unsigned char *rawid2);
+/* type (T_xxx), size in blocks, closed / locked flags of an entry; any
+ * output may be NULL. 0 ok, 62 not found. */
+int di_entry_info(DiskImage *di, const unsigned char *rawname, int *type, int *blocks, int *closed, int *locked);
+/* 2-byte disk ID / 2-byte DOS type ("2A", "3D") in the header, not NUL
+ * terminated */
+unsigned char *di_id(DiskImage *di);
+unsigned char *di_dostype(DiskImage *di);
 
 int di_sectors_per_track(ImageType type, int track);
 int di_tracks(ImageType type);

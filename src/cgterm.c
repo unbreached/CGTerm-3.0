@@ -22,40 +22,21 @@
 #include "music.h"
 #include "xfer.h"
 #include "ansi.h"
+#include "ui.h"
+#include "session.h"
+#include "login.h"
 #include "clipboard.h"
 
 
 #ifndef CGTERM_VERSION
-#define CGTERM_VERSION "3.0.0"
+#define CGTERM_VERSION "3.1.0"
 #endif
 
 int sendcrlf = 0;
+static int was_connected = 0;
 unsigned int lastsend = 0;
 unsigned int lastrecv = 0;
 unsigned int lastvbl = 0;
-FILE *logh;
-static int log_newline = 1;
-
-
-static void log_write_byte(int byte, FILE *f) {
-  if (f == NULL) return;
-  if (log_newline) {
-    time_t now = time(NULL);
-    struct tm *tm_info = localtime(&now);
-    fprintf(f, "[%02d:%02d:%02d] ",
-            tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
-    log_newline = 0;
-  }
-  if (fputc(byte, f) == EOF) {
-    return;
-  }
-  if (byte == 0x0d) {
-    fputc('\n', f);
-    log_newline = 1;
-  }
-}
-
-
 char *default_cgterm_cfg[] = {
   "#keyboard = ",
   "#zoom = 2",
@@ -97,19 +78,25 @@ void print_net_status(int code, char *message) {
 }
 
 
-void log_close(void) {
-  if (logh) {
-    fclose(logh);
-  }
-}
-
-
 void usage(void) {
     puts("cgterm [-4|-8] [-d delay] [-f] [-k keyboard.kbd] [-o logfile] [-r seconds]");
     puts("       [-s] [-z zoom] [-b(debug)] [-l (local echo on)] [-V (version)]");
     puts("       [host [port]]");
 }
 
+
+/* kbd_getkey() flags bytes coming from a "Load SEQ file" with +256: they are
+ * meant to be displayed locally, never sent to the BBS. Storing the result in
+ * an unsigned char dropped the flag and blasted the file to the board. */
+static unsigned char main_getkey(void) {
+  int kk = kbd_getkey();
+
+  if (kk > 255) {
+    ffd2((unsigned char)(kk - 256));
+    return 0;
+  }
+  return (unsigned char)kk;
+}
 
 int main(int argc, char *argv[]) {
   int c = 0;
@@ -119,34 +106,32 @@ int main(int argc, char *argv[]) {
     
   cfg_init(argv[0]);
 
+  /* System-wide config first (if any: /etc/cgterm.cfg, or cgterm.cfg next
+   * to the executable), then the per-user file on top. Reading only one of
+   * them meant the first saved user setting hid every bookmark and default
+   * from the system file for good. */
 #ifdef WINDOWS
-  if (cfg_readconfig("cgterm.cfg") < 0) {
+  snprintf(fname, sizeof(fname), "%s\\cgterm.cfg", path_system_config_dir());
+#else
+  snprintf(fname, sizeof(fname), "%s/cgterm.cfg", path_system_config_dir());
+#endif
+  if (cfg_file_exists(fname) && cfg_readconfig(fname) < 0) {
     return(1);
   }
-  if (cfg_read == 0) {
-    cfg_writeconfig(default_cgterm_cfg, "cgterm.cfg");
-    if (cfg_readconfig("cgterm.cfg") < 0) {
-      return(1);
-    }
-  }
+#ifdef WINDOWS
+  cfg_user_file(fname, sizeof(fname), "cgterm.cfg");
 #else
   snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
+#endif
   if (cfg_file_exists(fname)) {
     if (cfg_readconfig(fname) < 0) {
       return(1);
     }
-  } else {
-    snprintf(fname, sizeof(fname), "%s/cgterm.cfg", path_system_config_dir());
-    if (cfg_readconfig(fname) < 0) {
-      return(1);
-    }
   }
   if (cfg_read == 0) {
-    snprintf(fname, sizeof(fname), "%s/.cgtermrc", cfg_homedir);
     cfg_writeconfig(default_cgterm_cfg, fname);
     cfg_readconfig(fname);
   }
-#endif
 
   cfg_load_bookmarks();
 
@@ -195,7 +180,8 @@ int main(int argc, char *argv[]) {
       break;
 
     case 'z':
-      if ((cfg_zoom = strtol(optarg, (char **)NULL, 10)) == 0) {
+      cfg_zoom = strtol(optarg, (char **)NULL, 10);
+      if (cfg_zoom < 1 || cfg_zoom > 8) {   /* same bounds as the config file */
 	usage();
 	return(11);
       }
@@ -213,7 +199,9 @@ int main(int argc, char *argv[]) {
             cfg_localecho = 1;
             break;
             
-    case '?': usage(); break;
+    case '?':
+      usage();
+      return(100);
     default:
       usage();
       return(100);
@@ -226,6 +214,7 @@ int main(int argc, char *argv[]) {
   if (crc_init()) {
     return(14);
   }
+  gfx_status_enable(cfg_statusline);
   if (gfx_init(cfg_fullscreen, "CGTerm")) {
       printf("Killing because of GFX");
       return(15);
@@ -235,6 +224,12 @@ int main(int argc, char *argv[]) {
   }
   if (kernal_init()) {
     return(17);
+  }
+  if (cfg_termmode == 1) {
+    /* termmode = ansi in the config: set up the CP437 font, 80 columns and
+     * the colour tables now; enter_ansi_mode() only ran from the menu. */
+    gfx_set_columns(80);
+    ansi_init();
   }
   /* Initialize audio: try SDL_mixer first (supports XM music + WAV),
    * fall back to raw SDL audio if SDL_mixer not available */
@@ -269,7 +264,7 @@ int main(int argc, char *argv[]) {
     /* Black out the PETSCII screen behind the overlay */
     gfx_bgcolor(0);
     ffd2(147);  /* clear screen */
-    gfx_setcursxy(-1, -1);  /* hide blinking cursor */
+    gfx_cursor_show(0);  /* hide blinking cursor */
 
     /* Play splash music */
     {
@@ -327,7 +322,12 @@ int main(int argc, char *argv[]) {
      * SSH/stunnel tunnels) and was inconsistent with the connect dialog. */
     cfg_host = argv[0];
     if (argc == 2) {
-      cfg_port = (int)strtol(argv[1], (char **)NULL, 10);
+      long p = strtol(argv[1], (char **)NULL, 10);
+      if (p <= 0 || p > 65535) {
+        printf("Invalid port: %s\n", argv[1]);
+        return(1);
+      }
+      cfg_port = (int)p;
     }
 
   } else {
@@ -347,14 +347,11 @@ int main(int argc, char *argv[]) {
 
 
   if (cfg_logfile) {
-    /* append, don't truncate — opening "w" silently destroyed the previous
-     * session capture every launch when logfile= was set in the config */
-    if ((logh = fopen(cfg_logfile, "a")) == NULL) {
-      printf("Couldn't open %s for writing\n", cfg_logfile);
+    if (!session_capture_open(cfg_logfile)) {
       return(1);
     }
   }
-  atexit(log_close);
+  atexit(session_capture_close);
 
 
   for (;;) {
@@ -365,7 +362,11 @@ int main(int argc, char *argv[]) {
       } else {
 	lastvbl += 20;
       }
+      session_status_tick();
       gfx_vbl();
+    }
+    if (kbd_focus == FOCUS_TERM) {
+      login_tick(-1);   /* advance a running auto-login script (timeouts, sends) */
     }
 
     if (!net_connected() && cfg_host && cfg_reconnect && cfg_nextreconnect) {
@@ -380,12 +381,12 @@ int main(int argc, char *argv[]) {
 
     if (cfg_senddelay) {
       if (timer_get_ticks() > lastsend + cfg_senddelay) {
-          k = kbd_getkey();
+          k = main_getkey();
       } else {
 	k = 0;
       }
     } else {
-        k = kbd_getkey();
+        k = main_getkey();
     }
 
     /* Drain queued clipboard paste, paced at >= 8ms/byte even when senddelay
@@ -415,10 +416,21 @@ int main(int argc, char *argv[]) {
       }
     }
 
+    /* a failed send (net_write) disconnects without a -2 from net_receive():
+     * notice the transition so redial and the login script see the drop */
+    if (c != -2 && was_connected && !net_connected()) {
+      c = -2;
+    }
+    was_connected = net_connected();
+
     if (c == -2) {
       print("\x0d\x96" "dISCONNECTED!\x05\x0d");
-      if (timer_get_ticks() < cfg_nextreconnect) {
+      login_abort();
+      /* -r N / reconnect = N: redial N seconds after ANY drop, not only when
+       * the drop happened within N seconds of the last attempt */
+      if (cfg_reconnect > 0) {
 	cfg_nextreconnect = timer_get_ticks() + cfg_reconnect * 1000;
+	print("\x9e" "rEDIALING...\x05\x0d");
       } else {
 	cfg_nextreconnect = 0;
       }
@@ -434,21 +446,24 @@ int main(int argc, char *argv[]) {
 	}
 	if (cfg_localecho) {
 	  ffd2(k);
-	  if (logh) {
-	    log_write_byte(k, logh);
-	  }
+	  session_capture_byte(k);
 	}
       }
 
       if (c >= 0) {
+	if (cfg_autozmodem && session_zmodem_sentinel(c)) {
+	  /* the board started a ZMODEM send: answer it without a menu trip */
+	  print("\x0d\x9e" "zMODEM DOWNLOAD...\x05\x0d");
+	  ui_autostart_zmodem();
+	  continue;
+	}
 	if (cfg_termmode == 1) {
 	  ansi_out(c);
 	} else {
 	  ffd2(c);
 	}
-	if (logh) {
-	  log_write_byte(c, logh);
-	}
+	session_capture_byte(c);
+	login_tick(c);
       }
 
     } else {

@@ -7,6 +7,8 @@
 #include "config.h"
 #include "keyboard.h"
 #include "net.h"
+#include "login.h"
+#include <ctype.h>
 #include "kernal.h"
 #include "modem.h"
 #include "xfer.h"
@@ -33,8 +35,17 @@ void inputupdate(void) {
 }
 
 
+static void (*input_cancel_call)(void) = NULL;
+
+/* Register a callback for the current input prompt being abandoned (ESC or
+ * an empty answer). Cleared automatically by the next ui_inputcall(). */
+void ui_inputcall_on_cancel(void (*cancelcall)(void)) {
+  input_cancel_call = cancelcall;
+}
+
 void ui_inputcall(int width, char *title, char *text, void (*donecall)(char *), Focus focus) {
   input_done_call = donecall;
+  input_cancel_call = NULL;
   input_focus = focus;
   if (text) {
     strncpy(input_buffer, text, sizeof(input_buffer) - 1);
@@ -133,16 +144,26 @@ void ui_inputkey(SDL_keysym *keysym) {
   case SDLK_KP_ENTER:
     menu_hide();
     if (input_len) {
+      void (*cb)(char *) = input_done_call;
+      input_cancel_call = NULL;
       kbd_focus = input_focus;
-      input_done_call(input_buffer);
+      cb(input_buffer);
     } else {
+      void (*cancel)(void) = input_cancel_call;
+      input_cancel_call = NULL;
       kbd_focus = FOCUS_TERM; // maybe
+      if (cancel) cancel();
     }
     break;
 
   case SDLK_ESCAPE:
-    menu_hide();
-    kbd_focus = FOCUS_TERM; // maybe
+    {
+      void (*cancel)(void) = input_cancel_call;
+      input_cancel_call = NULL;
+      menu_hide();
+      kbd_focus = FOCUS_TERM; // maybe
+      if (cancel) cancel();
+    }
     break;
 
   case SDLK_BACKSPACE:
@@ -299,6 +320,55 @@ static void bm_rewrite_all(void) {
   }
 }
 
+/* The bookmark file is "bookmark = alias, host, port[, ansi]": a comma in
+ * the alias would split the line on reload and a host may only contain
+ * name characters. The editor allows 63 characters but addhost() stores 27,
+ * so clamp here and the user sees what will actually be kept. */
+static void bm_sanitize_fields(char *alias, size_t aliassz, char *host, size_t hostsz) {
+  char *p;
+  size_t i, o;
+
+  (void)aliassz;
+  for (p = alias; *p; p++) {
+    if (*p == ',' || *p == '\r' || *p == '\n') *p = ' ';
+  }
+  /* trim */
+  for (p = alias + strlen(alias); p > alias && p[-1] == ' '; p--) p[-1] = 0;
+  if (strlen(alias) > 27) alias[27] = 0;
+  for (i = 0, o = 0; host[i] && o + 1 < hostsz; i++) {
+    unsigned char c = (unsigned char)host[i];
+    if (isalnum(c) || c == '.' || c == '-' || c == ':' || c == '_') {
+      host[o++] = (char)c;
+    }
+  }
+  host[o] = 0;
+}
+
+/* Connect to bookmark b: shared by Enter and the 0-9 quick-dial keys so
+ * both honour the bookmark's terminal mode and set the window title. */
+static void bm_connect(int b) {
+  menu_hide();
+  kbd_focus = FOCUS_TERM;
+  cfg_sethost(cfg_bookmark_host[b]);
+  cfg_port = cfg_bookmark_port[b];
+  snprintf(cfg_connect_name, 128, "%s", cfg_bookmark_alias[b] ? cfg_bookmark_alias[b] : "");
+  if (cfg_bookmark_termmode[b] == 1) {
+    enter_ansi_mode();
+  } else if (cfg_termmode == 1) {
+    enter_petscii_mode();  /* switch back if was in ANSI */
+  }
+  {
+    char dbg[256];
+    snprintf(dbg, sizeof(dbg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
+    cfg_debug(dbg);
+  }
+  ffd2(147);  /* clear screen */
+  gfx_vbl();
+  if (modem_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status) == 0) {
+    login_start(cfg_bookmark_host[b], cfg_bookmark_port[b]);   /* per-bookmark auto-login, if any */
+  }
+}
+
 static void bm_delete(int index) {
   int i;
   if (index < 0 || index >= cfg_numbookmarks) return;
@@ -310,10 +380,12 @@ static void bm_delete(int index) {
     cfg_bookmark_alias[i] = cfg_bookmark_alias[i + 1];
     cfg_bookmark_host[i] = cfg_bookmark_host[i + 1];
     cfg_bookmark_port[i] = cfg_bookmark_port[i + 1];
+    cfg_bookmark_termmode[i] = cfg_bookmark_termmode[i + 1];   /* keep ANSI flags aligned */
   }
   cfg_bookmark_alias[cfg_numbookmarks - 1] = NULL;
   cfg_bookmark_host[cfg_numbookmarks - 1] = NULL;
   cfg_bookmark_port[cfg_numbookmarks - 1] = 0;
+  cfg_bookmark_termmode[cfg_numbookmarks - 1] = 0;
   cfg_numbookmarks--;
   bm_rewrite_all();
 }
@@ -360,7 +432,6 @@ void bm_add_alias(char *alias) {
 
 void ui_bookmarkkey(SDL_keysym *keysym) {
   int b;
-  char _DebugMsg[256];
   int max_bm = cfg_numbookmarks > 0 ? cfg_numbookmarks : 1;
 
   switch (keysym->sym) {
@@ -422,21 +493,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
     bm_input_len = 0;
     bm_input[0] = 0;
     if (b >= 0 && b < cfg_numbookmarks) {
-      menu_hide();
-      kbd_focus = FOCUS_TERM;
-      cfg_sethost(cfg_bookmark_host[b]);
-      cfg_port = cfg_bookmark_port[b];
-      snprintf(cfg_connect_name, 128, "%s", cfg_bookmark_alias[b]);
-      if (cfg_bookmark_termmode[b] == 1) {
-        enter_ansi_mode();
-      } else if (cfg_termmode == 1) {
-        enter_petscii_mode();  /* switch back if was in ANSI */
-      }
-      snprintf(_DebugMsg, sizeof(_DebugMsg), "Attempting to connect to: %s on port: %d\n", cfg_bookmark_host[b], cfg_bookmark_port[b]);
-      cfg_debug(_DebugMsg);
-      ffd2(147);  /* clear screen */
-      gfx_vbl();
-      modem_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
+      bm_connect(b);
     } else {
       menu_hide();
       kbd_focus = FOCUS_TERM;
@@ -451,6 +508,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt), &bm_mode)) {
         int port = atoi(pt);
         if (port <= 0 || port > 65535) port = 6400;
+        bm_sanitize_fields(nm, sizeof(nm), ht, sizeof(ht));
         if (nm[0] && ht[0] && cfg_numbookmarks < 40) {
           if (addhost(cfg_numbookmarks, nm, ht, port)) {
             cfg_bookmark_termmode[cfg_numbookmarks] = bm_mode;
@@ -475,12 +533,21 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       if (menu_edit_bookmark(nm, sizeof(nm), ht, sizeof(ht), pt, sizeof(pt), &bm_mode)) {
         int port = atoi(pt);
         if (port <= 0 || port > 65535) port = 6400;
-        if (cfg_bookmark_alias[bm_cursor]) free(cfg_bookmark_alias[bm_cursor]);
-        if (cfg_bookmark_host[bm_cursor]) free(cfg_bookmark_host[bm_cursor]);
+        bm_sanitize_fields(nm, sizeof(nm), ht, sizeof(ht));
+        /* replace the strings only once the new ones exist, so an
+         * allocation failure can't leave a NULL slot for bm_rewrite_all() */
+        char *old_alias = cfg_bookmark_alias[bm_cursor];
+        char *old_host = cfg_bookmark_host[bm_cursor];
         if (addhost(bm_cursor, nm, ht, port)) {
           cfg_bookmark_termmode[bm_cursor] = bm_mode;
+          free(old_alias);
+          free(old_host);
+          bm_rewrite_all();
+        } else {
+          cfg_bookmark_alias[bm_cursor] = old_alias;
+          cfg_bookmark_host[bm_cursor] = old_host;
+          menu_draw_message("Out of memory!");
         }
-        bm_rewrite_all();
       }
       menu_draw_bookmarks_sel(bm_cursor);
       menu_show();
@@ -565,13 +632,7 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
       b = keysym->unicode - '0';
       bm_cursor = b;
       if (b < cfg_numbookmarks) {
-        menu_hide();
-        kbd_focus = FOCUS_TERM;
-        cfg_sethost(cfg_bookmark_host[b]);
-        cfg_port = cfg_bookmark_port[b];
-        ffd2(147);  /* clear screen */
-      gfx_vbl();
-      modem_connect(cfg_bookmark_host[b], cfg_bookmark_port[b], &ui_display_net_status);
+        bm_connect(b);   /* same path as Enter: honours the bookmark's ANSI flag */
       } else {
         /* No bookmark at this slot — just move cursor */
         menu_draw_bookmarks_sel(bm_cursor);
@@ -604,6 +665,7 @@ void enter_ansi_mode(void) {
   cfg_save_setting("termmode", "ansi");
   gfx_set_columns(80);
   ansi_init();
+  net_send_naws();   /* tell a Telnet board about the new size */
 }
 
 void enter_petscii_mode(void) {
@@ -611,6 +673,7 @@ void enter_petscii_mode(void) {
   cfg_save_setting("termmode", "petscii");
   gfx_set_columns(40);
   gfx_setfont(1);
+  net_send_naws();
   if (!net_connected()) {
     gfx_show_startup_bg();
   }

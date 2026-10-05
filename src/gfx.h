@@ -26,6 +26,12 @@ void gfx_scrollup(void);
 void gfx_vbl(void);
 int gfx_getkey(unsigned char *shift, unsigned char *ctrl, unsigned char *alt);
 void gfx_setcursxy(int x, int y);
+void gfx_cursor_show(int show);   /* 0 hides the blinking cursor, 1 shows it */
+void gfx_set_zoom(int zoom);     /* runtime zoom change (re-creates the window) */
+void gfx_status_enable(int on);   /* call before gfx_init(): adds a status row under the screen */
+int gfx_status_enabled(void);
+void gfx_status_set(const char *text, unsigned char fg, unsigned char bg);
+int gfx_screen_to_text(char *out, size_t outsz);
 #define gfx_setcursx(X) gfx_setcursxy((X), gfx_cursy)
 void gfx_cursleft(void);
 void gfx_cursright(void);
@@ -50,3 +56,10 @@ int gfx_save_screenshot(const char *filename);
 void gfx_crt_shutdown(void);
 void gfx_show_startup_bg(void);
 void gfx_show_background(const char *bmpfile);
+
+/* ---- ANSI terminal helpers (appended; used by ansi.c) ---- */
+extern unsigned char *gfx_bg;   /* per-cell background plane, parallel to gfx_0400/gfx_d800 */
+void gfx_fill_cells(int x, int y, int count, int fg, int bg);
+void gfx_scroll_region(int top, int bottom, int n, int fg, int bg);
+void gfx_insert_cells(int x, int y, int n, int fg, int bg);
+void gfx_delete_cells(int x, int y, int n, int fg, int bg);

@@ -89,13 +89,12 @@ else
     fi
 fi
 
-# Check for SDL_mixer (optional)
-if [ -f /opt/homebrew/include/SDL/SDL_mixer.h ] || [ -f /usr/local/include/SDL/SDL_mixer.h ]; then
-    echo "[+] SDL_mixer found (music support enabled)"
+# libopenmpt is REQUIRED (XM music; the Makefile links it)
+if pkg-config --exists libopenmpt 2>/dev/null || [ -f /opt/homebrew/include/libopenmpt/libopenmpt.h ] || [ -f /usr/local/include/libopenmpt/libopenmpt.h ]; then
+    echo "[+] libopenmpt found"
 else
-    echo "[*] SDL_mixer not found — music support disabled (optional)"
-    echo "    For XM/MOD music, build SDL_mixer 1.2.12 from source:"
-    echo "    https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-1.2.12.tar.gz"
+    echo "[*] libopenmpt not found — installing with Homebrew..."
+    brew install libopenmpt
 fi
 
 echo ""
@@ -114,52 +113,21 @@ RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 mkdir -p "$DIST_DIR"
 rm -rf "$APP_DIR"
 
-echo "[*] Building CGTerm..."
-if ! make -C "$ROOT_DIR" clean all; then
-    echo "[!] Build failed"
+echo "[*] Building the self-contained app bundle (package-macos.sh)..."
+if ! "$ROOT_DIR/scripts/package-macos.sh"; then
+    echo "[!] Bundle build failed"
     exit 1
 fi
-
-echo "[*] Creating app bundle..."
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
-cp "$ROOT_DIR/bin/cgterm" "$MACOS_DIR/CGTerm"
-chmod +x "$MACOS_DIR/CGTerm"
-cp -R "$ROOT_DIR/assets/." "$RESOURCES_DIR/"
-
-# Bundle libmikmod if available (needed by SDL_mixer for XM/MOD music)
-for lib in /opt/homebrew/lib/libmikmod.3.dylib /usr/local/lib/libmikmod.3.dylib; do
-    if [ -f "$lib" ]; then
-        cp "$lib" "$MACOS_DIR/libmikmod.dylib"
-        echo "[+] Bundled libmikmod.dylib for XM music support"
-        break
-    fi
-done
-
-# Info.plist
-cat > "${CONTENTS_DIR}/Info.plist" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleName</key><string>CGTerm</string>
-<key>CFBundleDisplayName</key><string>CGTerm</string>
-<key>CFBundleExecutable</key><string>CGTerm</string>
-<key>CFBundleIdentifier</key><string>com.cgterm.app</string>
-<key>CFBundleVersion</key><string>3.0</string>
-<key>CFBundleShortVersionString</key><string>3.0</string>
-<key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>NSHighResolutionCapable</key><true/>
-</dict></plist>
-EOF
-
-echo "APPLCGTR" > "${CONTENTS_DIR}/PkgInfo"
 echo "[+] App bundle created: $APP_DIR"
 
 # Install to /Applications (optional)
 echo ""
 INSTALL_APP_PATH="/Applications/CGTerm.app"
-read -p "[?] Install to $INSTALL_APP_PATH? [y/N] " -n 1 -r
-echo
+REPLY=n
+if [ -t 0 ]; then
+    read -p "[?] Install to $INSTALL_APP_PATH? [y/N] " -n 1 -r
+    echo
+fi
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ -w "/Applications" ]; then
         rm -rf "$INSTALL_APP_PATH"

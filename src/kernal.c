@@ -141,6 +141,7 @@ void ffd2(unsigned char a) {
     break;
 
   case 147:
+    gfx_cursor_show(1);   /* a cleared screen is a live terminal again */
     gfx_setcursxy(0, 0);
     gfx_cls();
     break;

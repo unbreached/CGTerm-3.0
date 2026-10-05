@@ -3,6 +3,21 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── OCTOBER 2026 UPDATE ───
+
+[+]ZMODEM: batch send/receive, file names and sizes, crash recovery, CRC-32, auto-start when the board sends
+[+]Transfers: last protocol preselected (T + Return), transfer log with bytes/time/cps, on-screen summary, cancel prompt no longer stalls the peer
+[+]XMODEM: CRC to checksum fallback, bounded handshakes, cancel during send, 0-byte files
+[+]Punter: one-byte last blocks no longer lost, duplicate block guard, patient S/B wait, SEQ file type announced, empty files
+[+]Disk tools: validate (rebuild BAM), lock/unlock, rename disk/ID, extract to host, insert into image, CBM listing with splat/lock markers, error-table images, D81/D71 fixes
+[+]Terminal: status line, capture toggle, copy screen text, paste transliterates UTF-8, macros record RETURN/cursor/F-keys
+[+]ANSI: scroll regions, pending wrap, DECSC/DECRC, ICH/DCH/ECH, iCE colours, truecolour, line drawing, xterm keys, Alt hotkeys
+[+]Network: IPv6 with IPv4 first, Telnet negotiation offered in ANSI mode, raw 0xFF from PETSCII boards shown, no SIGPIPE/EAGAIN losses
+[+]Session: connection history with redial, per-bookmark auto-login scripts, reconnect after any drop, options panel, keyboard layouts scanned from assets
+[+]Audio: bell and modem sounds on macOS/Linux, runtime mute and volume, gapless XM loop
+[+]Build: native MinGW build, make test / make fuzz, GitHub Actions CI, make uninstall/distclean, %APPDATA% on Windows
+[!]Dozens of bug fixes listed in REVIEW-2026-10.md
+
 ─── WHAT IS THIS RELEASE ───
 
 Major update to the C64 BBS terminal MagerValp gave the scene. Same heart: real boards, PETSCII on glass, files in motion. The codebase is cleaned and lifted onto SDL2; the polish nods to demoscene intros, modem-era mood, batch transfers, disk tools, and UI work for people who still enjoy watching bytes.

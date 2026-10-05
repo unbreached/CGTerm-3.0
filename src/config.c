@@ -5,6 +5,7 @@
 #include <time.h>
 #ifdef WINDOWS
 #include <direct.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -48,7 +49,8 @@ static int validate_alias(const char *alias) {
   if (len == 0 || len > 64) return 0;  /* Reasonable limit */
 
   for (p = alias; *p; p++) {
-    if (*p < 32 || *p == 127) {  /* No control characters */
+    unsigned char c = (unsigned char)*p;
+    if (c < 32 || c == 127) {  /* No control characters (bytes >= 0x80 are fine) */
       return 0;
     }
   }
@@ -94,6 +96,14 @@ int cfg_splash = 1;
 int cfg_modem = 0;
 int cfg_splashfont = 6;  /* C64 Pro Mono */
 int cfg_menufont = 8;  /* Edit Undo */
+int cfg_statusline = 1;
+int cfg_autozmodem = 1;
+int cfg_lastprotocol = 0;
+int cfg_lastdirection = 0;
+int cfg_musicvolume = 64;
+int cfg_transferlog = 1;
+char *cfg_userdir = NULL;
+static char userdir[512];
 #ifdef WINDOWS
 char cfg_bookmarkfile[256] = "cgterm-bookmarks.cfg";
 #else
@@ -135,6 +145,38 @@ int cfg_init(char *argv0) {
     printf("$HOME is not set, using current directory\n");
     cfg_homedir = ".";
   }
+#endif
+
+  /* Per-user data directory. On Windows the config, bookmarks, notes and
+   * history used to be bare relative names resolved against the current
+   * directory, so launching from another folder "lost" them. They now live
+   * under %APPDATA%\CGTerm; an existing set in the start folder is copied
+   * over once. */
+#ifdef WINDOWS
+  {
+    const char *appdata = getenv("APPDATA");
+    if (appdata && appdata[0]) {
+      snprintf(userdir, sizeof(userdir), "%s\\CGTerm", appdata);
+      _mkdir(userdir);
+    } else {
+      snprintf(userdir, sizeof(userdir), ".");
+    }
+    cfg_userdir = userdir;
+    {
+      static const char *legacy[] = { "cgterm.cfg", "cgterm-bookmarks.cfg", "cgterm-notes.cfg", "cgterm-history.log", "cgchat.cfg", "cgedit.cfg", NULL };
+      int i;
+      for (i = 0; legacy[i]; i++) {
+        char dst[600];
+        snprintf(dst, sizeof(dst), "%s\\%s", userdir, legacy[i]);
+        if (!cfg_file_exists(dst) && cfg_file_exists((char *)legacy[i])) {
+          CopyFileA(legacy[i], dst, TRUE);
+        }
+      }
+    }
+  }
+#else
+  snprintf(userdir, sizeof(userdir), "%s", cfg_homedir);
+  cfg_userdir = userdir;
 #endif
 
   path_init(argv0);
@@ -401,6 +443,44 @@ int addbookmark(char *line) {
 }
 
 
+/* Split "key = value" into key (<= 15 chars) and value (rest of the line,
+ * leading/trailing blanks and CR/LF removed). Unlike the old
+ * sscanf("%15s = %255s") this keeps values that contain spaces, e.g. a
+ * Windows "C:\\Users\\John Smith\\Downloads" download directory, which
+ * cfg_save_setting() writes and which was then silently truncated at the
+ * first space on the next start. A leading "~/" is expanded to $HOME. */
+static int cfg_parse_line(const char *linebuf, char *key, size_t keysz, char *value, size_t valsz) {
+  const char *p = linebuf;
+  size_t n = 0;
+
+  while (*p == ' ' || *p == '\t') p++;
+  while (*p && *p != ' ' && *p != '\t' && *p != '=' && *p != '\r' && *p != '\n') {
+    if (n + 1 < keysz) key[n++] = *p;
+    p++;
+  }
+  key[n] = 0;
+  if (n == 0) return 0;
+  while (*p == ' ' || *p == '\t') p++;
+  if (*p != '=') return 0;
+  p++;
+  while (*p == ' ' || *p == '\t') p++;
+  n = 0;
+  if (p[0] == '~' && (p[1] == '/' || p[1] == '\\') && cfg_homedir) {
+    n = strlen(cfg_homedir);
+    if (n >= valsz) n = valsz - 1;
+    memcpy(value, cfg_homedir, n);
+    p++;
+  }
+  while (*p && *p != '\r' && *p != '\n') {
+    if (n + 1 < valsz) value[n++] = *p;
+    p++;
+  }
+  while (n && (value[n - 1] == ' ' || value[n - 1] == '\t')) n--;
+  value[n] = 0;
+  return n > 0 ? 2 : 0;
+}
+
+
 signed int cfg_readconfig(char *configfile) {
   FILE *cfg;
   char linebuf[256], key[16], value[256];
@@ -423,16 +503,11 @@ signed int cfg_readconfig(char *configfile) {
     if (linebuf[0] == '#') {
     } else if (strlen(linebuf) >= 3) {
 
-      if (sscanf(linebuf, "%15s = %255s \n", key, value) == 2) {
+      if (cfg_parse_line(linebuf, key, sizeof(key), value, sizeof(value)) == 2) {
 
 	if (strcmp(key, "host") == 0) {
-	  if (strchr(value, '.')) {
-	    cfg_sethost(value);
-	  } else {
-	    printf("Invalid hostname in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
-	  }
+	  /* let the resolver decide: "localhost" and tunnel aliases have no dot */
+	  cfg_sethost(value);
 	} else if (strcmp(key, "port") == 0) {
 	  cfg_port = strtol(value, (char **)NULL, 10);
 	  if (cfg_port <= 0 || cfg_port > 65535) {
@@ -589,6 +664,22 @@ signed int cfg_readconfig(char *configfile) {
 	    fclose(cfg);
 	    return(-1);
 	  }
+	} else if (strcmp(key, "statusline") == 0) {
+	  cfg_statusline = (strcmp("yes", value) == 0);
+	} else if (strcmp(key, "autozmodem") == 0) {
+	  cfg_autozmodem = (strcmp("yes", value) == 0);
+	} else if (strcmp(key, "transferlog") == 0) {
+	  cfg_transferlog = (strcmp("yes", value) == 0);
+	} else if (strcmp(key, "lastprotocol") == 0) {
+	  cfg_lastprotocol = (int)strtol(value, (char **)NULL, 10);
+	  if (cfg_lastprotocol < 0 || cfg_lastprotocol > 16) cfg_lastprotocol = 0;
+	} else if (strcmp(key, "lastdirection") == 0) {
+	  cfg_lastdirection = (int)strtol(value, (char **)NULL, 10);
+	  if (cfg_lastdirection < 0 || cfg_lastdirection > 2) cfg_lastdirection = 0;
+	} else if (strcmp(key, "musicvolume") == 0) {
+	  cfg_musicvolume = (int)strtol(value, (char **)NULL, 10);
+	  if (cfg_musicvolume < 0) cfg_musicvolume = 0;
+	  if (cfg_musicvolume > 128) cfg_musicvolume = 128;
 	} else if (strcmp(key, "termmode") == 0) {
 	  if (strcmp(value, "ansi") == 0) {
 	    cfg_termmode = 1;
@@ -656,7 +747,7 @@ void cfg_writeconfig(char **data, char *configfile) {
 /* Get the config file path */
 static void cfg_get_config_path(char *out, size_t outsz) {
 #ifdef WINDOWS
-  snprintf(out, outsz, "cgterm.cfg");
+  cfg_user_file(out, outsz, "cgterm.cfg");
 #else
   snprintf(out, outsz, "%s/.cgtermrc", cfg_homedir);
 #endif
@@ -707,10 +798,17 @@ int cfg_save_setting(const char *key, const char *value) {
   if (!found) {
     fprintf(out, "%s = %s\n", key, value);
   }
-  fclose(out);
+  if (ferror(out) || fclose(out) != 0) {
+    /* disk full / I/O error: keep the original config untouched */
+    remove(tmpname);
+    return(0);
+  }
 
-  /* Replace original with temp */
+  /* Replace original with temp. POSIX rename() replaces atomically, so the
+   * original is never missing; Windows needs the explicit remove first. */
+#if defined(WINDOWS) || defined(__WIN32__)
   remove(fname);
+#endif
   if (rename(tmpname, fname) != 0) {
     remove(tmpname);   /* clean up the temp file if the replace failed */
     return(0);
@@ -732,7 +830,28 @@ void cfg_debug(const char *s){
 }
 
 
+void cfg_user_file(char *out, size_t size, const char *name) {
+#ifdef WINDOWS
+  snprintf(out, size, "%s\\%s", cfg_userdir ? cfg_userdir : ".", name);
+#else
+  snprintf(out, size, "%s/.%s", cfg_homedir ? cfg_homedir : ".", name);
+#endif
+}
+
+
+char *cfg_user_path(char *out, size_t size, const char *name) {
+  cfg_user_file(out, size, name);
+  return out;
+}
+
+
 void cfg_resolve_bookmarkfile(char *resolved, size_t size) {
+#ifdef WINDOWS
+  if (!path_is_absolute(cfg_bookmarkfile) && cfg_bookmarkfile[0] != '~') {
+    cfg_user_file(resolved, size, cfg_bookmarkfile);
+    return;
+  }
+#endif
   if (cfg_bookmarkfile[0] == '~') {
 #ifdef WINDOWS
     if (cfg_bookmarkfile[1] == '/' || cfg_bookmarkfile[1] == '\\') {
@@ -807,20 +926,23 @@ static int notes_path_inited = 0;
 static void cfg_notes_path(void) {
   if (!notes_path_inited) {
 #ifdef WINDOWS
-    snprintf(notes_path, sizeof(notes_path), "cgterm-notes.cfg");
+    cfg_user_file(notes_path, sizeof(notes_path), "cgterm-notes.cfg");
 #else
-    snprintf(notes_path, sizeof(notes_path), "%s/.cgterm-notes", cfg_homedir);
+    cfg_user_file(notes_path, sizeof(notes_path), "cgterm-notes");
 #endif
     notes_path_inited = 1;
   }
 }
 
-/* Read note for a given host:port. Returns static buffer or "" if none. */
+/* Read note for a given host:port. Returns static buffer or "" if none.
+ * Note lines are stored with one leading space (see cfg_set_bookmark_note)
+ * so a note line that itself starts with '[' is not read as a section
+ * header; the space is stripped here (old files without it still load). */
 static char note_buf[2048];
 
 const char *cfg_get_bookmark_note(const char *host, int port) {
   FILE *f;
-  char key[256], line[256];
+  char key[256], line[2048];
   int found = 0;
 
   cfg_notes_path();
@@ -833,20 +955,44 @@ const char *cfg_get_bookmark_note(const char *host, int port) {
   while (fgets(line, sizeof(line), f)) {
     /* Strip trailing newline */
     int len = strlen(line);
+    const char *text = line;
     while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
 
     if (line[0] == '[') {
       if (found) break;  /* hit next section, done */
       if (strcmp(line, key) == 0) found = 1;
     } else if (found) {
-      if (strlen(note_buf) + strlen(line) + 2 < sizeof(note_buf)) {
+      if (text[0] == ' ') text++;
+      if (strlen(note_buf) + strlen(text) + 2 < sizeof(note_buf)) {
         if (note_buf[0]) strcat(note_buf, "\n");
-        strcat(note_buf, line);
+        strcat(note_buf, text);
       }
     }
   }
   fclose(f);
   return note_buf;
+}
+
+
+const char *cfg_get_bookmark_login(const char *host, int port) {
+  static char login_buf[1024];
+  const char *note = cfg_get_bookmark_note(host, port);
+  const char *p = note;
+
+  login_buf[0] = 0;
+  while (p && *p) {
+    const char *eol = strchr(p, '\n');
+    size_t len = eol ? (size_t)(eol - p) : strlen(p);
+    if ((len > 6 && strncmp(p, "login=", 6) == 0) || (len > 6 && strncmp(p, "login:", 6) == 0)) {
+      size_t n = len - 6;
+      if (n >= sizeof(login_buf)) n = sizeof(login_buf) - 1;
+      memcpy(login_buf, p + 6, n);
+      login_buf[n] = 0;
+      break;
+    }
+    p = eol ? eol + 1 : NULL;
+  }
+  return login_buf;
 }
 
 
@@ -885,9 +1031,16 @@ void cfg_set_bookmark_note(const char *host, int port, const char *note) {
     fclose(f);
   }
 
-  /* Append new note */
+  /* Append new note, one leading space per line (see cfg_get_bookmark_note) */
   if (note && note[0]) {
-    fprintf(tmp, "%s\n%s\n", key, note);
+    const char *p = note;
+    fprintf(tmp, "%s\n", key);
+    while (*p) {
+      const char *eol = strchr(p, '\n');
+      size_t len = eol ? (size_t)(eol - p) : strlen(p);
+      fprintf(tmp, " %.*s\n", (int)len, p);
+      p = eol ? eol + 1 : p + len;
+    }
   }
 
   fclose(tmp);
@@ -905,9 +1058,9 @@ void cfg_log_connection(const char *host, int port) {
   struct tm *tm_info;
 
 #ifdef WINDOWS
-  snprintf(fname, sizeof(fname), "cgterm-history.log");
+  cfg_user_file(fname, sizeof(fname), "cgterm-history.log");
 #else
-  snprintf(fname, sizeof(fname), "%s/.cgterm-history", cfg_homedir);
+  cfg_user_file(fname, sizeof(fname), "cgterm-history");
 #endif
 
   now = time(NULL);
@@ -920,4 +1073,65 @@ void cfg_log_connection(const char *host, int port) {
             host, port);
     fclose(hf);
   }
+}
+
+
+/* Newest-first, de-duplicated view of the connection history written by
+ * cfg_log_connection(). Returns the number of entries filled. */
+int cfg_read_history(CfgHistoryEntry *entries, int max) {
+  FILE *hf;
+  char fname[512];
+  char line[512];
+  CfgHistoryEntry *all;
+  int n = 0, i, j, out = 0;
+  const int cap = 4096;
+
+#ifdef WINDOWS
+  cfg_user_file(fname, sizeof(fname), "cgterm-history.log");
+#else
+  cfg_user_file(fname, sizeof(fname), "cgterm-history");
+#endif
+  if (max <= 0 || (hf = fopen(fname, "r")) == NULL) {
+    return 0;
+  }
+  if ((all = malloc(sizeof(*all) * cap)) == NULL) {
+    fclose(hf);
+    return 0;
+  }
+  while (n < cap && fgets(line, sizeof(line), hf)) {
+    char *sep, *colon;
+    size_t len = strlen(line);
+    while (len && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = 0;
+    if (len < 22) continue;
+    sep = line + 19;              /* "YYYY-MM-DD HH:MM:SS  host:port" */
+    while (*sep == ' ') sep++;
+    colon = strrchr(sep, ':');
+    if (!colon || colon == sep) continue;
+    memcpy(all[n].when, line, 19);
+    all[n].when[19] = 0;
+    {
+      size_t hl = (size_t)(colon - sep);
+      if (hl >= sizeof(all[n].host)) hl = sizeof(all[n].host) - 1;
+      memcpy(all[n].host, sep, hl);
+      all[n].host[hl] = 0;
+    }
+    all[n].port = (int)strtol(colon + 1, NULL, 10);
+    n++;
+  }
+  fclose(hf);
+  /* walk backwards (newest last in the file), skipping repeats */
+  for (i = n - 1; i >= 0 && out < max; i--) {
+    int dup = 0;
+    for (j = 0; j < out; j++) {
+      if (entries[j].port == all[i].port && strcmp(entries[j].host, all[i].host) == 0) {
+        dup = 1;
+        break;
+      }
+    }
+    if (!dup) {
+      entries[out++] = all[i];
+    }
+  }
+  free(all);
+  return out;
 }

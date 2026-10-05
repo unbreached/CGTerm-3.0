@@ -22,7 +22,7 @@ static int lastvbl = 0;
 
 char *default_cgedit_cfg[] = {
 #ifndef WINDOWS
-  "keyboard = us.kbd",
+  "#keyboard = default.kbd",
 #endif
   "#zoom = 2",
   "#fullscreen = no",
@@ -53,12 +53,12 @@ int main(int argc, char *argv[]) {
   cfg_init(argv[0]);
 
 #ifdef WINDOWS
-  if (cfg_readconfig("cgedit.cfg") < 0) {
+  if (cfg_readconfig(cfg_user_path(fname, sizeof(fname), "cgedit.cfg")) < 0) {
     return(1);
   }
   if (cfg_read == 0) {
-    cfg_writeconfig(default_cgedit_cfg, "cgedit.cfg");
-    if (cfg_readconfig("cgedit.cfg") < 0) {
+    cfg_writeconfig(default_cgedit_cfg, cfg_user_path(fname, sizeof(fname), "cgedit.cfg"));
+    if (cfg_readconfig(cfg_user_path(fname, sizeof(fname), "cgedit.cfg")) < 0) {
       return(1);
     }
   }

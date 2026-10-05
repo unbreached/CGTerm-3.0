@@ -17,7 +17,7 @@ SetCompressor /SOLID lzma
 ;-----------------------------------------------------
 ; Version info embedded in the .exe
 ;-----------------------------------------------------
-VIProductVersion "3.0.0.0"
+VIProductVersion "3.1.0.0"
 VIAddVersionKey "ProductName" "CGTerm"
 VIAddVersionKey "ProductVersion" "3.0"
 VIAddVersionKey "FileDescription" "CGTerm 3.0 - C64 BBS Terminal"

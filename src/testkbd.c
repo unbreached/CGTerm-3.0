@@ -162,7 +162,8 @@ int main(int argc, char *argv[]) {
 
     } else {
 
-      if (!sscanf(linebuf, "%s", linebuf)) {
+      char tok[256];
+      if (!sscanf(linebuf, "%255s", tok)) {
 	printf("Syntax error on line %d\n", line);
       }
 

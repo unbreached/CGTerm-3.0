@@ -35,6 +35,17 @@ static Uint8 charwidth, charheight;
 static int borderleft, borderright;
 static Uint8 cursorctr, colorundercursor;
 static SDL_bool cursorvis;
+static int cursor_hidden = 0;   /* gfx_cursor_show(0): no blink at all */
+
+/* Optional status row drawn below the 25 terminal rows (cgterm only; cgchat
+ * and cgedit keep the plain window). The text is kept as ASCII and converted
+ * to the active font's codes at draw time. */
+static int gfx_status_rows = 0;
+static char status_text[81];
+static unsigned char status_color = 1;
+static unsigned char status_bg = 0;
+static int status_dirty = 0;
+static void gfx_draw_status_row(void);
 static SDL_bool dirty[25];
 static Uint8 fgcolor = 1, bgcolor = 0;
 static int font;
@@ -262,7 +273,7 @@ int gfx_init(int fullscreen, char *appname) {
   if ((gfx_bpp = vidinfo->vfmt->BitsPerPixel) < 15) {
     gfx_bpp = 16;
   }
-  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp, (SDL_FULLSCREEN * fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, (SDL_FULLSCREEN * fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
     printf("Unable to open window: %s\n", SDL_GetError());
     return(1);
   }
@@ -462,6 +473,7 @@ void gfx_scroll_line(int srcline, int dstline) {
 
 
 void gfx_cls(void) {
+  resetcursor();   /* otherwise the blink phase XORs a stray 0x80 into the blank cell */
   memset(gfx_0400, 32, cfg_columns * 25);
   memset(gfx_d800, fgcolor, cfg_columns * 25);
   memset(gfx_bg, 0, cfg_columns * 25);
@@ -470,11 +482,13 @@ void gfx_cls(void) {
 
 
 void gfx_scrollup(void) {
+  resetcursor();   /* don't scroll an inverted cursor glyph up into the text */
   memmove(gfx_0400_buffer, gfx_0400_buffer + cfg_columns, sizeof(gfx_0400_buffer) - (26 - cfg_rows) * cfg_columns);
   memmove(gfx_d800_buffer, gfx_d800_buffer + cfg_columns, sizeof(gfx_d800_buffer) - (26 - cfg_rows) * cfg_columns);
   memmove(gfx_bg_buffer, gfx_bg_buffer + cfg_columns, sizeof(gfx_bg_buffer) - (26 - cfg_rows) * cfg_columns);
   memset(gfx_0400 + (cfg_rows - 1) * cfg_columns, 32, cfg_columns);
   memset(gfx_d800 + (cfg_rows - 1) * cfg_columns, fgcolor, cfg_columns);
+  memset(gfx_bg + (cfg_rows - 1) * cfg_columns, 0, cfg_columns);
   memset(dirty, SDL_TRUE, sizeof(dirty));
 }
 
@@ -593,16 +607,116 @@ void gfx_draw_line(int ypos) {
 }
 
 
+/* ASCII -> screen code for the PETSCII fonts (font 0 = upper/graphics,
+ * font 1 = lower/upper). Letters land on 1-26 / 65-90, punctuation and
+ * digits keep their code, everything else becomes a space. */
+static unsigned char ascii_to_screencode(unsigned char c, int fnt) {
+  if (fnt == 2) return c;                       /* CP437 is byte-ordered */
+  if (c >= 'a' && c <= 'z') return (unsigned char)(c - 'a' + 1);
+  if (c >= 'A' && c <= 'Z') return (unsigned char)(fnt == 1 ? c - 'A' + 65 : c - 'A' + 1);
+  if (c == '@') return 0;
+  if (c == '[') return 27;
+  if (c == ']') return 29;
+  if (c >= 0x20 && c <= 0x3F) return c;
+  if (c == '|') return 93;                      /* vertical bar graphic */
+  if (c == '_') return 100;
+  return 32;
+}
+
+/* Screen code -> ASCII (inverse of the above, for copy-to-clipboard). */
+static char screencode_to_ascii(unsigned char sc, int fnt) {
+  sc &= 0x7F;
+  if (fnt == 2) return (sc >= 0x20 && sc < 0x7F) ? (char)sc : '?';
+  if (sc == 0) return '@';
+  if (sc >= 1 && sc <= 26) return (char)(fnt == 1 ? 'a' + sc - 1 : 'A' + sc - 1);
+  if (sc == 27) return '[';
+  if (sc == 28) return '#';
+  if (sc == 29) return ']';
+  if (sc == 30) return '^';
+  if (sc == 31) return '-';
+  if (sc >= 0x20 && sc <= 0x3F) return (char)sc;
+  if (fnt == 1 && sc >= 65 && sc <= 90) return (char)('A' + sc - 65);
+  if (sc == 100) return '_';
+  if (sc == 93) return '|';
+  return ' ';
+}
+
+void gfx_status_enable(int on) {
+  gfx_status_rows = on ? 1 : 0;
+}
+
+int gfx_status_enabled(void) {
+  return gfx_status_rows;
+}
+
+void gfx_status_set(const char *text, unsigned char fg, unsigned char bg) {
+  char buf[81];
+  snprintf(buf, sizeof(buf), "%-*.*s", cfg_columns, cfg_columns, text ? text : "");
+  if (strcmp(buf, status_text) != 0 || fg != status_color || bg != status_bg) {
+    memcpy(status_text, buf, sizeof(status_text));
+    status_color = fg;
+    status_bg = bg;
+    status_dirty = 1;
+  }
+}
+
+static void gfx_draw_status_row(void) {
+  int xpos;
+  SDL_Rect src, dest;
+
+  src.w = charwidth;
+  src.h = charheight;
+  dest.w = charwidth;
+  dest.h = charheight;
+  dest.y = 25 * charheight;
+  for (xpos = 0; xpos < cfg_columns; ++xpos) {
+    unsigned char sc = ascii_to_screencode((unsigned char)status_text[xpos], font);
+    if (font != 2) sc |= 0x80;                   /* reverse video bar in PETSCII */
+    src.x = sc * charwidth;
+    src.y = status_color * charheight;
+    dest.x = xpos * charwidth;
+    if (font == 2) {
+      SDL_FillRect(gfx_screen, &dest, SDL_MapRGB(gfx_screen->format,
+        vga_palette[status_bg].r, vga_palette[status_bg].g, vga_palette[status_bg].b));
+    }
+    SDL_BlitSurface(fontlist[font], &src, gfx_screen, &dest);
+  }
+  SDL_UpdateRect(gfx_screen, 0, 25 * charheight, gfx_width - 1, charheight);
+}
+
+/* Visible screen as text lines (trailing blanks trimmed), for the
+ * clipboard. Returns the number of bytes written excluding the NUL. */
+int gfx_screen_to_text(char *out, size_t outsz) {
+  int y, x;
+  size_t n = 0;
+
+  if (!out || outsz == 0) return 0;
+  for (y = 0; y < 25 && n + 2 < outsz; y++) {
+    int last = -1;
+    char line[81];
+    for (x = 0; x < cfg_columns && x < 80; x++) {
+      line[x] = screencode_to_ascii(gfx_0400[y * cfg_columns + x], font);
+      if (line[x] != ' ') last = x;
+    }
+    for (x = 0; x <= last && n + 2 < outsz; x++) out[n++] = line[x];
+    out[n++] = '\n';
+  }
+  out[n] = 0;
+  return (int)n;
+}
+
 void gfx_vbl(void) {
   int first, last, l;
 
   cursorctr = (cursorctr + 1) % cursorspeed;
-  if (cursorctr == cursorspeed/2) {
+  if (cursor_hidden) {
+    /* ESC[?25l, splash, background image: no blink at all */
+  } else if (cursorctr == cursorspeed/2) {
     invertcursor();
     cursorvis = SDL_TRUE;
     colorundercursor = gfx_d800[gfx_cursy * cfg_columns + gfx_cursx];
     gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = fgcolor;
-  } else if (cursorctr == 0) {
+  } else if (cursorctr == 0 && cursorvis) {
     invertcursor();
     cursorvis = SDL_FALSE;
     gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = colorundercursor;
@@ -630,7 +744,19 @@ void gfx_vbl(void) {
   if (first != 25) {
     SDL_UpdateRect(gfx_screen, 0, first * charheight, gfx_width - 1, (last - first) * charheight + charheight);
   }
+  if (gfx_status_rows && (status_dirty || first != 25)) {
+    gfx_draw_status_row();
+    status_dirty = 0;
+  }
 
+}
+
+
+void gfx_cursor_show(int show) {
+  if (!show) {
+    resetcursor();
+  }
+  cursor_hidden = !show;
 }
 
 
@@ -711,15 +837,18 @@ void gfx_delete(void) {
   int x;
   unsigned char *rowchar = &gfx_0400[gfx_cursy * cfg_columns];
   unsigned char *rowcolor = &gfx_d800[gfx_cursy * cfg_columns];
+  unsigned char *rowbg = &gfx_bg[gfx_cursy * cfg_columns];
 
   resetcursor();
   if (gfx_cursx) {
     for (x = gfx_cursx - 1; x < cfg_columns - 1; ++x) {
       rowchar[x] = rowchar[x + 1];
       rowcolor[x] = rowcolor[x + 1];
+      rowbg[x] = rowbg[x + 1];
     }
     rowchar[x] = 32;
     rowcolor[x] = fgcolor;
+    rowbg[x] = 0;
     --gfx_cursx;
     dirty[gfx_cursy] = SDL_TRUE;
   } else {
@@ -737,6 +866,7 @@ void gfx_insert(void) {
   int x;
   unsigned char *rowchar = &gfx_0400[gfx_cursy * cfg_columns];
   unsigned char *rowcolor = &gfx_d800[gfx_cursy * cfg_columns];
+  unsigned char *rowbg = &gfx_bg[gfx_cursy * cfg_columns];
 
   resetcursor();
   if (gfx_cursx < cfg_columns - 1) {
@@ -744,9 +874,11 @@ void gfx_insert(void) {
       for (x = cfg_columns - 1; x > gfx_cursx; --x) {
 	rowchar[x] = rowchar[x - 1];
 	rowcolor[x] = rowcolor[x - 1];
+	rowbg[x] = rowbg[x - 1];
       }
       rowchar[x] = 32;
       rowcolor[x] = fgcolor;
+      rowbg[x] = 0;
       dirty[gfx_cursy] = SDL_TRUE;
     }
   }
@@ -761,7 +893,7 @@ void gfx_set_title(const char *title) {
 void gfx_toggle_fullscreen(void) {
   //SDL_WM_ToggleFullScreen(gfx_screen);
   if (cfg_fullscreen) {
-    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp, SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
       printf("Unable to open window: %s\n", SDL_GetError());
       exit(1);
     }
@@ -769,7 +901,7 @@ void gfx_toggle_fullscreen(void) {
     SDL_ShowCursor(SDL_DISABLE);  /* stay hidden in windowed mode too */
     cfg_fullscreen = 0;
   } else {
-    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
       printf("Unable to open window: %s\n", SDL_GetError());
       exit(1);
     }
@@ -822,25 +954,22 @@ void gfx_reload_charset(void) {
 static int saved_zoom = 0;  /* remember zoom before 80-col switch */
 
 void gfx_set_columns(int cols) {
+  int old_columns = cfg_columns, old_zoom = cfg_zoom, old_saved_zoom = saved_zoom;
+  int old_charwidth = charwidth, old_width = gfx_width, old_height = gfx_height;
+
   if (cols != 40 && cols != 80) return;
   if (cols == cfg_columns) return;
 
+  /* Compute the new geometry first; nothing is persisted until the video
+   * mode switch has succeeded, otherwise a failed SDL_SetVideoMode left
+   * cfg_columns/charwidth (and the saved config) describing a layout the
+   * screen buffers were never re-pointed for. */
   cfg_columns = cols;
-  {
-    char val[8];
-    snprintf(val, sizeof(val), "%d", cfg_columns);
-    cfg_save_setting("columns", val);
-  }
   if (cfg_columns == 40) {
     /* Restore original zoom when going back to 40 cols */
     if (saved_zoom > 0) {
       cfg_zoom = saved_zoom;
       saved_zoom = 0;
-      {
-        char zoom_val[8];
-        snprintf(zoom_val, sizeof(zoom_val), "%d", cfg_zoom);
-        cfg_save_setting("zoom", zoom_val);
-      }
     }
     charwidth = 8 * cfg_zoom;
   } else {
@@ -848,11 +977,6 @@ void gfx_set_columns(int cols) {
     if (cfg_zoom == 1 || cfg_zoom == 3) {
       saved_zoom = cfg_zoom;
       cfg_zoom = 2;
-      {
-        char zoom_val[8];
-        snprintf(zoom_val, sizeof(zoom_val), "%d", cfg_zoom);
-        cfg_save_setting("zoom", zoom_val);
-      }
     }
     charwidth = 4 * cfg_zoom;
   }
@@ -860,14 +984,30 @@ void gfx_set_columns(int cols) {
   gfx_height = cfg_zoom * GFX_HEIGHT;
 
   {
-    SDL_Surface *newscreen = SDL_SetVideoMode(gfx_width, gfx_height, gfx_bpp,
+    SDL_Surface *newscreen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp,
         (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE);
     if (newscreen == NULL) {
-      /* keep the existing surface rather than leaving gfx_screen NULL */
+      /* keep the existing surface and layout rather than leaving gfx_screen NULL */
       printf("Unable to resize window: %s\n", SDL_GetError());
+      cfg_columns = old_columns;
+      cfg_zoom = old_zoom;
+      saved_zoom = old_saved_zoom;
+      charwidth = old_charwidth;
+      gfx_width = old_width;
+      gfx_height = old_height;
       return;
     }
     gfx_screen = newscreen;
+  }
+
+  {
+    char val[8];
+    snprintf(val, sizeof(val), "%d", cfg_columns);
+    cfg_save_setting("columns", val);
+    if (cfg_zoom != old_zoom) {
+      snprintf(val, sizeof(val), "%d", cfg_zoom);
+      cfg_save_setting("zoom", val);
+    }
   }
 
   /* Regenerate fonts for new charwidth */
@@ -907,6 +1047,56 @@ void gfx_set_columns(int cols) {
 void gfx_set_offset(int offset) {
   gfx_offset = offset;
   memset(dirty, SDL_TRUE, sizeof(dirty));
+}
+
+
+/* Runtime zoom change (Options panel). Re-creates the window and fonts at
+ * the new size; the screen contents are kept. Also used to add or remove
+ * the status row (gfx_status_enable() first, then gfx_set_zoom(cfg_zoom)). */
+void gfx_set_zoom(int zoom) {
+  int old_zoom = cfg_zoom;
+  SDL_Surface *newscreen;
+
+  if (zoom < 1 || zoom > 8) return;
+  if (cfg_columns == 80 && (zoom & 1)) return;   /* 80 columns needs 4*zoom pixel cells */
+
+  cfg_zoom = zoom;
+  charwidth = (cfg_columns == 40 ? 8 : 4) * cfg_zoom;
+  charheight = 8 * cfg_zoom;
+  gfx_width = cfg_zoom * GFX_WIDTH;
+  gfx_height = cfg_zoom * GFX_HEIGHT;
+
+  newscreen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp,
+      (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE);
+  if (newscreen == NULL) {
+    printf("Unable to resize window: %s\n", SDL_GetError());
+    cfg_zoom = old_zoom;
+    charwidth = (cfg_columns == 40 ? 8 : 4) * cfg_zoom;
+    charheight = 8 * cfg_zoom;
+    gfx_width = cfg_zoom * GFX_WIDTH;
+    gfx_height = cfg_zoom * GFX_HEIGHT;
+    return;
+  }
+  gfx_screen = newscreen;
+
+  gfx_destroyfont(fontlist[0]);
+  gfx_destroyfont(fontlist[1]);
+  gfx_destroyfont(fontlist[2]);
+  fontlist[0] = gfx_createfont(rawfont[0], cfg_zoom);
+  fontlist[1] = gfx_createfont(rawfont[1], cfg_zoom);
+  fontlist[2] = gfx_createfont_ansi(rawfont[2], cfg_zoom, vga_palette);
+
+  if (menu_init(gfx_width, gfx_height)) {
+    printf("menu_init failed on zoom change: %s\n", SDL_GetError());
+    return;
+  }
+  gfx_menu_width = gfx_width;
+  gfx_menu_height = gfx_height;
+  gfx_menu_lastline = (gfx_height - 1) / charheight;
+
+  SDL_FillRect(gfx_screen, NULL, SDL_MapRGB(gfx_screen->format, 0, 0, 0));
+  memset(dirty, SDL_TRUE, sizeof(dirty));
+  status_dirty = 1;
 }
 
 
@@ -990,7 +1180,7 @@ void gfx_show_startup_bg(void) {
     /* Fall back to background_80.bmp */
     path_build_asset(path, sizeof(path), "background_80.bmp");
     if (cfg_file_exists(path)) {
-      gfx_setcursxy(-1, -1);
+      gfx_cursor_show(0);
       gfx_vbl();
       gfx_show_background(path);
       return;
@@ -1012,7 +1202,7 @@ void gfx_show_startup_bg(void) {
     /* Fall back to background_40.bmp */
     path_build_asset(path, sizeof(path), "background_40.bmp");
     if (cfg_file_exists(path)) {
-      gfx_setcursxy(-1, -1);
+      gfx_cursor_show(0);
       gfx_vbl();
       gfx_show_background(path);
       return;
@@ -1185,4 +1375,126 @@ void gfx_crt_shutdown(void) {
   SDL_Delay(300);
 
   SDL_FreeSurface(snapshot);
+}
+
+
+/* ---------------------------------------------------------------------------
+ * ANSI terminal helpers (appended for ansi.c).
+ *
+ * All of these work on the live screen (gfx_0400 / gfx_d800 / gfx_bg), never
+ * on the scrollback part of the buffers, and every vacated cell is filled with
+ * a space in the caller's fg/bg colours so the terminal can implement BCE
+ * (background colour erase) the way xterm and SyncTERM do.
+ * ------------------------------------------------------------------------- */
+
+/* Fill `count` cells of row y starting at column x with a blank in fg/bg.
+ * Clipped to the row; a count that runs past the right edge stops there. */
+void gfx_fill_cells(int x, int y, int count, int fg, int bg) {
+  int offset;
+
+  if (y < 0 || y > 24 || x < 0 || x >= cfg_columns || count <= 0) {
+    return;
+  }
+  if (x + count > cfg_columns) {
+    count = cfg_columns - x;
+  }
+  resetcursor();
+  offset = y * cfg_columns + x;
+  memset(gfx_0400 + offset, ' ', count);
+  memset(gfx_d800 + offset, fg, count);
+  memset(gfx_bg + offset, bg, count);
+  dirty[y] = SDL_TRUE;
+}
+
+
+/* Scroll rows top..bottom (inclusive) by n: n > 0 moves content up (rows
+ * vacated at the bottom), n < 0 moves content down (rows vacated at the top).
+ * Rows outside the range are untouched; this is the DECSTBM scroll-region
+ * primitive used by LF/IND/RI/IL/DL/SU/SD. Nothing goes to scrollback. */
+void gfx_scroll_region(int top, int bottom, int n, int fg, int bg) {
+  int rows, abs_n, y;
+
+  if (top < 0) top = 0;
+  if (bottom > 24) bottom = 24;
+  if (top > bottom || n == 0) {
+    return;
+  }
+  rows = bottom - top + 1;
+  abs_n = n < 0 ? -n : n;
+  if (abs_n > rows) {
+    abs_n = rows;
+  }
+  resetcursor();
+  if (abs_n < rows) {
+    int count = (rows - abs_n) * cfg_columns;
+    int src, dst;
+    if (n > 0) {
+      src = (top + abs_n) * cfg_columns;
+      dst = top * cfg_columns;
+    } else {
+      src = top * cfg_columns;
+      dst = (top + abs_n) * cfg_columns;
+    }
+    memmove(gfx_0400 + dst, gfx_0400 + src, count);
+    memmove(gfx_d800 + dst, gfx_d800 + src, count);
+    memmove(gfx_bg + dst, gfx_bg + src, count);
+  }
+  if (n > 0) {
+    for (y = bottom - abs_n + 1; y <= bottom; y++) {
+      gfx_fill_cells(0, y, cfg_columns, fg, bg);
+    }
+  } else {
+    for (y = top; y < top + abs_n; y++) {
+      gfx_fill_cells(0, y, cfg_columns, fg, bg);
+    }
+  }
+  for (y = top; y <= bottom; y++) {
+    dirty[y] = SDL_TRUE;
+  }
+}
+
+
+/* ICH: open n blank cells at (x, y), shifting the rest of the row right.
+ * Cells pushed past the right margin are lost. */
+void gfx_insert_cells(int x, int y, int n, int fg, int bg) {
+  int offset, moving;
+
+  if (y < 0 || y > 24 || x < 0 || x >= cfg_columns || n <= 0) {
+    return;
+  }
+  if (n > cfg_columns - x) {
+    n = cfg_columns - x;
+  }
+  resetcursor();
+  offset = y * cfg_columns + x;
+  moving = cfg_columns - x - n;
+  if (moving > 0) {
+    memmove(gfx_0400 + offset + n, gfx_0400 + offset, moving);
+    memmove(gfx_d800 + offset + n, gfx_d800 + offset, moving);
+    memmove(gfx_bg + offset + n, gfx_bg + offset, moving);
+  }
+  gfx_fill_cells(x, y, n, fg, bg);
+}
+
+
+/* DCH: remove n cells at (x, y), shifting the rest of the row left and
+ * filling the vacated cells at the right margin with blanks in fg/bg. */
+void gfx_delete_cells(int x, int y, int n, int fg, int bg) {
+  int offset, moving;
+
+  if (y < 0 || y > 24 || x < 0 || x >= cfg_columns || n <= 0) {
+    return;
+  }
+  if (n > cfg_columns - x) {
+    n = cfg_columns - x;
+  }
+  resetcursor();
+  offset = y * cfg_columns + x;
+  moving = cfg_columns - x - n;
+  if (moving > 0) {
+    memmove(gfx_0400 + offset, gfx_0400 + offset + n, moving);
+    memmove(gfx_d800 + offset, gfx_d800 + offset + n, moving);
+    memmove(gfx_bg + offset, gfx_bg + offset + n, moving);
+  }
+  gfx_fill_cells(cfg_columns - n, y, n, fg, bg);
 }

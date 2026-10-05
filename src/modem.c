@@ -369,6 +369,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   unsigned int play_start;
   int ring1_ms, ring2_ms;
   int aborted = 0;
+  int skipped = 0;   /* ESC during the dial audio: skip ahead, stay connected */
   int showed_ring1 = 0, showed_ring2 = 0;
   int already_connected = 0;
 
@@ -698,7 +699,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
 
   audio_buf = (Sint16 *)malloc(total_samples * sizeof(Sint16));
   if (!audio_buf) {
-    return net_connect(host, port, status);
+    return 0;   /* no audio, but the pre-flight connection is up */
   }
 
   offset = 0;
@@ -750,7 +751,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
                                       total_samples * sizeof(Sint16));
     if (sample_id < 0) {
       free(audio_buf);
-      return net_connect(host, port, status);
+      return 0;   /* already connected by the pre-flight */
     }
     sound_play_sample(sample_id);
   }
@@ -760,7 +761,10 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   while ((music_sfx_playing() || sound_is_playing()) && !aborted) {
     unsigned int elapsed_ms = timer_get_ticks() - play_start;
 
-    if (pump_events_check_esc()) { aborted = 1; break; }
+    /* ESC skips the rest of the dial soundtrack; the pre-flight
+     * connection is already up, so go straight to CONNECT instead of
+     * reporting "no carrier" while actually online. */
+    if (pump_events_check_esc()) { skipped = 1; break; }
 
     if (!showed_ring1 && (int)elapsed_ms >= ring1_ms) {
       ffd2(0x1e);  /* green — modem response */
@@ -805,7 +809,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   }
 
   /* ---- Phase 5: CONNECT 9600 ---- */
-  timer_delay(200);
+  timer_delay(skipped ? 0 : 200);
   ffd2(0x1e);  /* green — modem response */
   print("connect 9600\x0d\x0d");
   gfx_vbl();
@@ -866,6 +870,9 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   return net_connect(host, port, status);
 
 aborted:
+  if (already_connected) {
+    net_disconnect();   /* the screen says no carrier: don't stay online */
+  }
   ffd2(0x1c);  /* red */
   print("\x0d no carrier\x0d");
   ffd2(0x05);  /* white */

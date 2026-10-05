@@ -95,6 +95,15 @@ The .app bundle is created at:
 Pre-built binaries are provided in the zip file.
 Just unzip and run cgterm.exe.
 
+Native build under MSYS2 (MINGW64 shell):
+
+    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make \
+              mingw-w64-x86_64-SDL mingw-w64-x86_64-SDL_mixer
+    mingw32-make
+
+The Makefile detects MinGW/MSYS and selects the Windows code
+paths (winsock, SDL_mixer music) by itself.
+
 To cross-compile from macOS/Linux:
 
     ./scripts/cross-compile-win.sh
@@ -107,9 +116,10 @@ Output:
 
 //KEYBOARD LAYOUTS
 --------------------------------------------------
-CGTerm ships a single key map, assets/default.kbd, which
-is loaded automatically. To use a custom map, pass it
-with -k:
+CGTerm ships assets/default.kbd, which is loaded
+automatically. Every other *.kbd file placed in the assets
+folder shows up in the keyboard menu (K). To use a custom
+map from elsewhere, pass it with -k:
 
     cgterm -k /path/to/your.kbd
 
@@ -123,7 +133,13 @@ See assets/KEYBOARD-PROFILES.md for the key-map format.
 //CONFIG FILE
 --------------------------------------------------
 Linux/macOS:  ~/.cgtermrc
-Windows:      cgterm.cfg (same directory as exe)
+Windows:      %APPDATA%\CGTerm\cgterm.cfg
+
+A system-wide file is read first and the per-user file on
+top of it:
+
+Linux/macOS:  /etc/cgterm.cfg
+Windows:      cgterm.cfg next to cgterm.exe
 
 Example settings:
 
@@ -133,6 +149,42 @@ Example settings:
     modem = yes
     splashfont = 5
     menufont = 7
+    statusline = yes
+    autozmodem = yes
+    transferlog = yes
+    musicvolume = 64
+    reconnect = 30          # redial 30 s after a dropped carrier
+    logfile = ~/bbs.log     # capture every session, appended
+
+Values may contain spaces and a leading ~/ expands to your
+home directory. Most settings can also be changed from the
+Options panel (O) and are saved automatically.
+
+
+//PER-USER FILES
+--------------------------------------------------
+                        Linux/macOS               Windows (%APPDATA%\CGTerm)
+settings                ~/.cgtermrc               cgterm.cfg
+bookmarks               ~/.cgterm-bookmarks       cgterm-bookmarks.cfg
+notes + login scripts   ~/.cgterm-notes           cgterm-notes.cfg
+connection history      ~/.cgterm-history         cgterm-history.log
+transfer log            ~/.cgterm-transfers.log   cgterm-transfers.log
+debug log (debug = yes) ~/.cgterm-debug.log       cgterm-debug.log
+
+On Windows an older set of these files in the start folder is
+copied to %APPDATA%\CGTerm the first time the new version runs.
+
+
+//TESTS
+--------------------------------------------------
+    make test     protocol (XMODEM, Punter, ZMODEM against lrzsz
+                  when installed), ANSI emulation and disk-image
+                  regression tests; no window and no network
+    make fuzz     mutation fuzzing of the disk-image parser with
+                  AddressSanitizer/UBSan (FUZZ_ITER=n FUZZ_TYPE=d81)
+
+The same runs in GitHub Actions on Linux, macOS and MinGW
+(.github/workflows/build.yml).
 
 
 //PROGRAMS BUILT

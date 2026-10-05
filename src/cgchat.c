@@ -28,7 +28,7 @@ unsigned int lastvbl = 0;
 
 char *default_cgchat_cfg[] = {
 #ifndef WINDOWS
-  "keyboard = us.kbd",
+  "#keyboard = default.kbd",
 #endif
   "#zoom = 2",
   "#fullscreen = no",
@@ -75,12 +75,12 @@ int main(int argc, char *argv[]) {
   cfg_init(argv[0]);
 
 #ifdef WINDOWS
-  if (cfg_readconfig("cgchat.cfg") < 0) {
+  if (cfg_readconfig(cfg_user_path(fname, sizeof(fname), "cgchat.cfg")) < 0) {
     return(1);
   }
   if (cfg_read == 0) {
-    cfg_writeconfig(default_cgchat_cfg, "cgchat.cfg");
-    if (cfg_readconfig("cgchat.cfg") < 0) {
+    cfg_writeconfig(default_cgchat_cfg, cfg_user_path(fname, sizeof(fname), "cgchat.cfg"));
+    if (cfg_readconfig(cfg_user_path(fname, sizeof(fname), "cgchat.cfg")) < 0) {
       return(1);
     }
   }
@@ -97,9 +97,9 @@ int main(int argc, char *argv[]) {
     }
   }
   if (cfg_read == 0) {
-    strncpy(fname, cfg_homedir, 1000);
-    strcat(fname, "/.cgchatrc");
+    snprintf(fname, sizeof(fname), "%s/.cgchatrc", cfg_homedir);
     cfg_writeconfig(default_cgchat_cfg, fname);
+    cfg_readconfig(fname);   /* pick up the defaults just written */
   }
 #endif
 
@@ -180,12 +180,7 @@ int main(int argc, char *argv[]) {
 
   } else if (argc == 1 || argc == 2) {
 
-    if (strchr(argv[0], '.') == NULL) {
-      printf("Invalid hostname: %s\n", argv[0]);
-      return(1);
-    }
-
-    cfg_host = argv[0];
+    cfg_host = argv[0];   /* the resolver decides what is a valid host */
     if (argc == 2) {
       cfg_port = (int)strtol(argv[1], (char **)NULL, 10);
     }

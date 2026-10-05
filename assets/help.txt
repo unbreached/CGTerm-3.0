@@ -7,8 +7,35 @@
   ESC          Open/close menu
   ?            Show this help (or use menu)
   Alt+ESC      Send ESC to BBS (ANSI mode)
-  Ctrl+V       Paste from clipboard
-  PageUp/Down  Scroll through history
+  Ctrl+V       Paste from clipboard (paced)
+  PageUp/Down  Scroll back through history
+               (ANSI mode: Shift+PageUp/Down)
+
+  MENU KEYS
+  ---------
+  B  Bookmarks            D  Connect/Disconnect
+  R  Reconnect            Y  History / redial
+  T  Transfer file        J  Set paths
+  U  Unjoin disk image    N  New disk image
+  L  Load SEQ file        P  Post SEQ to BBS
+  S  Save screen          I  Screenshot (BMP)
+  X  Copy screen text     Z  Font settings
+  W  Upper/Lowercase      G  PETSCII/ANSI
+  E  Local echo           F  Fullscreen
+  K  Keyboard layout      H  Charset
+  M  Oldskool modem       O  Options
+  C  Record macro         V  Play macro
+  A  Abort                Q  Quit
+
+  OPTIONS PANEL [O]
+  -----------------
+  S  Sound on/off      +/- Music volume
+  D  Send delay        R   Receive delay
+  Z  Zoom 1x-4x        L   Status line
+  A  Auto-start ZMODEM T   Transfer log
+  C  Capture to file   E   Local echo
+  The status line shows board, mode,
+  CAP (capturing), REC (macro), LOGIN.
 
   MODIFIER KEYS (PETSCII MODE)
   ----------------------------
@@ -20,15 +47,46 @@
     Ctrl+3 Red      Ctrl+7 Yellow
     Ctrl+4 Cyan     Ctrl+8 Orange
 
-  FILE TRANSFERS
-  --------------
-  Punter     Most common C64 BBS protocol
-  Multi-P    Batch download/upload (Punter)
-  XMODEM     Legacy protocol (CRC/1K variants)
-  Rainbow    Used on some BBSes
+  FILE TRANSFERS [T]
+  ------------------
+  R/S picks receive or send, then:
+  P  Punter      Most common C64 protocol
+  M  Multi Punter  Batch (C*Base)
+  Z  ZMODEM      Batch, names + resume
+  X  XMODEM      C  XMODEM-CRC  1  1K
+  W  Rainbow
+  Return starts; the last choice is
+  preselected, so T + Return repeats.
+  A board that starts a ZMODEM send is
+  answered automatically (Options [A]).
+  Every transfer is logged with bytes,
+  time and cps in the transfer log.
 
   During transfer:
-    ESC = Cancel (with confirmation)
+    ESC = Cancel (asks Y/N, keeps going
+          while you decide)
+
+  FILE SELECTOR
+  -------------
+  Space  Tag file / enter folder
+  Return Select      C  Create folder
+  D  Delete          R  Rename
+  F2 Save this path as transfer path
+  Inside a disk image (D64/D71/D81):
+  V  Validate (rebuild BAM)
+  L  Lock/unlock file
+  X  Extract file(s) to the folder
+  I  Disk info, rename disk/ID
+  In a folder, when the download path
+  is an image: X inserts the file(s).
+
+  AUTO-LOGIN
+  ----------
+  Put a line in a bookmark's notes [N]:
+    login=w:Handle;s:name;cr;w:Password;s:pw;cr
+  w: wait for text   s: send text
+  cr send RETURN     p:N pause N ms
+  It runs after dialing that bookmark.
 
   C*BASE BBS COMMANDS (USER)
   --------------------------
@@ -63,20 +121,17 @@
   Shift+D  Disconnect user
   @        Send disk command
 
-  Sysop maintenance:
-  - Edit userparams to manage users
-  - Use Library for file management
-  - BBS Info shows system status
-  - Wallwriter for announcements
-
   ANSI MODE
   ---------
-  Toggle with [G] in menu.
-  Auto-switches to 80 columns.
-  Alt+ESC sends ESC byte to BBS.
-  Arrow keys send ANSI sequences.
-  Supports colors, cursor movement,
-  box-drawing, and 256 colors.
+  Toggle with [G] in menu (80 columns).
+  Alt+ESC sends ESC; Alt+letter sends
+  ESC+letter (Mystic/Synchronet hotkeys).
+  F1-F12, Insert, Delete, PgUp/PgDn and
+  the arrows send xterm sequences; TAB
+  and Ctrl+A..Z are passed through.
+  Scroll regions, iCE colours, 256 and
+  truecolour SGR, line drawing and the
+  usual VT100 controls are supported.
 
   TIPS
   ----
@@ -88,4 +143,6 @@
     warez download directory
   - Bookmarks support ANSI/PETSCII
     mode per BBS (edit with [E])
-
+  - Files: ~/.cgterm-transfers.log,
+    ~/.cgterm-history, ~/.cgterm-notes
+    (Windows: %APPDATA%\CGTerm)
