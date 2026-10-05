@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL.h>
+#include <sys/stat.h>
 #include "xfer.h"
 #include "xmodem.h"
 #include "punter.h"
@@ -158,6 +159,140 @@ static void xr_peer(unsigned char c) {
     n = 0;
   }
 }
+
+/* ---------------- Multi Punter upload: scripted C*Base receiver ----------------
+ * Mirrors bbs.bas: the board waits for 0x09 + name + CR (get#5 loop), then
+ * runs initrecv2 (8-byte filetype block, $ffff -> SYN exchange) and
+ * receive2 (7-byte header, data blocks, $ffff last block -> SYN exchange),
+ * then returns to the get#5 loop. 0x09 0x04 ends the batch. */
+#include "diskimage.h"
+#include "dir.h"
+#include "fileselector.h"
+static unsigned char mp_rx[3][8192]; static int mp_rx_len[3]; static char mp_names[3][64]; static int mp_files;
+static int mp_batch_end, mp_filetypes[3];
+static int mp_state, mp_blklen, mp_blkpos, mp_nextsize, mp_badchecksum_once, mp_bad_done;
+static unsigned char mp_blk[300];
+static char mp_acc[4];
+static int mp_namepos;
+static int mp_checksum_ok(const unsigned char *b, int len) {
+  unsigned short ck = 0, clc = 0; int i;
+  for (i = 4; i < len; i++) { ck += b[i]; clc ^= b[i]; clc = (clc << 1) | (clc >> 15); }
+  return ck == (b[0] | (b[1] << 8)) && clc == (b[2] | (b[3] << 8));
+}
+static void mp_send(const char *s) { feed((const unsigned char *)s, 3); }
+/* states: 0 wait TAB, 1 reading name, 2 wait ACK(after GOO) phase1, 3 wait S/B? no: we send S/B and read 8 bytes (state 3 = reading block),
+ * 4 wait ACK after GOO (block accepted), 5 wait SYN, 6 wait S/B (end of SYN exchange), 7 wait ACK (phase 2 GOO),
+ * 8 reading header/data block, 9 wait ACK after GOO for data block, 10 wait SYN (final), 11 wait S/B (final) */
+static int mp_phase;   /* 1 = filetype block, 2 = header, 3 = data */
+static void mp_expect_block(int len) { mp_blklen = len; mp_blkpos = 0; mp_state = 8; mp_send("S/B"); }
+static void mp_peer(unsigned char c) {
+  if (mp_state == 0) {
+    if (c == 0x09) { mp_state = 1; mp_namepos = 0; }
+    return;
+  }
+  if (mp_state == 1) {
+    if (c == 0x04 && mp_namepos == 0) { mp_batch_end = 1; mp_state = 0; return; }
+    if (c == 0x09) return;
+    if (c == '\r' || c == '\n') {
+      mp_names[mp_files][mp_namepos] = 0;
+      mp_rx_len[mp_files] = 0;
+      mp_phase = 1;
+      mp_state = 2;
+      mp_send("GOO");          /* initrecv2 -> recvblk: GOO, wait ACK */
+      return;
+    }
+    if (mp_namepos < 63) mp_names[mp_files][mp_namepos++] = (char)c;
+    return;
+  }
+  if (mp_state == 8) {
+    mp_blk[mp_blkpos++] = c;
+    if (mp_blkpos < mp_blklen) return;
+    /* whole block in */
+    if (!mp_checksum_ok(mp_blk, mp_blklen) || (mp_badchecksum_once && !mp_bad_done && mp_phase == 3)) {
+      mp_bad_done = 1;
+      mp_state = 12;            /* BAD, wait ACK, then S/B again */
+      mp_send("BAD");
+      return;
+    }
+    if (mp_phase == 1) { mp_filetypes[mp_files] = mp_blk[7]; }
+    if (mp_phase == 3 && mp_blklen > 7) {
+      memcpy(mp_rx[mp_files] + mp_rx_len[mp_files], mp_blk + 7, mp_blklen - 7);
+      mp_rx_len[mp_files] += mp_blklen - 7;
+    }
+    mp_nextsize = mp_blk[4];
+    mp_state = 9;
+    mp_send("GOO");
+    return;
+  }
+  mp_acc[0] = mp_acc[1]; mp_acc[1] = mp_acc[2]; mp_acc[2] = (char)c; mp_acc[3] = 0;
+  switch (mp_state) {
+  case 2:  /* ACK to our GOO (phase 1 or 2 entry) */
+    if (strcmp(mp_acc, "ACK") == 0) { memset(mp_acc, 0, 4); mp_expect_block(mp_phase == 1 ? 8 : 7); mp_phase = (mp_phase == 1) ? 1 : 2; }
+    break;
+  case 12: /* ACK to our BAD */
+    if (strcmp(mp_acc, "ACK") == 0) { memset(mp_acc, 0, 4); mp_expect_block(mp_blklen); }
+    break;
+  case 9:  /* ACK to our GOO after a good block */
+    if (strcmp(mp_acc, "ACK") != 0) break;
+    memset(mp_acc, 0, 4);
+    if (mp_phase == 1 || (mp_phase >= 2 && mp_blk[5] == 0xff && mp_blk[6] == 0xff)) {
+      /* recvblk sets lastblkflag on ANY $ffff block, the 7-byte header included */
+      /* lastblkflag: S/B, wait SYN, SYN, wait S/B */
+      mp_state = 10; mp_send("S/B");
+    } else if (mp_phase == 2) {
+      mp_phase = 3; mp_expect_block(mp_nextsize);
+    } else {
+      mp_expect_block(mp_nextsize);
+    }
+    break;
+  case 10:
+    if (strcmp(mp_acc, "SYN") == 0) { memset(mp_acc, 0, 4); mp_state = 11; mp_send("SYN"); }
+    break;
+  case 11:
+    if (strcmp(mp_acc, "S/B") == 0) {
+      memset(mp_acc, 0, 4);
+      if (mp_phase == 1) { mp_phase = 2; mp_state = 2; mp_send("GOO"); }   /* receive2 -> recvblk */
+      else { mp_files++; mp_state = 0; }                                    /* back to get#5 */
+    }
+    break;
+  default: break;
+  }
+}
+static void run_multipunter_send(const char *label, int nfiles, const int *sizes, int badonce) {
+  static DirEntry ents[3]; static Dir dir; static FileSelector fs;
+  static unsigned char data[3][8192];
+  char path[64]; int i, ok = 1;
+  peer_reset();
+  memset(&mp_rx_len, 0, sizeof(mp_rx_len)); mp_files = 0; mp_batch_end = 0; mp_state = 0; mp_bad_done = 0; mp_badchecksum_once = badonce;
+  memset(mp_acc, 0, 4);
+  snprintf(cfg_xferdir, 256, "/tmp/cgt-mp");
+  mkdir("/tmp/cgt-mp", 0755);
+  memset(&dir, 0, sizeof(dir)); memset(ents, 0, sizeof(ents)); memset(&fs, 0, sizeof(fs));
+  for (i = 0; i < nfiles; i++) {
+    int k; FILE *f;
+    for (k = 0; k < sizes[i]; k++) data[i][k] = (unsigned char)(k * 31 + i * 7 + 1);
+    snprintf(path, sizeof(path), "/tmp/cgt-mp/file%d.prg", i);
+    f = fopen(path, "wb"); fwrite(data[i], 1, sizes[i], f); fclose(f);
+    ents[i].name = malloc(32); snprintf(ents[i].name, 32, "file%d.prg", i);
+    ents[i].type = T_PRG; ents[i].tagged = 1; ents[i].size = sizes[i];
+    if (i) ents[i - 1].next = &ents[i];
+  }
+  dir.firstentry = &ents[0]; dir.numentries = nfiles; dir.blocksfree = -1;
+  fs.dir = &dir; fs.numtagged = nfiles; fs.selectedfile = &ents[0];
+  peer_on_byte = mp_peer;
+  xfer_send_multipunter(&fs);
+  printf("  [%s] files=%d batch_end=%d vclock=%us\n", label, mp_files, mp_batch_end, vclock / 1000);
+  if (mp_files != nfiles || !mp_batch_end) ok = 0;
+  for (i = 0; i < nfiles && ok; i++) {
+    char want[64]; snprintf(want, sizeof(want), "FILE%d,p", i);
+    if (mp_rx_len[i] != sizes[i] || memcmp(mp_rx[i], data[i], sizes[i]) != 0) { printf("    file %d: got %d bytes, want %d\n", i, mp_rx_len[i], sizes[i]); ok = 0; }
+    if (strcmp(mp_names[i], want) != 0) { printf("    file %d: announced as '%s', want '%s'\n", i, mp_names[i], want); ok = 0; }
+    if (mp_filetypes[i] != 2) { printf("    file %d: filetype %d, want 2\n", i, mp_filetypes[i]); ok = 0; }
+  }
+  CHECK(ok, label);
+  for (i = 0; i < nfiles; i++) free(ents[i].name);
+}
+
 int main(int argc, char **argv) { (void)argc; (void)argv;
   int rc, i;
   crc_init();
@@ -193,6 +328,11 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   run_punter_recv("248 bytes: last block carries 1 data byte", 248, 0);
   run_punter_recv("1 byte file", 1, 0);
   run_punter_recv("block 1 retransmitted (lost GOO)", 500, 1);
+
+  puts("[Multi Punter upload to a C*Base-style receiver]");
+  { int sz[3] = {494, 248, 1}; run_multipunter_send("3 files (494, 248, 1 bytes)", 3, sz, 0); }
+  { int sz[1] = {3000}; run_multipunter_send("1 file, one block rejected with BAD then resent", 1, sz, 1); }
+  { int sz[2] = {0, 100}; run_multipunter_send("empty file followed by a normal one", 2, sz, 0); }
 
   printf("\n%s (%d failures)\n", fails ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED", fails);
   return fails != 0;
