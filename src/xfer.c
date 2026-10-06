@@ -63,6 +63,7 @@ int xfer_cancel;
 static int xfer_batch_mode = 0;   /* Multi Punter / ZMODEM: never re-prompt for names */
 static int xfer_batch_files = 0;  /* files received so far in a batch (fallback names) */
 static unsigned int xfer_last_elapsed_ms = 0;
+static void xfer_trace_flush(void);
 static int xfer_confirm_pending = 0;   /* ESC pressed, waiting for Y/N */
 
 static const char *xfer_protocol_name(Protocol p) {
@@ -82,6 +83,8 @@ static const char *xfer_protocol_name(Protocol p) {
  * date, host, protocol, direction, name, bytes, seconds, cps, result. */
 void xfer_log_result(const char *direction, const char *name, long bytes, unsigned int ms, const char *result) {
   FILE *f;
+  xfer_trace_flush();
+  dbg("--- result: %s %s %ld bytes %s\n", direction, name ? name : "-", bytes, result);
   char path[600];
   time_t now = time(NULL);
   struct tm *tm_info = localtime(&now);
@@ -631,6 +634,43 @@ void xfer_check_kbd(void) {
   }
 }
 
+/* Byte-level transfer trace for debug mode (-b / debug = yes): every byte in
+ * both directions goes to the debug log as hex, one line per direction
+ * change with the elapsed time, plus the ASCII of the line. This is what
+ * we need from a user whose board hangs or crashes during a transfer. */
+static char trace_dir = 0;
+static char trace_hex[200];
+static char trace_asc[40];
+static int trace_n = 0;
+static unsigned int trace_t0 = 0;
+
+static void xfer_trace_flush(void) {
+  if (trace_n == 0) return;
+  trace_asc[trace_n] = 0;
+  dbg("%c %6u.%03u %-48s |%s|\n", trace_dir, (timer_get_ticks() - trace_t0) / 1000,
+      (timer_get_ticks() - trace_t0) % 1000, trace_hex, trace_asc);
+  trace_n = 0;
+  trace_hex[0] = 0;
+}
+
+void xfer_trace_start(const char *what) {
+  if (!cfg_debugmode) return;
+  xfer_trace_flush();
+  trace_t0 = timer_get_ticks();
+  dbg("=== %s host=%s proto=%s dir=%s\n", what, cfg_host ? cfg_host : "?",
+      xfer_protocol_name(xfer_protocol), xfer_direction == DIR_SEND ? "send" : "recv");
+}
+
+static void xfer_trace(char dir, unsigned char c) {
+  if (!cfg_debugmode) return;
+  if (dir != trace_dir || trace_n >= 16) {
+    xfer_trace_flush();
+    trace_dir = dir;
+  }
+  snprintf(trace_hex + strlen(trace_hex), sizeof(trace_hex) - strlen(trace_hex), "%02x ", c);
+  trace_asc[trace_n++] = (c >= 32 && c < 127) ? (char)c : '.';
+}
+
 void xfer_send_byte(unsigned char c) {
   unsigned int t;
 
@@ -639,6 +679,7 @@ void xfer_send_byte(unsigned char c) {
     xfer_last_kbd_check = t;
     xfer_check_kbd();
   }
+  xfer_trace('T', c);
   net_send(c);
   menu_xfer_feed_byte(c);
 }
@@ -667,11 +708,13 @@ signed int xfer_recv_byte(int timeout) {
   }
 
   if (c < 0) {
+    if (c == -2) {
+      xfer_trace_flush();
+      dbg("--- disconnected\n");
+    }
     return(c);   /* -2: disconnected (don't feed it to the hex display) */
   }
-  if (xfer_recv_debug_count < 5) {
-    dbg(" xfer_recv_byte: got 0x%02x (%d bytes so far)\n", c, xfer_recv_debug_count + 1);
-  }
+  xfer_trace('R', (unsigned char)c);
   xfer_recv_debug_count++;
   menu_xfer_feed_byte((unsigned char)c);
   return(c);
@@ -740,6 +783,7 @@ int xfer_load_data(unsigned char *data, int length) {
 int xfer_recv(void) {
   int status = 0;
 
+  xfer_trace_start("xfer_recv");
   dbg(" xfer_recv() entered: protocol=%d direction=%d\n", xfer_protocol, xfer_direction);
   dbg(" dldir='%s' xferdir='%s'\n", cfg_dldir, cfg_xferdir);
   dbg(" net_connected=%d\n", net_connected());
@@ -944,6 +988,7 @@ int xfer_send(const char *filename, const unsigned char *rawname) {
   xfer_cancel = 0;
   xfer_confirm_pending = 0;
   xfer_starttime = timer_get_ticks();
+  xfer_trace_start(filename);
   menu_draw_xfer_progress((char *)filename, xfer_direction, xfer_protocol);
   menu_show();
   gfx_vbl();
@@ -1428,6 +1473,7 @@ void xfer_send_multipunter(FileSelector *fs) {
   xfer_cancel = 0;
   xfer_confirm_pending = 0;
   xfer_starttime = timer_get_ticks();
+  xfer_trace_start("multipunter send");
 
   /* Loop through all entries, send tagged ones */
   de = fs->dir->firstentry;
