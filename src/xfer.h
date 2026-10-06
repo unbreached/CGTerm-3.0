@@ -49,6 +49,7 @@ void xfer_discard_download(void);
 int xfer_begin_file(void);
 int xfer_end_file(const char *remote_name);
 void xfer_abort_file(void);
+void xfer_trace_start(const char *what);   /* debug-mode byte trace section header */
 void xfer_log_result(const char *direction, const char *name, long bytes, unsigned int ms, const char *result);
 
 void xfer_send_byte(unsigned char c);

@@ -133,6 +133,14 @@
   truecolour SGR, line drawing and the
   usual VT100 controls are supported.
 
+  TROUBLESHOOTING A TRANSFER
+  --------------------------
+  Start with  cgterm -b  (or debug = yes
+  in the config), repeat the transfer and
+  send ~/.cgterm-debug.log to the sysop or
+  the GitHub issue: it holds every byte
+  sent (T) and received (R) with timing.
+
   TIPS
   ----
   - Set charset to Swedish [H] to

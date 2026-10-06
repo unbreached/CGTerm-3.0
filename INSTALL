@@ -171,6 +171,12 @@ connection history      ~/.cgterm-history         cgterm-history.log
 transfer log            ~/.cgterm-transfers.log   cgterm-transfers.log
 debug log (debug = yes) ~/.cgterm-debug.log       cgterm-debug.log
 
+Transfer problems: start with  cgterm -b  (or debug = yes), repeat
+the transfer and attach ~/.cgterm-debug.log to the report. In debug
+mode every byte of a transfer is logged in both directions with the
+elapsed time, which is enough to see where a board and CGTerm
+disagree.
+
 On Windows an older set of these files in the start folder is
 copied to %APPDATA%\CGTerm the first time the new version runs.
 
