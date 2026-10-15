@@ -22,8 +22,8 @@ GitHub release `v3.1.0` (draft until published) with exactly these names:
 
 | Link on the site | File to upload | SHA-256 |
 |------------------|----------------|---------|
-| `./files/CGTerm-3.1-win32.zip` | CGTerm-3.1-win32.zip | c1ac2ea732a32814da6fa675c7137a2d49fdafb5b43c7c46eb2a1c4ce09c2e16 |
-| `./files/CGTerm-3.1-macos.zip` | CGTerm-3.1-macos.zip | ccf521da0116cc4627a20a49bea28baa2894680c95e4ba7c2df9ecd1ec37ed8c |
+| `./files/CGTerm-3.1-win32.zip` | CGTerm-3.1-win32.zip | 18f48e714e4018c3e14bcbcbb7251151a6eab06d8968ae7af3a12417375226fa |
+| `./files/CGTerm-3.1-macos.zip` | CGTerm-3.1-macos.zip | cb00f7559952eab463641da698b48853a43302a5070e9e53a47d6ece3c2595f0 |
 | `./files/CGTerm-3.1-source.tar.gz` | CGTerm-3.1-source.tar.gz | see the release page (the tarball cannot contain its own hash) |
 
 The source tarball unpacks to `CGTerm-3.1/`, matching the Linux
@@ -43,6 +43,16 @@ Reported by a caller after months of 3.0 use (fixed 2026-10-15, in the
 - "Press X to never see the intro again" did nothing when the config
   folder was not writable (Windows, Program Files); settings now live in
   %APPDATA% and a failed save is reported.
+
+From a long-time CGTerm user (fixed 2026-10-15):
+
+- The window can be dragged to any size; it snaps to the nearest whole
+  zoom step (no more "small or fullscreen only").
+- 40/80 columns is now a key in the Options panel, including PETSCII 80
+  columns; ANSI stays 80.
+- Oldskool modem mode no longer shows the scrolling phone book, and the
+  TCP connection is made when the modem "answers" instead of before the
+  dial sequence, so boards no longer time out during the theatre.
 
 The 3.1 changelog on the site is the one from CHANGELOG.md. These fixes
 are the ones callers actually hit and are not spelled out there:

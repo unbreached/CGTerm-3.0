@@ -273,7 +273,7 @@ int gfx_init(int fullscreen, char *appname) {
   if ((gfx_bpp = vidinfo->vfmt->BitsPerPixel) < 15) {
     gfx_bpp = 16;
   }
-  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, (SDL_FULLSCREEN * fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+  if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, (SDL_FULLSCREEN * fullscreen)|(fullscreen ? 0 : SDL_RESIZABLE)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
     printf("Unable to open window: %s\n", SDL_GetError());
     return(1);
   }
@@ -893,7 +893,7 @@ void gfx_set_title(const char *title) {
 void gfx_toggle_fullscreen(void) {
   //SDL_WM_ToggleFullScreen(gfx_screen);
   if (cfg_fullscreen) {
-    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_RESIZABLE|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
       printf("Unable to open window: %s\n", SDL_GetError());
       exit(1);
     }
@@ -985,7 +985,7 @@ void gfx_set_columns(int cols) {
 
   {
     SDL_Surface *newscreen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp,
-        (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE);
+        (SDL_FULLSCREEN * cfg_fullscreen)|(cfg_fullscreen ? 0 : SDL_RESIZABLE)|SDL_ANYFORMAT|SDL_SWSURFACE);
     if (newscreen == NULL) {
       /* keep the existing surface and layout rather than leaving gfx_screen NULL */
       printf("Unable to resize window: %s\n", SDL_GetError());
@@ -1067,7 +1067,7 @@ void gfx_set_zoom(int zoom) {
   gfx_height = cfg_zoom * GFX_HEIGHT;
 
   newscreen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp,
-      (SDL_FULLSCREEN * cfg_fullscreen)|SDL_ANYFORMAT|SDL_SWSURFACE);
+      (SDL_FULLSCREEN * cfg_fullscreen)|(cfg_fullscreen ? 0 : SDL_RESIZABLE)|SDL_ANYFORMAT|SDL_SWSURFACE);
   if (newscreen == NULL) {
     printf("Unable to resize window: %s\n", SDL_GetError());
     cfg_zoom = old_zoom;
@@ -1497,4 +1497,35 @@ void gfx_delete_cells(int x, int y, int n, int fg, int bg) {
     memmove(gfx_bg + offset, gfx_bg + offset + n, moving);
   }
   gfx_fill_cells(cfg_columns - n, y, n, fg, bg);
+}
+
+
+/* Window dragged to a new size (SDL_VIDEORESIZE). The C64 screen is drawn
+ * with integer-scaled 8x8 cells, so the window snaps to the nearest whole
+ * zoom factor (1x-8x; 80 columns needs an even one) and the new zoom is
+ * kept in the config. Dragging a little smaller or larger than the current
+ * size therefore steps the zoom like the Options panel does. */
+void gfx_handle_resize(int w, int h) {
+  int z;
+  int want_h;
+
+  if (cfg_fullscreen) return;
+  if (w == gfx_width && h == gfx_height + gfx_status_rows * charheight) return;   /* our own re-mode */
+  z = (w + GFX_WIDTH / 2) / GFX_WIDTH;
+  {
+    int zh = (h + GFX_HEIGHT / 2) / (GFX_HEIGHT + gfx_status_rows * 8);
+    if (zh < z) z = zh;          /* fit both dimensions */
+  }
+  if (z < 1) z = 1;
+  if (z > 8) z = 8;
+  if (cfg_columns == 80 && (z & 1)) z = (z > 1) ? z - 1 : 2;
+  want_h = z * GFX_HEIGHT + gfx_status_rows * 8 * z;
+  if (z != cfg_zoom || w != z * GFX_WIDTH || h != want_h) {
+    gfx_set_zoom(z);             /* also snaps the window back to the exact size */
+    if (z == cfg_zoom) {
+      char val[8];
+      snprintf(val, sizeof(val), "%d", cfg_zoom);
+      cfg_save_setting("zoom", val);
+    }
+  }
 }
