@@ -291,14 +291,15 @@ static int xfer_copy_file(FILE *from, FILE *to, int bytesleft) {
   return (bytesleft == 0);
 }
 
+/* Punter file type byte: 1 = PRG, 2 = SEQ, 3 = USR (not the CBM DOS codes) */
 static const char *multipunter_ext_from_type(int filetype) {
   switch (filetype) {
   case 1:
-    return ".seq";
-  case 2:
     return ".prg";
+  case 2:
+    return ".seq";
   case 3:
-    return ".wp";
+    return ".usr";
   default:
     return "";
   }
@@ -967,17 +968,17 @@ int xfer_copy_from_image(char *imgname, const char *src, const unsigned char *ex
 }
 
 /* Punter filetype byte for an upload, from the local name: ",s"/".seq" is
- * SEQ (1), everything else PRG (2). */
+ * SEQ (2), ",u"/".usr" is USR (3), everything else PRG (1). */
 static int punter_filetype_from_name(const char *name) {
   size_t len = strlen(name);
 
-  if (len >= 2 && name[len - 2] == ',' && (name[len - 1] == 's' || name[len - 1] == 'S')) {
-    return 1;
+  if (len >= 2 && name[len - 2] == ',') {
+    if (name[len - 1] == 's' || name[len - 1] == 'S') return 2;
+    if (name[len - 1] == 'u' || name[len - 1] == 'U') return 3;
   }
-  if (len >= 4 && strcasecmp(name + len - 4, ".seq") == 0) {
-    return 1;
-  }
-  return 2;
+  if (len >= 4 && strcasecmp(name + len - 4, ".seq") == 0) return 2;
+  if (len >= 4 && strcasecmp(name + len - 4, ".usr") == 0) return 3;
+  return 1;
 }
 
 int xfer_send(const char *filename, const unsigned char *rawname) {

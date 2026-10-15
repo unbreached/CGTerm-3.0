@@ -37,6 +37,23 @@ static int was_connected = 0;
 unsigned int lastsend = 0;
 unsigned int lastrecv = 0;
 unsigned int lastvbl = 0;
+/* Seeded into the bookmark file on first run (never into the config, so
+ * the user can delete them). */
+static const char *default_bookmarks[] = {
+  "FRoZEN FLoPPY BBS, bbs.retrohack.se, 64128",
+  "OPTiCAL iLLUSiON, oi.ath.cx, 64128",
+  "ANTiDOTE, antidote.triad.se, 64128",
+  "Boar's Head Tavern, byob.hopto.org, 64128",
+  "Dark Endless, darkendlessbbs.hopto.org, 6510",
+  "Dead Zone, dzbbs.hopto.org, 64128",
+  "Fria Bad BBS, friabad.hopto.org, 64128",
+  "The Hidden, the-hidden.hopto.org, 64128",
+  "Rapid Fire BBS, rapidfire.hopto.org, 64128",
+  "Raveolution, raveolution.hopto.org, 64128",
+  "The Valley, valley64.com, 6400",
+  NULL
+};
+
 char *default_cgterm_cfg[] = {
   "#keyboard = ",
   "#zoom = 2",
@@ -53,17 +70,6 @@ char *default_cgterm_cfg[] = {
   "#debug = no",
   "#xferdir = ",
   "#debug = no",
-  "bookmark = FRoZEN FLoPPY BBS, bbs.retrohack.se, 64128",
-  "bookmark = OPTiCAL iLLUSiON, oi.ath.cx, 64128",
-  "bookmark = ANTiDOTE, antidote.triad.se, 64128",
-  "bookmark = Boar's Head Tavern, byob.hopto.org, 64128",
-  "bookmark = Dark Endless, darkendlessbbs.hopto.org, 6510",
-  "bookmark = Dead Zone, dzbbs.hopto.org, 64128",
-  "bookmark = Fria Bad BBS, friabad.hopto.org, 64128",
-  "bookmark = The Hidden, the-hidden.hopto.org, 64128",
-  "bookmark = Rapid Fire BBS, rapidfire.hopto.org, 64128",
-  "bookmark = Raveolution, raveolution.hopto.org, 64128",
-  "bookmark = The Valley, valley64.com, 6400",
   NULL
 };
 
@@ -115,9 +121,16 @@ int main(int argc, char *argv[]) {
 #else
   snprintf(fname, sizeof(fname), "%s/cgterm.cfg", path_system_config_dir());
 #endif
+  {
+    /* bookmarks in a system-wide config only seed a first run */
+    char bmfile[512];
+    cfg_resolve_bookmarkfile(bmfile, sizeof(bmfile));
+    cfg_skip_cfg_bookmarks = cfg_file_exists(bmfile);
+  }
   if (cfg_file_exists(fname) && cfg_readconfig(fname) < 0) {
     return(1);
   }
+  cfg_skip_cfg_bookmarks = 0;
 #ifdef WINDOWS
   cfg_user_file(fname, sizeof(fname), "cgterm.cfg");
 #else
@@ -133,6 +146,22 @@ int main(int argc, char *argv[]) {
     cfg_readconfig(fname);
   }
 
+  /* bookmarks live in the bookmark file only (see cfg_migrate_bookmarks) */
+  cfg_migrate_bookmarks(fname);
+  {
+    char bmfile[512];
+    cfg_resolve_bookmarkfile(bmfile, sizeof(bmfile));
+    if (!cfg_file_exists(bmfile)) {
+      int i;
+      for (i = 0; default_bookmarks[i]; i++) {
+        char alias[128], host[256];
+        int port;
+        if (sscanf(default_bookmarks[i], "%127[^,], %255[^,], %d", alias, host, &port) == 3) {
+          cfg_append_bookmark(alias, host, port, 0);
+        }
+      }
+    }
+  }
   cfg_load_bookmarks();
 
   while ((opt = getopt(argc, argv, "r:d:z:k:o:fs48lbV")) != -1) {
@@ -259,6 +288,7 @@ int main(int argc, char *argv[]) {
   if (cfg_splash) {
     int splash_frame = 0;
     int splash_done = 0;
+    int splash_save_failed = 0;
     SDL_Event splash_event;
 
     /* Black out the PETSCII screen behind the overlay */
@@ -283,7 +313,12 @@ int main(int argc, char *argv[]) {
           if (splash_event.key.keysym.sym == SDLK_ESCAPE) {
             splash_done = 1;
           } else if (splash_event.key.keysym.sym == SDLK_x) {
-            cfg_disable_splash();
+            if (!cfg_disable_splash()) {
+              /* 3.0 failed here silently when the config folder was not
+               * writable (Program Files) and the intro came back forever */
+              printf("Could not save splash = no to the config file\n");
+              splash_save_failed = 1;
+            }
             splash_done = 1;
           }
           break;
@@ -299,6 +334,9 @@ int main(int argc, char *argv[]) {
     menu_cls();
     gfx_setcursxy(0, 0);
     ffd2(147);  /* clear screen for normal use */
+    if (splash_save_failed) {
+      print("\x96" "cOULD NOT SAVE SETTINGS - CONFIG FOLDER NOT WRITABLE\x05\x0d");
+    }
   }
 
   /* Show startup background:

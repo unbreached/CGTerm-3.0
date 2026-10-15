@@ -11,7 +11,7 @@
 #define PUNTER_MAX_RETRIES 10
 
 int punter_last_filetype = 0;
-int punter_send_filetype = 2;   /* 1 = SEQ, 2 = PRG; set by xfer.c from the file name */
+int punter_send_filetype = 1;   /* Punter file type: 1 = PRG, 2 = SEQ, 3 = USR (set by xfer.c) */
 static int punter_last_block = -1;  /* last data block number saved (duplicate guard) */
 static int punter_scan_for_string(const char *target, int timeout_ms, int max_bytes);
 
@@ -665,7 +665,10 @@ static int punter_send_internal(int send_presignal) {
   xfer_buffer[4] = 0;      /* next block size = 0 (matches BBS initsend2) */
   xfer_buffer[5] = 0xff;   /* block number lo = $ff */
   xfer_buffer[6] = 0xff;   /* block number hi = $ff (triggers lastblkflag) */
-  xfer_buffer[7] = (unsigned char)punter_send_filetype;   /* 1 = SEQ, 2 = PRG */
+  /* Punter's file type byte is NOT the CBM DOS type byte: 1 = PRG, 2 = SEQ
+   * (Zimodem, C*Base). 3.0 sent 2 for everything and every upload landed on
+   * the boards as a SEQ file nobody could download. */
+  xfer_buffer[7] = (unsigned char)punter_send_filetype;
   punter_build_checksum(xfer_buffer, 8);
 
   /* send_block: waits S/B, sends data, waits GOO, sends ACK */
