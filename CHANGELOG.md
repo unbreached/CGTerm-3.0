@@ -8,7 +8,10 @@ Genesis*Project · 2026
 [+]ZMODEM: batch send/receive, file names and sizes, crash recovery, CRC-32, auto-start when the board sends
 [+]Transfers: last protocol preselected (T + Return), transfer log with bytes/time/cps, on-screen summary, cancel prompt no longer stalls the peer
 [+]XMODEM: CRC to checksum fallback, bounded handshakes, cancel during send, 0-byte files
-[+]Punter: one-byte last blocks no longer lost, duplicate block guard, patient S/B wait, SEQ file type announced, empty files
+[+]Punter: one-byte last blocks no longer lost, duplicate block guard, patient S/B wait, empty files
+[!]Punter / Multi Punter upload: the file type byte was reversed (3.0 announced every upload as SEQ, so other callers could not download them); PRG is now sent as PRG, SEQ as SEQ
+[!]Bookmarks: boards listed in the config file came back after being deleted; they now live only in the bookmark file (moved over automatically on first start) and the defaults are seeded there once
+[!]Splash: when "X" cannot be saved (config folder not writable) CGTerm now says so instead of showing the intro forever; Windows settings live in %APPDATA% so this no longer happens in Program Files
 [+]Disk tools: validate (rebuild BAM), lock/unlock, rename disk/ID, extract to host, insert into image, CBM listing with splat/lock markers, error-table images, D81/D71 fixes
 [+]Terminal: status line, capture toggle, copy screen text, paste transliterates UTF-8, macros record RETURN/cursor/F-keys
 [+]ANSI: scroll regions, pending wrap, DECSC/DECRC, ICH/DCH/ECH, iCE colours, truecolour, line drawing, xterm keys, Alt hotkeys

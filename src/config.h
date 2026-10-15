@@ -52,12 +52,15 @@ signed int cfg_readconfig(char *configfile);
 void cfg_sethost(char *h);
 int cfg_change_dir(char *dirbuffer, const char *newdir);
 void cfg_writeconfig(char **data, char *configfile);
-void cfg_disable_splash(void);
+int cfg_disable_splash(void);   /* 0 when the setting could not be written */
 int cfg_save_setting(const char *key, const char *value);
 void cfg_debug(const char *s);
 int addhost(int num, char *alias, char *hostname, int port);
 void cfg_load_bookmarks(void);
 void cfg_save_bookmark(char *alias, char *host, int port);
+void cfg_append_bookmark(const char *alias, const char *host, int port, int ansi);
+int cfg_migrate_bookmarks(const char *userconfig);
+extern int cfg_skip_cfg_bookmarks;
 void cfg_resolve_bookmarkfile(char *resolved, size_t size);
 void cfg_log_connection(const char *host, int port);
 const char *cfg_get_bookmark_note(const char *host, int port);

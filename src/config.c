@@ -97,6 +97,8 @@ int cfg_modem = 0;
 int cfg_splashfont = 6;  /* C64 Pro Mono */
 int cfg_menufont = 8;  /* Edit Undo */
 int cfg_statusline = 1;
+int cfg_skip_cfg_bookmarks = 0;
+static int cfg_bookmarks_from_cfg = 0;
 int cfg_autozmodem = 1;
 int cfg_lastprotocol = 0;
 int cfg_lastdirection = 0;
@@ -649,10 +651,14 @@ signed int cfg_readconfig(char *configfile) {
 	} else if (strcmp(key, "bookmarkfile") == 0) {
 	  snprintf(cfg_bookmarkfile, sizeof(cfg_bookmarkfile), "%s", value);
 	} else if (strcmp(key, "bookmark") == 0) {
-	  if (addbookmark(linebuf) == 0) {
+	  if (cfg_skip_cfg_bookmarks) {
+	    /* system config seeds only a first run; the user's own file rules */
+	  } else if (addbookmark(linebuf) == 0) {
 	    printf("Syntax error in %s line %d\n", configfile, line + 1);
 	    fclose(cfg);
 	    return(-1);
+	  } else {
+	    cfg_bookmarks_from_cfg++;
 	  }
 	} else if (strcmp(key, "case") == 0) {
 	  if (strcmp(value, "upper") == 0) {
@@ -817,9 +823,9 @@ int cfg_save_setting(const char *key, const char *value) {
 }
 
 
-void cfg_disable_splash(void) {
+int cfg_disable_splash(void) {
   cfg_splash = 0;
-  cfg_save_setting("splash", "no");
+  return cfg_save_setting("splash", "no");
 }
 
 void cfg_debug(const char *s){
@@ -894,20 +900,106 @@ void cfg_load_bookmarks(void) {
 }
 
 
-void cfg_save_bookmark(char *alias, char *host, int port) {
+void cfg_append_bookmark(const char *alias, const char *host, int port, int ansi) {
   FILE *bf;
   char resolved[512];
 
   cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
 
   if ((bf = fopen(resolved, "a")) != NULL) {
-    if (cfg_termmode == 1) {
+    if (ansi) {
       fprintf(bf, "bookmark = %s, %s, %d, ansi\n", alias, host, port);
     } else {
       fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
     }
     fclose(bf);
   }
+}
+
+void cfg_save_bookmark(char *alias, char *host, int port) {
+  cfg_append_bookmark(alias, host, port, cfg_termmode == 1);
+}
+
+
+/* Does the bookmark file already hold host:port? */
+static int cfg_bookmarkfile_has(const char *host, int port) {
+  FILE *bf;
+  char resolved[512], line[512];
+  int found = 0;
+
+  cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
+  if ((bf = fopen(resolved, "r")) == NULL) return 0;
+  while (!found && fgets(line, sizeof(line), bf)) {
+    char *p = strchr(line, '='), *c1, *c2;
+    if (!p || (c1 = strchr(p, ',')) == NULL) continue;
+    c1++;
+    while (*c1 == ' ') c1++;
+    if ((c2 = strchr(c1, ',')) == NULL) continue;
+    {
+      size_t hl = (size_t)(c2 - c1);
+      while (hl && c1[hl - 1] == ' ') hl--;
+      if (hl == strlen(host) && strncmp(c1, host, hl) == 0 && strtol(c2 + 1, NULL, 10) == port) found = 1;
+    }
+  }
+  fclose(bf);
+  return found;
+}
+
+
+/* "bookmark =" lines in the per-user config were loaded on every start,
+ * while Delete in the bookmark list only rewrote the bookmark file, so
+ * deleted boards came back next launch. Move them to the bookmark file
+ * once (skipping ones already there) and strip them from the config.
+ * The in-memory list is cleared; the caller loads the bookmark file. */
+int cfg_migrate_bookmarks(const char *userconfig) {
+  int i, moved = 0;
+  FILE *in, *out;
+  char tmpname[600], line[1024];
+
+  if (cfg_bookmarks_from_cfg == 0) {
+    return 0;
+  }
+  for (i = 0; i < cfg_numbookmarks; i++) {
+    if (cfg_bookmark_host[i] && !cfg_bookmarkfile_has(cfg_bookmark_host[i], cfg_bookmark_port[i])) {
+      cfg_append_bookmark(cfg_bookmark_alias[i] ? cfg_bookmark_alias[i] : cfg_bookmark_host[i],
+                          cfg_bookmark_host[i], cfg_bookmark_port[i], cfg_bookmark_termmode[i] == 1);
+      moved++;
+    }
+    free(cfg_bookmark_alias[i]);
+    free(cfg_bookmark_host[i]);
+    cfg_bookmark_alias[i] = NULL;
+    cfg_bookmark_host[i] = NULL;
+  }
+  cfg_numbookmarks = 0;
+  cfg_bookmarks_from_cfg = 0;
+
+  /* strip the lines from the user config */
+  if (userconfig && (in = fopen(userconfig, "r")) != NULL) {
+    snprintf(tmpname, sizeof(tmpname), "%s.tmp", userconfig);
+    if ((out = fopen(tmpname, "w")) != NULL) {
+      int ok = 1;
+      while (fgets(line, sizeof(line), in)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "bookmark", 8) == 0 && (p[8] == ' ' || p[8] == '=' || p[8] == '\t')) continue;
+        if (fputs(line, out) == EOF) ok = 0;
+      }
+      if (fclose(out) != 0) ok = 0;
+      fclose(in);
+      if (ok) {
+#if defined(WINDOWS) || defined(__WIN32__)
+        remove(userconfig);   /* Windows rename() will not overwrite */
+#endif
+        if (rename(tmpname, userconfig) != 0) remove(tmpname);
+      } else {
+        remove(tmpname);
+      }
+    } else {
+      fclose(in);
+    }
+  }
+  printf("Moved %d bookmark(s) from the config file to the bookmark file\n", moved);
+  return moved;
 }
 
 

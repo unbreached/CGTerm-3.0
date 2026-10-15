@@ -22,14 +22,27 @@ GitHub release `v3.1.0` (draft until published) with exactly these names:
 
 | Link on the site | File to upload | SHA-256 |
 |------------------|----------------|---------|
-| `./files/CGTerm-3.1-win32.zip` | CGTerm-3.1-win32.zip | 9c6bf0b503da6419bcb60a5078ef968468f452c7c25e2214a20e7ac1c4ba3f8e |
-| `./files/CGTerm-3.1-macos.zip` | CGTerm-3.1-macos.zip | cb695203a873c054450f20ae8ba531d329ac3e95c040a6aa20e81e3b8c6ba8c3 |
+| `./files/CGTerm-3.1-win32.zip` | CGTerm-3.1-win32.zip | c1ac2ea732a32814da6fa675c7137a2d49fdafb5b43c7c46eb2a1c4ce09c2e16 |
+| `./files/CGTerm-3.1-macos.zip` | CGTerm-3.1-macos.zip | ccf521da0116cc4627a20a49bea28baa2894680c95e4ba7c2df9ecd1ec37ed8c |
 | `./files/CGTerm-3.1-source.tar.gz` | CGTerm-3.1-source.tar.gz | see the release page (the tarball cannot contain its own hash) |
 
 The source tarball unpacks to `CGTerm-3.1/`, matching the Linux
 instructions on the page (`cd CGTerm-3.1`).
 
 ## 2. Changelog lines to add
+
+Reported by a caller after months of 3.0 use (fixed 2026-10-15, in the
+3.1.0 packages):
+
+- Punter and Multi Punter uploads were stored on the boards as SEQ files
+  (file type byte reversed), so nobody could download what you uploaded.
+  PRG now arrives as PRG. This one deserves its own line at the top.
+- Deleted phonebook entries came back on the next start because the
+  defaults lived in the config file; bookmarks now live only in the
+  bookmark file and are moved there automatically.
+- "Press X to never see the intro again" did nothing when the config
+  folder was not writable (Windows, Program Files); settings now live in
+  %APPDATA% and a failed save is reported.
 
 The 3.1 changelog on the site is the one from CHANGELOG.md. These fixes
 are the ones callers actually hit and are not spelled out there:

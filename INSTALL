@@ -166,6 +166,8 @@ Options panel (O) and are saved automatically.
                         Linux/macOS               Windows (%APPDATA%\CGTerm)
 settings                ~/.cgtermrc               cgterm.cfg
 bookmarks               ~/.cgterm-bookmarks       cgterm-bookmarks.cfg
+                        (bookmark lines found in the config file are moved
+                        here on first start; the config no longer holds any)
 notes + login scripts   ~/.cgterm-notes           cgterm-notes.cfg
 connection history      ~/.cgterm-history         cgterm-history.log
 transfer log            ~/.cgterm-transfers.log   cgterm-transfers.log
