@@ -407,7 +407,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
       int pad = cfg_columns - 18 - 11;
       for (si = 0; si < pad; si++) ffd2(' ');
     }
-    print("cgterm 3.0 ");
+    print("cgterm 3.1 ");
     ffd2(0x92);  /* reverse off */
     gfx_setcursxy(0, 0);
     gfx_vbl();
@@ -424,7 +424,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   ffd2(0x9f); print("r");  /* cyan */
   ffd2(0x1f); print("m");  /* blue */
   ffd2(0x05); /* white */
-  print(" terminal v3.0\x0d");
+  print(" terminal v3.1\x0d");
 
   /* Separator line — full width */
   {
@@ -460,173 +460,8 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   gfx_vbl();
   timer_delay(400 + modem_rand() % 300);
 
-  /* ---- Animated Phone Book ---- */
-  {
-    int pb_count, pb_target, pb_cursor;
-    int si;
-    int pb_start_y;
-
-    ffd2(0x9f);  /* cyan */
-    print("\x0d");
-    ffd2(0x12);  /* reverse on */
-    print(" loading phonebook... ");
-    ffd2(0x92);  /* reverse off */
-    print("\x0d\x0d");
-    gfx_vbl();
-    modem_draw_scanlines();
-    SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-    timer_delay(800);
-
-    /* Show all bookmarks — scroll if more than fit on screen */
-    pb_count = cfg_numbookmarks;
-    if (pb_count < 1) pb_count = 1;
-    {
-      int max_visible = 14;  /* max rows visible at once */
-      int visible = pb_count < max_visible ? pb_count : max_visible;
-
-      /* Find which bookmark index we're connecting to */
-      pb_target = 0;
-      for (si = 0; si < cfg_numbookmarks; si++) {
-        if (cfg_bookmark_host[si] && strcmp(cfg_bookmark_host[si], host) == 0) {
-          pb_target = si;
-          break;
-        }
-      }
-
-      pb_start_y = gfx_cursy;
-
-      /* Print initial visible list */
-      for (si = 0; si < visible; si++) {
-      char entry[40];
-      const char *bname = (si < cfg_numbookmarks && cfg_bookmark_alias[si])
-                          ? cfg_bookmark_alias[si] : "unknown";
-      /* Format: " N. BBSNAME" — PETSCII uppercase = lowercase codes */
-      {
-        int ei;
-        snprintf(entry, sizeof(entry), " %d. ", si + 1);
-        ffd2(0x9a);  /* light blue for number */
-        print(entry);
-        /* Print name in white, convert to PETSCII */
-        ffd2(0x05);  /* white */
-        for (ei = 0; bname[ei] && ei < 28; ei++) {
-          char c = bname[ei];
-          if (c >= 'A' && c <= 'Z') c = c + 32;  /* uppercase → PETSCII lowercase */
-          else if (c >= 'a' && c <= 'z') c = c - 32;  /* lowercase → PETSCII uppercase */
-          ffd2((unsigned char)c);
-        }
-        ffd2(0x0d);
-      }
-      gfx_vbl();
-      modem_draw_scanlines();
-      SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-      timer_delay(100 + modem_rand() % 100);
-    }
-    print("\x0d");
-    gfx_vbl();
-    timer_delay(300);
-
-    /* Helper macro to draw a bookmark entry line */
-    #define DRAW_PB_ENTRY(idx, row, highlight_color) { \
-      char _ent[10]; \
-      const char *_bn = ((idx) < cfg_numbookmarks && cfg_bookmark_alias[(idx)]) \
-                        ? cfg_bookmark_alias[(idx)] : "unknown"; \
-      int _ei; \
-      gfx_setcursxy(0, (row)); \
-      if (highlight_color) { ffd2(0x12); ffd2(highlight_color); } \
-      else { ffd2(0x9a); } \
-      snprintf(_ent, sizeof(_ent), " %2d. ", (idx) + 1); \
-      print(_ent); \
-      if (!highlight_color) ffd2(0x05); \
-      for (_ei = 0; _bn[_ei] && _ei < 28; _ei++) { \
-        char _c = _bn[_ei]; \
-        if (_c >= 'A' && _c <= 'Z') _c += 32; \
-        else if (_c >= 'a' && _c <= 'z') _c -= 32; \
-        ffd2((unsigned char)_c); \
-      } \
-      for (; _ei < 28; _ei++) ffd2(' '); \
-      if (highlight_color) ffd2(0x92); \
-    }
-
-    /* Animate cursor — human-like: move down toward target, variable speed */
-    pb_cursor = 0;
-    {
-      int scroll_offset = 0;
-      int vis_row;
-
-      /* Maybe start a few entries above target for realism */
-      /* (human scrolls from top, or maybe from a random spot) */
-
-      while (pb_cursor != pb_target) {
-        /* Scroll to keep cursor visible */
-        if (pb_cursor >= scroll_offset + visible) {
-          scroll_offset = pb_cursor - visible + 1;
-          for (vis_row = 0; vis_row < visible; vis_row++) {
-            int idx = scroll_offset + vis_row;
-            if (idx < pb_count)
-              DRAW_PB_ENTRY(idx, pb_start_y + vis_row, 0);
-          }
-        }
-
-        /* Draw highlight */
-        vis_row = pb_cursor - scroll_offset;
-        DRAW_PB_ENTRY(pb_cursor, pb_start_y + vis_row, 0x9e);
-
-        gfx_vbl();
-        modem_draw_scanlines();
-        SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-
-        /* Human-like delay: varies between keystrokes.
-         * Sometimes quick, sometimes a brief pause (reading the name) */
-        {
-          int base_delay = 150 + (int)(modem_rand() % 200);
-          /* Occasionally pause longer — "hmm, is this the one?" */
-          if ((modem_rand() % 5) == 0)
-            base_delay += 300 + (int)(modem_rand() % 400);
-          /* Slow down when getting close to target */
-          if (pb_target - pb_cursor <= 2)
-            base_delay += 200;
-          timer_delay(base_delay);
-        }
-
-        /* Un-highlight */
-        DRAW_PB_ENTRY(pb_cursor, pb_start_y + vis_row, 0);
-
-        /* Move toward target */
-        if (pb_cursor < pb_target)
-          pb_cursor++;
-        else
-          pb_cursor--;
-
-        if (pump_events_check_esc()) goto aborted;
-      }
-    }
-
-    /* Final selection — highlight the target in green */
-    {
-      int final_row = pb_target - (pb_target >= visible ? pb_target - visible + 1 : 0);
-      DRAW_PB_ENTRY(pb_target, pb_start_y + final_row, 0x1e); /* green highlight */
-    }
-    gfx_vbl();
-    modem_draw_scanlines();
-    SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-    timer_delay(600);
-
-    /* Position cursor below the visible list */
-    {
-      int below = pb_start_y + (pb_count < visible ? pb_count : visible) + 1;
-      if (below > 22) below = 22;
-      gfx_setcursxy(0, below);
-    }
-    ffd2(0x9e);  /* yellow */
-    print(" >> dialing...\x0d\x0d");
-    gfx_vbl();
-    modem_draw_scanlines();
-    SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-    timer_delay(500);
-
-    #undef DRAW_PB_ENTRY
-    } /* end visible block */
-  }
+  /* (the animated phone book that used to scroll here confused callers and
+   * added seconds to every dial; the bookmark list is one key away anyway) */
 
   /* ---- Phase 2: ATDT command (white = user typing, slower) ---- */
   ffd2(0x05);  /* white */
@@ -650,28 +485,10 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   modem_draw_scanlines();
   SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
 
-  /* ---- Pre-flight: connect silently while ATDT is on screen ---- */
-  {
-    int preflight = net_connect(host, port, status);
-    if (preflight != 0) {
-      /* BBS is down */
-      ffd2(0x1c);  /* red */
-      print("\x0d no carrier\x0d");
-      ffd2(0x05);
-      gfx_vbl();
-      modem_draw_scanlines();
-      SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
-      timer_delay(3000);
-      /* Restore */
-      gfx_bgcolor(COLOR_BLACK);
-      gfx_fgcolor(COLOR_WHITE);
-      ffd2(0x05);
-      ffd2(147);
-      gfx_vbl();
-      return 1;
-    }
-    already_connected = 1;
-  }
+  /* The real TCP connection is made only when the "modem" answers (see
+   * connect_now below). Connecting first and playing twenty seconds of
+   * theatre afterwards made boards start their login timers while the
+   * caller was still listening to the screech, and some hung up. */
 
   /* ---- Phase 3: Generate and play modem audio ---- */
 
@@ -699,7 +516,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
 
   audio_buf = (Sint16 *)malloc(total_samples * sizeof(Sint16));
   if (!audio_buf) {
-    return 0;   /* no audio, but the pre-flight connection is up */
+    goto connect_now;   /* no audio: just dial */
   }
 
   offset = 0;
@@ -751,7 +568,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
                                       total_samples * sizeof(Sint16));
     if (sample_id < 0) {
       free(audio_buf);
-      return 0;   /* already connected by the pre-flight */
+      goto connect_now;   /* no audio device: just dial */
     }
     sound_play_sample(sample_id);
   }
@@ -808,12 +625,30 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
     goto aborted;
   }
 
-  /* ---- Phase 5: CONNECT 9600 ---- */
-  timer_delay(skipped ? 0 : 200);
+  /* ---- Phase 5: the far end answers: connect for real, then CONNECT ---- */
+connect_now:
+  if (net_connect(host, port, status) != 0) {
+    /* board down / refused / unreachable: a modem would report it so */
+    ffd2(0x1c);  /* red */
+    print("\x0d no carrier\x0d");
+    ffd2(0x05);
+    gfx_vbl();
+    modem_draw_scanlines();
+    SDL_UpdateRect(SDL_GetVideoSurface(), 0, 0, 0, 0);
+    timer_delay(1500);
+    gfx_bgcolor(COLOR_BLACK);
+    gfx_fgcolor(COLOR_WHITE);
+    ffd2(0x05);
+    ffd2(147);
+    gfx_vbl();
+    return 1;
+  }
+  already_connected = 1;
+  (void)skipped;
   ffd2(0x1e);  /* green — modem response */
   print("connect 9600\x0d\x0d");
   gfx_vbl();
-  timer_delay(500);
+  timer_delay(150);
 
   /* Separator */
   {
@@ -826,11 +661,11 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   ffd2(0x9f);  /* cyan */
   print(" carrier detected - negotiating...\x0d");
   gfx_vbl();
-  timer_delay(600);
+  timer_delay(150);
   ffd2(0x1e);  /* green */
   print(" connection established.\x0d\x0d");
   gfx_vbl();
-  timer_delay(800);
+  timer_delay(200);
 
   ffd2(0x05);  /* white */
   print(" connecting to ");
@@ -863,15 +698,12 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
     while (SDL_PollEvent(&flush_ev)) { /* discard */ }
   }
 
-  /* Already connected from pre-flight check */
-  if (already_connected) {
-    return 0;  /* success */
-  }
-  return net_connect(host, port, status);
+  return 0;  /* connected at connect_now */
 
 aborted:
+  /* ESC while "typing": nothing was dialled yet, nothing to hang up */
   if (already_connected) {
-    net_disconnect();   /* the screen says no carrier: don't stay online */
+    net_disconnect();
   }
   ffd2(0x1c);  /* red */
   print("\x0d no carrier\x0d");

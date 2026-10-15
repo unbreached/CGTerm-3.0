@@ -34,6 +34,9 @@
   Z  Zoom 1x-4x        L   Status line
   A  Auto-start ZMODEM T   Transfer log
   C  Capture to file   E   Local echo
+  8  40/80 columns (PETSCII 80 col too)
+  You can also drag the window edge:
+  it snaps to the nearest zoom step.
   The status line shows board, mode,
   CAP (capturing), REC (macro), LOGIN.
 

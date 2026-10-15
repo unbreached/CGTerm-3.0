@@ -3277,7 +3277,7 @@ int menu_options(const char *capture_state) {
   while (!result) {
     if (redraw) {
       int lx = 30, ty = 30, line_h = 20, i;
-      char rows[10][96];
+      char rows[11][96];
       Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
 
       SDL_FillRect(menu_surface, NULL, solidbg);
@@ -3297,8 +3297,9 @@ int menu_options(const char *capture_state) {
       snprintf(rows[7], 96, "[T] Transfer log ......... %s", cfg_transferlog ? "on" : "off");
       snprintf(rows[8], 96, "[C] Capture to file ...... %s", capture_state);
       snprintf(rows[9], 96, "[E] Local echo ........... %s", cfg_localecho ? "on" : "off");
+      snprintf(rows[10], 96, "[8] Columns .............. %d (PETSCII 80 col needs an even zoom)", cfg_columns);
       font_set_font(menu_font[0]);
-      for (i = 0; i < 10; i++) {
+      for (i = 0; i < 11; i++) {
         font_draw_string_color(lx, ty + 40 + i * line_h, rows[i], 0x00, 0xff, 0x66);
       }
       font_draw_string_color(lx, menu_height - 30, "Press a key to change, Esc to back", 0x60, 0x80, 0xff);
@@ -3323,6 +3324,8 @@ int menu_options(const char *capture_state) {
           result = uc;
         } else if (uc >= 'A' && uc <= 'Z') {
           result = uc + 32;
+        } else if (uc == '8' || uc == '4') {
+          result = '8';
         }
       }
     }

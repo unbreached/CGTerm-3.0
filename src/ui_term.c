@@ -1424,6 +1424,20 @@ static void ui_options(void) {
       cfg_localecho ^= 1;
       cfg_save_setting("localecho", cfg_localecho ? "yes" : "no");
       break;
+    case '8': {
+      /* 40/80 columns in the current terminal mode (PETSCII 80 col uses the
+       * 4-pixel-wide C64 font; ANSI is always 80) */
+      int want = (cfg_columns == 40) ? 80 : 40;
+      if (cfg_termmode == 1 && want == 40) {
+        menu_draw_message_timed("ANSI mode is always 80 columns", 2000);
+        break;
+      }
+      gfx_set_columns(want);
+      snprintf(val, sizeof(val), "%d", cfg_columns);
+      cfg_save_setting("columns", val);
+      net_send_naws();
+      break;
+    }
     default:
       break;
     }

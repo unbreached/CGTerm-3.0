@@ -28,6 +28,7 @@ int gfx_getkey(unsigned char *shift, unsigned char *ctrl, unsigned char *alt);
 void gfx_setcursxy(int x, int y);
 void gfx_cursor_show(int show);   /* 0 hides the blinking cursor, 1 shows it */
 void gfx_set_zoom(int zoom);     /* runtime zoom change (re-creates the window) */
+void gfx_handle_resize(int w, int h);   /* SDL_VIDEORESIZE: snap to the nearest zoom */
 void gfx_status_enable(int on);   /* call before gfx_init(): adds a status row under the screen */
 int gfx_status_enabled(void);
 void gfx_status_set(const char *text, unsigned char fg, unsigned char bg);

@@ -11,6 +11,8 @@ Genesis*Project · 2026
 [+]Punter: one-byte last blocks no longer lost, duplicate block guard, patient S/B wait, empty files
 [!]Punter / Multi Punter upload: the file type byte was reversed (3.0 announced every upload as SEQ, so other callers could not download them); PRG is now sent as PRG, SEQ as SEQ
 [!]Bookmarks: boards listed in the config file came back after being deleted; they now live only in the bookmark file (moved over automatically on first start) and the defaults are seeded there once
+[+]Window can be dragged to any size and snaps to the nearest zoom step (1x-8x); 40/80 columns is a key in the Options panel, PETSCII 80 columns included
+[!]Oldskool modem: the phone-book animation is gone and the real connection is made when the modem "answers", so boards no longer start their login timers twenty seconds before you see the prompt; ESC still skips to CONNECT
 [!]Splash: when "X" cannot be saved (config folder not writable) CGTerm now says so instead of showing the intro forever; Windows settings live in %APPDATA% so this no longer happens in Program Files
 [+]Disk tools: validate (rebuild BAM), lock/unlock, rename disk/ID, extract to host, insert into image, CBM listing with splat/lock markers, error-table images, D81/D71 fixes
 [+]Terminal: status line, capture toggle, copy screen text, paste transliterates UTF-8, macros record RETURN/cursor/F-keys

@@ -8,6 +8,7 @@
 #include "macro.h"
 #include "ui.h"
 #include "clipboard.h"
+#include "gfx.h"
 #include "login.h"
 #include "net.h"
 
@@ -406,6 +407,10 @@ int kbd_getkey() {
                 
             case SDL_QUIT:
                 exit(1);
+                break;
+
+            case SDL_VIDEORESIZE:
+                gfx_handle_resize(event.resize.w, event.resize.h);
                 break;
                 
             case SDL_KEYDOWN:
