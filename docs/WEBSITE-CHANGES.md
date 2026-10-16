@@ -33,8 +33,8 @@ published) under exactly the names the Download section links:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
-| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 24a4a4d08182ae6bf178e731e3c9490f9b4cbcbc0ed38e73e48bb500921ecb8f |
-| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | ce1e950ac5fda323d48565f449194bb051cf2c4dcc47a8b3a0fa87619a373c5a |
+| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | a756803768c3f579f5678b00f0b6b3cd4023cc2579e2c30ba77f511045c2153d |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 953236cb2330945a378a2e0840648483c3c60bc5964f429b7345e47b5a27c874 |
 | `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | see the release page |
 
 The file names stay `CGTerm-3.0-*` like the repository and the graphics;
