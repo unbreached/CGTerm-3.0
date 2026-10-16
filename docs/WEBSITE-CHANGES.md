@@ -1,4 +1,4 @@
-# Website changes for the 3.1.1 release (www.cgterm.se)
+# Website changes for the 3.0.1 release (www.cgterm.se)
 
 Checked against the live site on 2026-10-16. The live page's source is
 not in this repository (the copies under ~/code/AI/website are older
@@ -6,10 +6,11 @@ designs), so the text below is written to be pasted into the live page.
 
 ## 1. Version and credits (everywhere on the page)
 
-- Replace every "3.1" version mention with **3.1.1**: the header badge,
-  the title ("CGTerm 3.1.1: Scene Edition"), the changelog heading
-  ("CGTERM 3.1.1 / SCENE EDITION"), the footer ("CGTerm 3.1.1 ·
-  Genesis*Project · 2026").
+- The release is **3.0.1** (the branding, URLs and graphics stay
+  "CGTerm 3.0"): header badge "3.0.1", title "CGTerm 3.0.1: Scene
+  Edition", changelog heading "CGTERM 3.0.1 / SCENE EDITION", footer
+  "CGTerm 3.0.1 · Genesis*Project · 2026". Everything that currently says
+  "3.1" on the page changes to "3.0.1".
 - Replace **m00p** with **David "m00p" Jacoby** in the About text
   ("this scene edition is a deep refresh by David "m00p" Jacoby and
   Genesis*Project"), in the Code credit ("Code: David "m00p" Jacoby
@@ -27,23 +28,25 @@ virtual host at the site (Let's Encrypt), or redirect HTTPS to HTTP until
 then. The READMEs link `http://www.cgterm.se` for now.
 
 ### Download files
-Upload the packages from the GitHub release `v3.1.1` (draft until
+Upload the packages from the GitHub release `v3.0.1` (draft until
 published) under exactly the names the Download section links:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
-| `./files/CGTerm-3.1-win32.zip` | CGTerm-3.1-win32.zip | 24a4a4d08182ae6bf178e731e3c9490f9b4cbcbc0ed38e73e48bb500921ecb8f |
-| `./files/CGTerm-3.1-macos.zip` | CGTerm-3.1-macos.zip | ce1e950ac5fda323d48565f449194bb051cf2c4dcc47a8b3a0fa87619a373c5a |
-| `./files/CGTerm-3.1-source.tar.gz` | CGTerm-3.1-source.tar.gz | see the release page |
+| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 24a4a4d08182ae6bf178e731e3c9490f9b4cbcbc0ed38e73e48bb500921ecb8f |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | ce1e950ac5fda323d48565f449194bb051cf2c4dcc47a8b3a0fa87619a373c5a |
+| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | see the release page |
 
-The file names keep the major.minor form (`CGTerm-3.1-*`); the tarball
-unpacks to `CGTerm-3.1/`, matching the Linux instructions on the page.
-If you prefer `CGTerm-3.1.1-*`, say so and the scripts will be changed.
+The file names stay `CGTerm-3.0-*` like the repository and the graphics;
+the tarball unpacks to `CGTerm-3.0/`, so the Linux instructions on the
+page must say `tar xzf CGTerm-3.0-source.tar.gz` and `cd CGTerm-3.0`. The
+Download links currently point at `CGTerm-3.1-*` names and need to change
+to `CGTerm-3.0-*`.
 
 ## 3. Changelog: replace the "3.1 · october 2026" block with this
 
 ```
-─── 3.1.1 · october 2026 ───
+─── 3.0.1 · october 2026 ───
 
 [!] Punter / Multi Punter upload: the file type byte was reversed, so
     every 3.0 upload landed on the boards as a SEQ file nobody could

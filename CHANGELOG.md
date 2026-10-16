@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── 3.1.1 · OCTOBER 2026 ───
+─── 3.0.1 · OCTOBER 2026 ───
 
 [+]ZMODEM: batch send/receive, file names and sizes, crash recovery, CRC-32, auto-start when the board sends
 [+]Transfers: last protocol preselected (T + Return), transfer log with bytes/time/cps, on-screen summary, cancel prompt no longer stalls the peer

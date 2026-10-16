@@ -44,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>CGTerm</string>
   <key>CFBundleExecutable</key><string>CGTerm</string>
   <key>CFBundleIdentifier</key><string>com.cgterm.app</string>
-  <key>CFBundleVersion</key><string>3.1.1</string>
-  <key>CFBundleShortVersionString</key><string>3.1.1</string>
+  <key>CFBundleVersion</key><string>3.0.1</string>
+  <key>CFBundleShortVersionString</key><string>3.0.1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -100,12 +100,12 @@ codesign --force -s - "$APP"
 
 echo "[*] Creating zip..."
 cd "$DIST"
-rm -f CGTerm-3.1-macos.zip
+rm -f CGTerm-3.0-macos.zip
 # ditto (not zip/tar) preserves the code signature, symlinks and resource forks
 # of the signed .app — a plain archiver corrupts the signature and the app gets
 # SIGKILLed on launch.
-ditto -c -k --keepParent CGTerm.app CGTerm-3.1-macos.zip
+ditto -c -k --keepParent CGTerm.app CGTerm-3.0-macos.zip
 
 echo ""
-echo "[+] Built: $DIST/CGTerm-3.1-macos.zip"
-ls -lh "$DIST/CGTerm-3.1-macos.zip"
+echo "[+] Built: $DIST/CGTerm-3.0-macos.zip"
+ls -lh "$DIST/CGTerm-3.0-macos.zip"
