@@ -46,7 +46,7 @@
          ███▓▌▓▒░     
             ▄▄             
 
-    CGTERM 3.0 ::: C64 SCENE EDiTiON //scene code by...... m00p
+    CGTERM 3.0 ::: C64 SCENE EDiTiON //scene code by...... David "m00p" Jacoby
                                      //support by......... mermaid
                                      //ideas by........... Larry
                                      //tested by.......... hedning, Jucke,

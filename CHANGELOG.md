@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── OCTOBER 2026 UPDATE ───
+─── 3.1.1 · OCTOBER 2026 ───
 
 [+]ZMODEM: batch send/receive, file names and sizes, crash recovery, CRC-32, auto-start when the board sends
 [+]Transfers: last protocol preselected (T + Return), transfer log with bytes/time/cps, on-screen summary, cancel prompt no longer stalls the peer
@@ -102,7 +102,7 @@ Major update to the C64 BBS terminal MagerValp gave the scene. Same heart: real 
 [!]Roadmap (not promised): TLS where boards support it, IPv6, file digests, sandboxing; see GitHub issues/PRs.
 ─── GREETZ & CREDITS ───
 
-Respect forever to MagerValp for the original CGTerm and the BBS culture it stands for. Scene Edition: code m00p (Genesis*Project), music Mr.Death, support mermaid, QA Larry / Jucke / SkyHawk, and every sysop still running a C64 (or bridge) board.
+Respect forever to MagerValp for the original CGTerm and the BBS culture it stands for. Scene Edition: code David "m00p" Jacoby (Genesis*Project), music Mr.Death, support mermaid, QA Larry / Jucke / SkyHawk, and every sysop still running a C64 (or bridge) board.
 ══════════════════════════════════════════════════════════════════════
   --- end of changelog ---
 ══════════════════════════════════════════════════════════════════════
