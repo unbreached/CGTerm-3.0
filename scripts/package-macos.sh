@@ -44,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>CGTerm</string>
   <key>CFBundleExecutable</key><string>CGTerm</string>
   <key>CFBundleIdentifier</key><string>com.cgterm.app</string>
-  <key>CFBundleVersion</key><string>3.1.0</string>
-  <key>CFBundleShortVersionString</key><string>3.1.0</string>
+  <key>CFBundleVersion</key><string>3.1.1</string>
+  <key>CFBundleShortVersionString</key><string>3.1.1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
