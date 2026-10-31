@@ -543,7 +543,7 @@ void gfx_conv_screen_to_pet(unsigned char *chars, unsigned char *colors, unsigne
 
 
 void gfx_savescreen(char *filename) {
-  unsigned char converted[80 * 3 + 1];
+  unsigned char converted[256 * 3 + 1];   /* room for any column count */
   FILE *f_screen;
   int row, lastcolor = 256, reverse = 0;
 
@@ -955,7 +955,8 @@ static int saved_zoom = 0;  /* remember zoom before 80-col switch */
 
 void gfx_set_columns(int cols) {
   int old_columns = cfg_columns, old_zoom = cfg_zoom, old_saved_zoom = saved_zoom;
-  int old_charwidth = charwidth, old_width = gfx_width, old_height = gfx_height;
+  int old_charwidth = charwidth, old_charheight = charheight;
+  int old_width = gfx_width, old_height = gfx_height;
 
   if (cols != 40 && cols != 80) return;
   if (cols == cfg_columns) return;
@@ -972,6 +973,8 @@ void gfx_set_columns(int cols) {
       saved_zoom = 0;
     }
     charwidth = 8 * cfg_zoom;
+    charheight = 8 * cfg_zoom;   /* must track cfg_zoom, or the regenerated
+                                  * font surface and dirty[] overflow */
   } else {
     /* Save zoom before forcing it for 80 cols */
     if (cfg_zoom == 1 || cfg_zoom == 3) {
@@ -979,6 +982,8 @@ void gfx_set_columns(int cols) {
       cfg_zoom = 2;
     }
     charwidth = 4 * cfg_zoom;
+    charheight = 8 * cfg_zoom;   /* see above: forcing zoom 1/3 -> 2 here
+                                  * previously left charheight stale at 8 */
   }
   gfx_width = cfg_zoom * GFX_WIDTH;
   gfx_height = cfg_zoom * GFX_HEIGHT;
@@ -993,6 +998,7 @@ void gfx_set_columns(int cols) {
       cfg_zoom = old_zoom;
       saved_zoom = old_saved_zoom;
       charwidth = old_charwidth;
+      charheight = old_charheight;
       gfx_width = old_width;
       gfx_height = old_height;
       return;

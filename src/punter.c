@@ -193,6 +193,7 @@ signed int punter_recv_block(int len, int save) {
 	menu_update_xfer_progress("Lost sync, retrying...", xfer_saved_bytes, 0);
 	gfx_vbl();
 	if (xfer_buffer[3] == 'A') {
+	  if (--errorcnt <= 0) return(-1);
 	  goto restart;
 	} else {
 	  //printf("punter_recv_block: skipping late ack\n");
@@ -206,18 +207,21 @@ signed int punter_recv_block(int len, int save) {
 	menu_update_xfer_progress("Lost sync, retrying...", xfer_saved_bytes, 0);
 	gfx_vbl();
 	//printf("punter_recv_block: lost sync, restarting block\n");
+	if (--errorcnt <= 0) return(-1);
 	goto restart;
       }
       if (strncmp("CKACKA", (const char *)(xfer_buffer + 2), 6) == 0) {
 	menu_update_xfer_progress("Lost sync, retrying...", xfer_saved_bytes, 0);
 	gfx_vbl();
 	//printf("punter_recv_block: lost sync, restarting block\n");
+	if (--errorcnt <= 0) return(-1);
 	goto restart;
       }
       if (strncmp("KACKAC", (const char *)(xfer_buffer + 2), 6) == 0) {
 	menu_update_xfer_progress("Lost sync, retrying...", xfer_saved_bytes, 0);
 	gfx_vbl();
 	//printf("punter_recv_block: lost sync, restarting block\n");
+	if (--errorcnt <= 0) return(-1);
 	goto restart;
       }
     }

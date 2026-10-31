@@ -25,7 +25,8 @@ static void capture_write_byte(int byte) {
   if (capture_newline) {
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
-    fprintf(capture, "[%02d:%02d:%02d] ", tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    if (tm_info)
+      fprintf(capture, "[%02d:%02d:%02d] ", tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
     capture_newline = 0;
   }
   if (cfg_termmode == 1 && byte == 0x0A && capture_last == 0x0D) {
@@ -52,7 +53,8 @@ int session_capture_open(const char *path) {
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char stamp[32];
-    strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm_info);
+    if (tm_info) strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm_info);
+    else snprintf(stamp, sizeof(stamp), "nodate");
 #ifdef WINDOWS
     snprintf(capture_name, sizeof(capture_name), "%s\\cgterm-capture-%s.txt", cfg_dldir, stamp);
 #else
@@ -66,8 +68,10 @@ int session_capture_open(const char *path) {
   }
   {
     time_t now = time(NULL);
+    struct tm *tm_now = localtime(&now);
     char stamp[64];
-    strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    if (tm_now) strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", tm_now);
+    else snprintf(stamp, sizeof(stamp), "(no date)");
     fprintf(capture, "=== CGTerm capture %s %s ===\n", stamp,
             cfg_host ? cfg_host : "(not connected)");
   }
@@ -142,7 +146,7 @@ void session_status_tick(void) {
            cfg_columns == 80 ? "80" : "40",
            session_capture_active() ? " cap" : "",
            macro_rec ? " rec" : (login_active() ? " login" : ""),
-           tm_info->tm_hour, tm_info->tm_min);
+           tm_info ? tm_info->tm_hour : 0, tm_info ? tm_info->tm_min : 0);
   width = cfg_columns - (int)strlen(right) - 2;
   if (width < 1) width = 1;
   snprintf(line, sizeof(line), " %-*.*s%s ", width, width, left, right);

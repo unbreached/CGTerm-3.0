@@ -116,7 +116,10 @@ static void run_next_step(void) {
       clipboard_queue_text("\r");
       return;
     } else if (strncmp(tok, "p:", 2) == 0) {
-      deadline = timer_get_ticks() + (unsigned int)strtol(tok + 2, NULL, 10);
+      long ms = strtol(tok + 2, NULL, 10);
+      if (ms < 0) ms = 0;
+      if (ms > 60000) ms = 60000;   /* clamp a bad/hostile pause value to 60s */
+      deadline = timer_get_ticks() + (unsigned int)ms;
       pausing = 1;
       return;
     } else {

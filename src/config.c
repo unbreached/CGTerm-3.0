@@ -28,7 +28,7 @@ static int validate_hostname(const char *hostname) {
   if (len == 0 || len > 253) return 0;  /* RFC limits */
 
   for (p = hostname; *p; p++) {
-    if (!isalnum(*p) && *p != '.' && *p != '-') {
+    if (!isalnum((unsigned char)*p) && *p != '.' && *p != '-') {
       return 0;  /* Invalid character */
     }
   }
@@ -157,8 +157,15 @@ int cfg_init(char *argv0) {
 #ifdef WINDOWS
   {
     const char *appdata = getenv("APPDATA");
+    const char *userprofile = getenv("USERPROFILE");
     if (appdata && appdata[0]) {
       snprintf(userdir, sizeof(userdir), "%s\\CGTerm", appdata);
+      _mkdir(userdir);
+    } else if (userprofile && userprofile[0]) {
+      /* APPDATA missing (stripped service account, some sandboxes): keep the
+       * per-user files under the profile, not the launch directory, so
+       * bookmarks and config are not "lost" when started from elsewhere. */
+      snprintf(userdir, sizeof(userdir), "%s\\CGTerm", userprofile);
       _mkdir(userdir);
     } else {
       snprintf(userdir, sizeof(userdir), ".");
@@ -903,14 +910,24 @@ void cfg_load_bookmarks(void) {
 void cfg_append_bookmark(const char *alias, const char *host, int port, int ansi) {
   FILE *bf;
   char resolved[512];
+  char safe_alias[256];
+  int i;
+
+  /* The alias is written into a comma-separated record; a comma in it would
+   * shift the fields on reload (the text after it parses as the host). Map
+   * commas to spaces so the bookmark round-trips. */
+  for (i = 0; alias[i] && i < (int)sizeof(safe_alias) - 1; i++) {
+    safe_alias[i] = (alias[i] == ',') ? ' ' : alias[i];
+  }
+  safe_alias[i] = 0;
 
   cfg_resolve_bookmarkfile(resolved, sizeof(resolved));
 
   if ((bf = fopen(resolved, "a")) != NULL) {
     if (ansi) {
-      fprintf(bf, "bookmark = %s, %s, %d, ansi\n", alias, host, port);
+      fprintf(bf, "bookmark = %s, %s, %d, ansi\n", safe_alias, host, port);
     } else {
-      fprintf(bf, "bookmark = %s, %s, %d\n", alias, host, port);
+      fprintf(bf, "bookmark = %s, %s, %d\n", safe_alias, host, port);
     }
     fclose(bf);
   }
@@ -1050,7 +1067,9 @@ const char *cfg_get_bookmark_note(const char *host, int port) {
     const char *text = line;
     while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
 
-    if (line[0] == '[') {
+    /* A section header is "[host:port]"; require the closing ']' so a note
+     * line beginning with '[' (from a pre-fix file) is not misread. */
+    if (line[0] == '[' && len > 0 && line[len-1] == ']') {
       if (found) break;  /* hit next section, done */
       if (strcmp(line, key) == 0) found = 1;
     } else if (found) {
@@ -1106,7 +1125,13 @@ void cfg_set_bookmark_note(const char *host, int port, const char *note) {
   f = fopen(notes_path, "r");
   if (f) {
     while (fgets(line, sizeof(line), f)) {
+      int is_hdr = 0;
       if (line[0] == '[') {
+        int t = strlen(line);
+        while (t > 0 && (line[t-1] == '\n' || line[t-1] == '\r')) t--;
+        if (t > 0 && line[t-1] == ']') is_hdr = 1;  /* real "[host:port]" */
+      }
+      if (is_hdr) {
         int len = strlen(line);
         while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
         if (strcmp(line, key) == 0) {
@@ -1135,11 +1160,18 @@ void cfg_set_bookmark_note(const char *host, int port, const char *note) {
     }
   }
 
-  fclose(tmp);
+  if (ferror(tmp) || fclose(tmp) != 0) {
+    /* disk full / I/O error: keep the original notes file untouched rather
+     * than renaming a truncated temp over it (losing every note). */
+    remove(tmppath);
+    return;
+  }
 #ifdef WINDOWS
   remove(notes_path);  /* Windows rename() fails if dest exists */
 #endif
-  rename(tmppath, notes_path);
+  if (rename(tmppath, notes_path) != 0) {
+    remove(tmppath);
+  }
 }
 
 
@@ -1158,7 +1190,7 @@ void cfg_log_connection(const char *host, int port) {
   now = time(NULL);
   tm_info = localtime(&now);
 
-  if ((hf = fopen(fname, "a")) != NULL) {
+  if (tm_info && (hf = fopen(fname, "a")) != NULL) {
     fprintf(hf, "%04d-%02d-%02d %02d:%02d:%02d  %s:%d\n",
             tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
             tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec,

@@ -251,7 +251,7 @@ static void zm_sendline(int c) {
  * end, or a negative code. XON/XOFF are flow control noise and dropped;
  * other unescaped control characters are data (we never ask for ESCCTL). */
 static int zm_dlread(void) {
-  int c, cans;
+  int c, cans, skipped = 0;
 
   for (;;) {
     c = zm_getc(ZM_TIMEOUT_MS);
@@ -265,6 +265,7 @@ static int zm_dlread(void) {
       break;
     }
     if (c == XON || c == XOFF || c == (XON | 0x80) || c == (XOFF | 0x80)) {
+      if (++skipped > ZM_MAX_GARBAGE) return ZM_ERROR;   /* flow-control flood */
       continue;
     }
     return c;
@@ -284,6 +285,7 @@ static int zm_dlread(void) {
       continue;
     }
     if (c == XON || c == XOFF || c == (XON | 0x80) || c == (XOFF | 0x80)) {
+      if (++skipped > ZM_MAX_GARBAGE) return ZM_ERROR;   /* flow-control flood */
       continue;
     }
     break;
@@ -770,7 +772,7 @@ static void zm_send_zrinit(void) {
 static void zm_send_zrpos(unsigned long pos) {
   int i;
 
-  for (i = 0; zm_attn[i] && i < (int)sizeof(zm_attn); i++) {
+  for (i = 0; i < (int)sizeof(zm_attn) && zm_attn[i]; i++) {
     if (zm_attn[i] != 0xdd && zm_attn[i] != 0xde) {
       zm_putc(zm_attn[i]);
     }

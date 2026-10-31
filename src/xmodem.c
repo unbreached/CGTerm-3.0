@@ -74,17 +74,24 @@ static int xm_recv_byte_error_dbg(int timeout_ms, int retries) {
 }
 
 void xmodem_fail(char *message) {
+  int drained = 0;
   xfer_progress(message);
   XMDBG("[XMODEM] FAIL: %s\n", message);
-  while (xfer_recv_byte(1000) >= 0);
+  /* drain until 1s of silence, but never spin forever on a live flood */
+  while (xfer_recv_byte(1000) >= 0 && !xfer_cancel) {
+    if (++drained > 4096) break;
+  }
   xm_send_byte_dbg(XM_CAN);
   xm_send_byte_dbg(XM_CAN);
 }
 
 void xmodem_retry(char *message) {
+  int drained = 0;
   xfer_progress(message);
   XMDBG("[XMODEM] RETRY: %s\n", message);
-  while (xfer_recv_byte(1000) >= 0);
+  while (xfer_recv_byte(1000) >= 0 && !xfer_cancel) {
+    if (++drained > 4096) break;
+  }
   xm_send_byte_dbg(XM_NAK);
 }
 
@@ -162,6 +169,7 @@ int xmodem_recv(int usecrc) {
   int started = 0;      /* a valid block has been accepted */
   int handshakes = 0;   /* opening handshakes sent without any block arriving */
   int garbage = 0;      /* non-header bytes seen since the last valid block */
+  int retries = 0;      /* consecutive bad-block retries (flood cap) */
 
   xmodem_buffer_len = 0;
   xmodem_recv_bytes = 0;
@@ -195,6 +203,10 @@ int xmodem_recv(int usecrc) {
   for (;;) {
     if (xfer_cancel) {
       xmodem_fail("Cancelling...");
+      return 0;
+    }
+    if (retries > 30) {
+      xmodem_fail("Too many retries");
       return 0;
     }
 
@@ -241,6 +253,7 @@ getblock:
       c = xm_recv_byte_error_dbg(1000, 10);
       if (c != (blocknum & 255) && c != ((blocknum - 1) & 255)) {
         XMDBG("[XMODEM] wrong block got=%d expected=%d prev=%d\n", c, blocknum & 255, (blocknum - 1) & 255);
+        ++retries;
         xmodem_retry("Wrong block, retrying");
         continue;
       }
@@ -251,6 +264,7 @@ getblock:
         int blockcomp = xm_recv_byte_error_dbg(1000, 10);
         if ((255 - blockcomp) != blockid) {
           XMDBG("[XMODEM] block mismatch blk=%d comp=%d\n", blockid, blockcomp);
+          ++retries;
           xmodem_retry("Block mismatch, retrying");
           continue;
         }
@@ -268,12 +282,14 @@ getblock:
         }
         if (c < 0) {
           XMDBG("[XMODEM] lost sync bufctr=%d c=%d\n", bufctr, c);
+          ++retries;
           xmodem_retry("Lost sync, retrying...");
           continue;
         }
 
         payload_len = blocksize & 0xfff0;
         if (!xmodem_checksum(payload_len, usecrc)) {
+          ++retries;
           xmodem_retry("Checksum failed, retrying...");
           continue;
         }
@@ -285,6 +301,7 @@ getblock:
           started = 1;
           errorcnt = 0;
           garbage = 0;
+          retries = 0;
           continue;
         }
 
@@ -304,6 +321,7 @@ getblock:
         started = 1;
         errorcnt = 0;
         garbage = 0;
+        retries = 0;
         ++blocknum;
         XMDBG("[XMODEM] ACK sent next_expected=%d\n", blocknum & 0xff);
       }

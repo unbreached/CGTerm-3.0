@@ -1821,22 +1821,6 @@ static int font_selector(const char *title,
 }
 
 
-/* menu_font[] slots may alias each other (a missing font file makes a slot
- * reuse another); free a font only when no other slot still points at it. */
-static void menu_font_release(int slot) {
-  int i;
-  Font *f = menu_font[slot];
-  if (!f) return;
-  for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
-    if (i != slot && menu_font[i] == f) {
-      menu_font[slot] = NULL;
-      return;      /* still referenced elsewhere */
-    }
-  }
-  font_free(f);
-  menu_font[slot] = NULL;
-}
-
 int menu_select_splash_font(void) {
   int sel = font_selector("Select header font:",
     splash_font_files, splash_font_names, NUM_SPLASH_FONTS,
@@ -1849,12 +1833,15 @@ int menu_select_splash_font(void) {
     if (newf) {
       Font *old = menu_font[2];
       int i;
-      menu_font_release(2);
-      /* slots that aliased the old header font follow it to the new one */
+      /* Repoint every slot that aliased the old header font to the new one
+       * first, then free the old font exactly once. This order avoids both
+       * the alias leak (old left referenced nowhere yet never freed) and
+       * reading an already-freed pointer in the compare. */
       for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
-        if (menu_font[i] == old && old != NULL) menu_font[i] = newf;
+        if (old != NULL && menu_font[i] == old) menu_font[i] = newf;
       }
       menu_font[2] = newf;
+      if (old != NULL && old != newf) font_free(old);
       cfg_splashfont = sel;
     }
   }
@@ -1874,13 +1861,14 @@ int menu_select_menu_font(void) {
     if (newf) {
       Font *old = menu_font[0];
       int i;
-      menu_font[1] = NULL;          /* [1] always aliases [0] */
-      menu_font_release(0);
+      /* Redirect every alias of the old body font (slots [1],[4],[5] may
+       * point at it) to the new one, then free it exactly once. */
       for (i = 0; i < (int)(sizeof(menu_font) / sizeof(menu_font[0])); i++) {
-        if (menu_font[i] == old && old != NULL) menu_font[i] = newf;
+        if (old != NULL && menu_font[i] == old) menu_font[i] = newf;
       }
       menu_font[0] = newf;
       menu_font[1] = newf;
+      if (old != NULL && old != newf) font_free(old);
       cfg_menufont = sel;
     }
   }

@@ -27,6 +27,10 @@ extern int xfer_file_size;
    transfer (a D81 image is 800 KB), so a hostile server cannot stream an
    unbounded file to fill the disk. */
 #define XFER_MAX_DOWNLOAD (64 * 1024 * 1024)
+/* Cumulative cap across one batch (Multi Punter / ZMODEM): a hostile board
+ * can otherwise stream unbounded 64 MiB files and fill the disk on an
+ * unattended session. */
+#define XFER_MAX_BATCH (1024 * 1024 * 1024)
 extern unsigned char xfer_buffer[];
 extern int xfer_debug;
 

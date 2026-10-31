@@ -322,8 +322,9 @@ int rainbow_recv(void) {
     if ((unsigned char)c != RB_SOH) {
       /* stray text byte: wait for the next one without re-sending GOO */
       {
-        int t;
+        int t, skip = 0;
         while ((t = xfer_recv_byte(RB_BYTE_TIMEOUT)) >= 0 && (unsigned char)t != RB_SOH && !xfer_cancel) {
+          if (++skip > 65536) break;
         }
         if (t == -2) {
           rainbow_fail("Rainbow: disconnected");
@@ -369,6 +370,7 @@ int rainbow_recv(void) {
     return 0;
   }
 
+  int stray = 0;   /* consecutive non-SOH bytes (flood cap) */
   for (;;) {
     if (xfer_cancel) {
       xfer_send_byte(RB_CAN);
@@ -396,8 +398,13 @@ int rainbow_recv(void) {
       return 0;
     }
     if ((unsigned char)c != RB_SOH) {
+      if (++stray > 65536) {
+        rainbow_fail("Rainbow: too much stray data");
+        return 0;
+      }
       continue;
     }
+    stray = 0;
 
     xfer_send_byte(RB_ACK);
     if (rainbow_recv_block(&blockno, block, &blocklen) <= 0) {

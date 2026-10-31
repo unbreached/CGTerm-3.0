@@ -264,6 +264,10 @@ void ui_rectanglekey(SDL_keysym *keysym) {
 
   case SDLK_c:
   case SDLK_x:
+    /* The stored corner can be stale after a 40/80 column switch; clamp it
+     * into the current window so rect_w/rect_h can't run past the buffer. */
+    if (rect_x > cfg_columns - 1) rect_x = cfg_columns - 1;
+    if (rect_y > 24) rect_y = 24;
     if (gfx_cursx < rect_x) {
       SWAP(gfx_cursx, rect_x);
     }

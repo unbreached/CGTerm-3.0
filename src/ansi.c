@@ -21,6 +21,19 @@
 #include "net.h"
 #include "ansi.h"
 
+/* Rate-limit auto-generated replies (CPR / DSR / DA / DECID). A board that
+ * floods ESC[6n and stops reading would otherwise make us emit an equal
+ * flood and stall on the blocking send. Cap at 32 replies per second. */
+static void ansi_send_reply(const unsigned char *s) {
+  static unsigned int window_start = 0;
+  static int count = 0;
+  unsigned int now = SDL_GetTicks();
+  if (now - window_start > 1000) { window_start = now; count = 0; }
+  if (count >= 32) return;
+  count++;
+  net_send_string(s);
+}
+
 
 enum ansi_state {
   ANSI_NORMAL = 0,
@@ -800,10 +813,10 @@ static void ansi_dispatch(unsigned char cmd) {
       row = gfx_cursy + 1;
       if (origin_mode) row -= scroll_top;
       snprintf(response, sizeof(response), "\033[%d;%dR", row, gfx_cursx + 1);
-      net_send_string((const unsigned char *)response);
+      ansi_send_reply((const unsigned char *)response);
     } else if (n == 5) {
       /* terminal status: OK */
-      net_send_string((const unsigned char *)"\033[0n");
+      ansi_send_reply((const unsigned char *)"\033[0n");
     }
     break;
 
@@ -833,7 +846,7 @@ static void ansi_dispatch(unsigned char cmd) {
   case 'c':  /* DA device attributes */
     if (ansi_param_raw(0) == 0) {
       /* "VT100 with no options": what SyncTERM-aware boards expect */
-      net_send_string((const unsigned char *)"\033[?1;0c");
+      ansi_send_reply((const unsigned char *)"\033[?1;0c");
     }
     break;
 
@@ -937,7 +950,7 @@ void ansi_out(unsigned char byte) {
       case 'M': ansi_reverse_index(); break;           /* RI */
       case 'c': ansi_hard_reset(); break;              /* RIS */
       case 'Z':                                        /* DECID: same reply as DA */
-        net_send_string((const unsigned char *)"\033[?1;0c");
+        ansi_send_reply((const unsigned char *)"\033[?1;0c");
         break;
       default:
         /* ESC = / ESC > keypad modes, ESC H tab set, and anything else:

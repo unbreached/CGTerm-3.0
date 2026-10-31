@@ -62,6 +62,7 @@ Protocol xfer_protocol;
 int xfer_cancel;
 static int xfer_batch_mode = 0;   /* Multi Punter / ZMODEM: never re-prompt for names */
 static int xfer_batch_files = 0;  /* files received so far in a batch (fallback names) */
+static int xfer_batch_saved = 0;  /* cumulative bytes saved in a batch (aggregate cap) */
 static unsigned int xfer_last_elapsed_ms = 0;
 static void xfer_trace_flush(void);
 static int xfer_confirm_pending = 0;   /* ESC pressed, waiting for Y/N */
@@ -197,8 +198,10 @@ static int xfer_create_temp_download(void) {
   return 1;
 #else
   int fd;
+  const char *tmpdir = getenv("TMPDIR");
+  if (!tmpdir || !tmpdir[0]) tmpdir = "/tmp";
 
-  snprintf(xfer_tempdlname, sizeof(xfer_tempdlname), "/tmp/cgterm-download-XXXXXX");
+  snprintf(xfer_tempdlname, sizeof(xfer_tempdlname), "%s/cgterm-download-XXXXXX", tmpdir);
   fd = mkstemp(xfer_tempdlname);
   if (fd < 0) {
     xfer_tempdlname[0] = 0;
@@ -253,8 +256,10 @@ static int xfer_create_temp_upload(void) {
   return 1;
 #else
   int fd;
+  const char *tmpdir = getenv("TMPDIR");
+  if (!tmpdir || !tmpdir[0]) tmpdir = "/tmp";
 
-  snprintf(xfer_tempulname, sizeof(xfer_tempulname), "/tmp/cgterm-upload-XXXXXX");
+  snprintf(xfer_tempulname, sizeof(xfer_tempulname), "%s/cgterm-upload-XXXXXX", tmpdir);
   fd = mkstemp(xfer_tempulname);
   if (fd < 0) {
     xfer_tempulname[0] = 0;
@@ -708,6 +713,15 @@ signed int xfer_recv_byte(int timeout) {
     }
   }
 
+  /* Poll the keyboard on the data path too. A peer that keeps bytes flowing
+   * (sub-timeout gaps) would otherwise never let xfer_check_kbd() run, so
+   * ESC/cancel could not be seen and every protocol skip/drain loop became a
+   * non-cancellable freeze of the whole client. */
+  if (timer_get_ticks() > xfer_last_kbd_check + 20) {
+    xfer_check_kbd();
+    xfer_last_kbd_check = timer_get_ticks();
+  }
+
   if (c < 0) {
     if (c == -2) {
       xfer_trace_flush();
@@ -730,6 +744,13 @@ signed int xfer_recv_byte_error(int timeout, int errorcnt) {
   return(c);
 }
 
+/* ftell can exceed INT_MAX for a >2 GiB local file; a bare (int) cast would
+ * wrap negative and corrupt the progress math. Clamp it. */
+static int xfer_clamp_filesize(long sz) {
+  if (sz < 0 || sz > XFER_MAX_DOWNLOAD) return 0;
+  return (int)sz;
+}
+
 int xfer_save_data(unsigned char *data, int length) {
   int l;
   int written = 0;
@@ -739,6 +760,10 @@ int xfer_save_data(unsigned char *data, int length) {
      against overflow). */
   if (length < 0 || xfer_saved_bytes > XFER_MAX_DOWNLOAD - length) {
     xfer_progress_status("Download exceeds maximum size", xfer_saved_bytes, xfer_file_size);
+    return(0);
+  }
+  if (xfer_batch_saved > XFER_MAX_BATCH - length) {
+    xfer_progress_status("Batch exceeds maximum size", xfer_saved_bytes, xfer_file_size);
     return(0);
   }
 
@@ -759,6 +784,7 @@ int xfer_save_data(unsigned char *data, int length) {
   }
 
   xfer_saved_bytes += written;
+  xfer_batch_saved += written;
   return(written);
 }
 
@@ -793,6 +819,8 @@ int xfer_recv(void) {
   xfer_cancel = 0;
   xfer_confirm_pending = 0;
   xfer_saved_bytes = 0;
+  xfer_batch_saved = 0;
+  xfer_batch_files = 0;
   xfer_starttime = timer_get_ticks();
   menu_draw_xfer_progress("No filename", xfer_direction, xfer_protocol);
   menu_show();
@@ -1026,7 +1054,7 @@ int xfer_send(const char *filename, const unsigned char *rawname) {
       gfx_vbl();
       return 0;
     }
-    xfer_file_size = (int)ftell(xfer_sendfile);
+    xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
     fseek(xfer_sendfile, 0, SEEK_SET);
     punter_send_filetype = punter_filetype_from_name(filename);
 
@@ -1254,6 +1282,15 @@ static int xfer_validate_filename(const char *filename) {
     return 0;
   }
 
+#ifdef WINDOWS
+  /* ':' selects an NTFS alternate data stream or a drive-relative path on
+   * Windows (e.g. "file.txt:hidden", "C:foo"); it is a legal filename byte
+   * on POSIX, so it is only rejected here. */
+  if (strchr(filename, ':')) {
+    return 0;
+  }
+#endif
+
   /* Block null bytes and control characters */
   for (p = filename; *p; p++) {
     unsigned char ch = (unsigned char)*p;   /* char is signed on x86/arm64 macOS */
@@ -1276,12 +1313,13 @@ static int xfer_validate_filename(const char *filename) {
     stem[sl] = 0;
 
     if (strcmp(stem, "con") == 0 || strcmp(stem, "prn") == 0 ||
-        strcmp(stem, "aux") == 0 || strcmp(stem, "nul") == 0) {
+        strcmp(stem, "aux") == 0 || strcmp(stem, "nul") == 0 ||
+        strcmp(stem, "conin$") == 0 || strcmp(stem, "conout$") == 0) {
       return 0;
     }
-    /* com1..com9, lpt1..lpt9 */
+    /* com0..com9, lpt0..lpt9 (COM0/LPT0 are reserved on modern Windows) */
     if (sl == 4 && (memcmp(stem, "com", 3) == 0 || memcmp(stem, "lpt", 3) == 0)
-        && stem[3] >= '1' && stem[3] <= '9') {
+        && stem[3] >= '0' && stem[3] <= '9') {
       return 0;
     }
   }
@@ -1375,13 +1413,19 @@ int xfer_save_file_in_dir(char *filename) {
     return 0;
   }
 
-  if (!xfer_copy_file(from, to, xfer_saved_bytes) || fclose(to) != 0) {
-    menu_draw_message("Write error!");
-    menu_show();
-    gfx_vbl();
-    fclose(from);
-    remove(name);   /* don't leave a truncated file behind */
-    return 0;
+  {
+    int wrote = xfer_copy_file(from, to, xfer_saved_bytes);
+    /* Always close the destination, even when the copy failed, or the
+     * handle leaks (the || short-circuit used to skip this fclose). */
+    if (fclose(to) != 0) wrote = 0;
+    if (!wrote) {
+      menu_draw_message("Write error!");
+      menu_show();
+      gfx_vbl();
+      fclose(from);
+      remove(name);   /* don't leave a truncated file behind */
+      return 0;
+    }
   }
 
   fclose(from);
@@ -1543,7 +1587,7 @@ void xfer_send_multipunter(FileSelector *fs) {
         de = de->next;
         continue;
       }
-      xfer_file_size = (int)ftell(xfer_sendfile);
+      xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
       fseek(xfer_sendfile, 0, SEEK_SET);
       xfer_saved_bytes = 0;
       punter_send_filetype = punter_filetype_from_name(de->name);
@@ -1716,7 +1760,7 @@ void xfer_send_zmodem(FileSelector *fs) {
       continue;
     }
     fseek(xfer_sendfile, 0, SEEK_END);
-    xfer_file_size = (int)ftell(xfer_sendfile);
+    xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
     fseek(xfer_sendfile, 0, SEEK_SET);
     xfer_saved_bytes = 0;
     t0 = timer_get_ticks();

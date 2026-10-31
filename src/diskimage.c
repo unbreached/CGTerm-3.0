@@ -68,7 +68,11 @@ int di_rawname_from_name(unsigned char *rawname, char *name) {
 }
 
 
-/* convert from rawname */
+/* Convert from rawname. CONTRACT: 'name' must hold at least 17 bytes (up to
+ * 16 PETSCII bytes plus a NUL). The bytes are copied verbatim, so the result
+ * can contain '/', '\\', ':' or a leading '.'; it is a CBM name, NOT safe to
+ * use as a host filesystem path. Any caller writing to the host must
+ * sanitise it first (see fs_host_name_from_entry in ui_term.c). */
 int di_name_from_rawname(char *name, unsigned char *rawname) {
   int i;
 
@@ -338,9 +342,11 @@ int blocks_free(DiskImage *di) {
   int blocks = 0;
 
   for (track = 1; track <= di_tracks(di->type); ++track) {
-    if (track != di->dir.track) {
-      blocks += di_track_blocks_free(di, track);
-    }
+    /* skip the directory track, and on D71 the reserved second-side BAM
+     * track (53); counting track 53 let a crafted BAM inflate the total */
+    if (track == di->dir.track) continue;
+    if (di->type == D71 && track == 53) continue;
+    blocks += di_track_blocks_free(di, track);
   }
   return(blocks);
 }
@@ -718,6 +724,7 @@ DiskImage *di_load_image(char *name) {
   di->blocksfree = blocks_free(di);
   di->modified = 0;
   set_status(di, 254, 0, 0);
+  fclose(file);   /* every error path above closed it; the success path must too */
   return(di);
 }
 

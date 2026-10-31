@@ -403,8 +403,17 @@ signed int net_receive(void) {
 
 static signed int net_telnet_byte(void) {
   signed int c;
+  int work = 0;
 
   for (;;) {
+    /* Bound the work done per call. A peer that streams only Telnet option
+     * negotiation (e.g. a flood of IAC DO <opt>) never produces a data byte,
+     * so without this the loop spins across recv() refills and starves the
+     * main SDL loop. Yield with "no data"; tn_state is static, so the next
+     * call resumes mid-stream. */
+    if (++work > 4096) {
+      return -1;
+    }
     switch (tn_state) {
 
     case TN_DATA:
