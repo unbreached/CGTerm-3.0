@@ -3,6 +3,17 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── SECURITY & STABILITY · NOVEMBER 2026 ───
+
+[!]Fixed a heap overflow when switching 40/80 columns at an odd zoom (the font surface and the dirty-line array were sized with a stale character height)
+[!]File transfers can no longer hang the client: ESC cancels even while a board keeps sending, and the ZMODEM, XMODEM and Rainbow receive loops are all bounded against a byte flood
+[!]Disk images: fixed a file-descriptor leak on every image load; the D71 free-block count no longer trusts a crafted BAM
+[!]Bookmarks: a write error while saving notes can no longer wipe the notes file, and a comma in a bookmark name no longer corrupts the entry on reload
+[!]Network: a flood of Telnet option negotiation or ANSI status queries can no longer freeze the window or be amplified back at the board
+[!]Downloads: added an aggregate batch size cap, always close the output file on a write error, and reject ':' and more Windows reserved device names in received filenames
+[!]Windows: when %APPDATA% is unset the per-user files fall back to the user profile instead of the launch directory
+[!]Hardening: temp files honor TMPDIR, login pause values are clamped, and several NULL and signed-char edge cases fixed; full detail in REVIEW-2026-10-31.md
+
 ─── 3.0.1 · OCTOBER 2026 ───
 
 [+]ZMODEM: batch send/receive, file names and sizes, crash recovery, CRC-32, auto-start when the board sends
