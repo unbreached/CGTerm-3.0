@@ -54,11 +54,17 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# install_name_tool warns "changes ... will invalidate the code signature" for
+# every dylib we re-id. That is expected here: we re-sign everything inside-out
+# further down, so drop those benign lines so a real error still stands out.
+# (Using 2> >(...) keeps each command's own exit status, so set -e still fires.)
+quiet_sig() { grep -v 'will invalidate the code signature' >&2 || true; }
+
 command -v dylibbundler >/dev/null 2>&1 || { echo "[!] dylibbundler not found: brew install dylibbundler"; exit 1; }
 echo "[*] Bundling linked libraries with dylibbundler..."
 dylibbundler -of -b \
   -x "$MACOS/CGTerm" -x "$MACOS/cgchat" -x "$MACOS/cgedit" \
-  -d "$LIBS" -p "@executable_path/../libs/" >/dev/null
+  -d "$LIBS" -p "@executable_path/../libs/" >/dev/null 2> >(quiet_sig)
 
 echo "[*] Adding libSDL2 (dlopen'd by sdl12-compat, missed by dylibbundler)..."
 SDL2_SRC="$(readlink -f /opt/homebrew/lib/libSDL2-2.0.0.dylib 2>/dev/null || echo /opt/homebrew/lib/libSDL2-2.0.0.dylib)"
@@ -66,7 +72,7 @@ cp "$SDL2_SRC" "$LIBS/libSDL2-2.0.0.dylib"
 chmod u+w "$LIBS/libSDL2-2.0.0.dylib"
 # sdl12-compat dlopens "@loader_path/libSDL2-2.0.0.dylib" (relative to the
 # bundled libSDL-1.2.0.dylib in Contents/libs), so this id makes it resolve.
-install_name_tool -id "@loader_path/libSDL2-2.0.0.dylib" "$LIBS/libSDL2-2.0.0.dylib"
+install_name_tool -id "@loader_path/libSDL2-2.0.0.dylib" "$LIBS/libSDL2-2.0.0.dylib" 2> >(quiet_sig)
 
 # Since late 2025 Homebrew's "sdl2" is sdl2-compat: an SDL2 API on top of
 # SDL3 that dlopens "@loader_path/libSDL3.dylib" at load time and shows a
@@ -81,7 +87,7 @@ if strings "$LIBS/libSDL2-2.0.0.dylib" | grep -q "libSDL3.dylib"; then
   echo "[*] Adding libSDL3 (dlopen'd by sdl2-compat)..."
   cp "$SDL3_SRC" "$LIBS/libSDL3.dylib"
   chmod u+w "$LIBS/libSDL3.dylib"
-  install_name_tool -id "@loader_path/libSDL3.dylib" "$LIBS/libSDL3.dylib"
+  install_name_tool -id "@loader_path/libSDL3.dylib" "$LIBS/libSDL3.dylib" 2> >(quiet_sig)
 fi
 
 echo "[*] Ad-hoc code signing (inside-out)..."
