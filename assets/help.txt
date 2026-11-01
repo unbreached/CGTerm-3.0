@@ -38,8 +38,12 @@
   A  Auto-start ZMODEM T   Transfer log
   C  Capture to file   E   Local echo
   8  40/80 columns (PETSCII 80 col too)
+  W  Window scaling: crisp (snaps to
+     whole zoom steps) or smooth (stretches
+     to fill any window size)
   You can also drag the window edge:
-  it snaps to the nearest zoom step.
+  crisp snaps to the nearest zoom step,
+  smooth fills whatever size you choose.
   The status line shows board, mode,
   CAP (capturing), REC (macro), LOGIN.
 

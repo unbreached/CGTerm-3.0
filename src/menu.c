@@ -24,6 +24,30 @@ int menu_width, menu_height;    /* == design size, so the layout never changes *
 #define MENU_DESIGN_W 640
 #define MENU_DESIGN_H 400
 static int menu_comp_w, menu_comp_h;   /* window size the composite targets */
+
+/* ------------------------------------------------------------------ *
+ *  One menu colour palette, used everywhere so [D], labels and values *
+ *  look the same on every screen. Pass straight to                    *
+ *  font_draw_string_color (do not use inside a ?: — the commas break).  *
+ * ------------------------------------------------------------------ */
+#define PAL_BRACKET 0x00, 0xee, 0xff   /* the [ ] around a shortcut key */
+#define PAL_KEY     0xff, 0xff, 0xff   /* the shortcut letter itself     */
+#define PAL_KEY_RED 0xff, 0x40, 0x40   /* a destructive key (Quit)       */
+#define PAL_LABEL   0x60, 0x80, 0xff   /* item / option text             */
+#define PAL_TITLE   0xff, 0x40, 0x80   /* panel + section titles         */
+#define PAL_DOT     0x30, 0x48, 0x60   /* dot leaders                    */
+#define PAL_HINT    0x60, 0x80, 0xff   /* footer hints                   */
+
+/* Value styles (right-hand side of a setting row). */
+enum { OPTV_OFF, OPTV_ON, OPTV_NUM, OPTV_ACT };
+static void menu_value_rgb(int vstyle, int *r, int *g, int *b) {
+  switch (vstyle) {
+    case OPTV_ON:  *r = 0x00; *g = 0xff; *b = 0x66; break;   /* on / active   */
+    case OPTV_NUM: *r = 0xff; *g = 0xff; *b = 0x54; break;   /* number / mode */
+    case OPTV_ACT: *r = 0x00; *g = 0xee; *b = 0xff; break;   /* an action     */
+    default:       *r = 0x90; *g = 0x78; *b = 0x90; break;   /* off / muted   */
+  }
+}
 static Uint32 transparent;
 static Uint32 bgcolor;
 static Uint32 fgcolor;
@@ -413,6 +437,26 @@ static void menu_draw_item_redkey(int x, int y, const char *key, const char *tex
   font_draw_string_color(x + 30 + klen * 10, y, text, 0x60, 0x80, 0xff);
 }
 
+/* A setting shown as "[K] Label [value]" (used across the main menu). Same
+ * palette as menu_draw_item, with the value bracketed and coloured by style.
+ * valx is the x of the value's opening bracket. */
+static void menu_draw_setting(int x, int y, const char *key, const char *label,
+                              const char *value, int valx, int vstyle) {
+  int klen = (int)strlen(key);
+  int vr, vg, vb;
+  menu_value_rgb(vstyle, &vr, &vg, &vb);
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x, y, "[", PAL_BRACKET);
+  font_set_font(menu_font[1]);
+  font_draw_string_color(x + 10, y, key, PAL_KEY);
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x + 10 + klen * 10, y, "] ", PAL_BRACKET);
+  font_draw_string_color(x + 30 + klen * 10, y, label, PAL_LABEL);
+  font_draw_string_color(valx, y, "[", PAL_BRACKET);
+  font_draw_string_color(valx + 10, y, value, vr, vg, vb);
+  font_draw_string_color(valx + 10 + (int)strlen(value) * 10, y, "]", PAL_BRACKET);
+}
+
 /* Draw section title centered within its quadrant, with colored brackets */
 static void menu_draw_section_centered(int left, int right, int y, const char *title) {
   int title_len = (int)strlen(title);
@@ -495,96 +539,32 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(lx, ty + 42, "P", "Post SEQ to BBS");
     menu_draw_item(lx, ty + 56, "S", "Save screen");
     menu_draw_item(lx, ty + 70, "I", "Screenshot");
-    /* Upper/Lowercase toggle — same style as Charset */
-    {
-      int mx = lx;
-      int my = ty + 84;
-      const char *gname = gfx_get_font() == 0 ? "UPPER" : "lower";
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "W", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Graphics ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 140, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 150, my, gname, 0xff, 0xff, 0x54);
-      font_draw_string_color(mx + 150 + (int)strlen(gname) * 10, my, "]", 0x00, 0xee, 0xff);
-    }
-
-    /* Terminal mode toggle — same style as Charset */
-    {
-      int mx = lx;
-      int my = ty + 98;
-      const char *tname = cfg_termmode == 1 ? "ANSI" : "PETSCII";
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "G", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Terminal ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 140, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 150, my, tname, 0xff, 0xff, 0x54);
-      font_draw_string_color(mx + 150 + (int)strlen(tname) * 10, my, "]", 0x00, 0xee, 0xff);
-    }
+    menu_draw_setting(lx, ty + 84, "W", "Graphics",
+                      gfx_get_font() == 0 ? "UPPER" : "lower", lx + 140, OPTV_NUM);
+    menu_draw_setting(lx, ty + 98, "G", "Terminal",
+                      cfg_termmode == 1 ? "ANSI" : "PETSCII", lx + 140, OPTV_NUM);
 
     menu_draw_item(lx, ty + 112, "C", "Record macro");
     menu_draw_item(lx, ty + 126, "V", "Play macro");
     menu_draw_item(lx, ty + 140, "A", "Abort");
 
     menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
-    /* Local echo shows its on/off state like Charset/Terminal do, so you know
-     * which way it is set before you connect (GitHub issue #7). */
-    {
-      int mx = rx;
-      int my = ty + 28;
-      const char *ename = cfg_localecho ? "ON" : "OFF";
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "E", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Local echo ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 210, my, ename, 0xff, 0xff, 0x54);
-      font_draw_string_color(mx + 210 + (int)strlen(ename) * 10, my, "]", 0x00, 0xee, 0xff);
-    }
+    /* Local echo shows its on/off state so you know the setting before you
+     * connect (GitHub issue #7). */
+    menu_draw_setting(rx, ty + 28, "E", "Local echo", cfg_localecho ? "ON" : "OFF",
+                      rx + 200, cfg_localecho ? OPTV_ON : OPTV_OFF);
     menu_draw_item(rx, ty + 42, "F", "Fullscreen");
     menu_draw_item(rx, ty + 56, "Z", "Font settings");
     menu_draw_item(rx, ty + 70, "K", "Keyboard layout");
 
-    /* Charset toggle */
     {
-      int mx = rx;
-      int my = ty + 84;
       const char *csname = "US/UK";
       if (cfg_charset == 1) csname = "Swedish";
       else if (cfg_charset == 2) csname = "German";
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "H", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Charset ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 210, my, csname, 0xff, 0xff, 0x54);
-      font_draw_string_color(mx + 210 + (int)strlen(csname) * 10, my, "]", 0x00, 0xee, 0xff);
+      menu_draw_setting(rx, ty + 84, "H", "Charset", csname, rx + 200, OPTV_NUM);
     }
-
-    /* Oldschool modem toggle — same style as Charset */
-    {
-      int mx = rx;
-      int my = ty + 98;
-      const char *mname = cfg_modem ? "ON" : "OFF";
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
-      font_set_font(menu_font[1]);
-      font_draw_string_color(mx + 10, my, "M", 0xff, 0xff, 0xff);
-      font_set_font(menu_font[0]);
-      font_draw_string_color(mx + 20, my, "] Oldskool Mode ", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
-      font_draw_string_color(mx + 210, my, mname, cfg_modem ? 0x00 : 0xff, cfg_modem ? 0xff : 0x40, cfg_modem ? 0x66 : 0x40);
-      font_draw_string_color(mx + 210 + (int)strlen(mname) * 10, my, "]", 0x00, 0xee, 0xff);
-    }
+    menu_draw_setting(rx, ty + 98, "M", "Oldskool Mode", cfg_modem ? "ON" : "OFF",
+                      rx + 200, cfg_modem ? OPTV_ON : OPTV_OFF);
 
     menu_draw_item(rx, ty + 112, "O", "Options");
     menu_draw_item(rx, ty + 126, "?", "Help");
@@ -2810,34 +2790,44 @@ int menu_macros(void) {
     menu_draw_borderbox(10, 10, menu_width - 11, menu_height - 11);
 
     font_set_font(menu_font[1]);
-    font_draw_string_color(lx, ty, "MACROS", 0xff, 0x40, 0x80);
+    font_draw_string_color(lx, ty, "MACROS", PAL_TITLE);
     ty += 18;
     font_set_font(menu_font[0]);
-    font_draw_string_color(lx, ty, "Cmd/Win + 0-9 sends a macro from the terminal.", 0x60, 0x80, 0xff);
+    font_draw_string_color(lx, ty, "Cmd/Win + 0-9 sends a macro from the terminal.", PAL_HINT);
     ty += 18;
 
     for (i = 0; i < 10; i++) {
-      char row[96];
       const char *txt = (editing && i == sel) ? editbuf : cfg_macros[i];
       int y = ty + i * line_h;
-      unsigned char r = (i == sel) ? 0xff : 0x00;
-      unsigned char g = (i == sel) ? 0xff : 0xff;
-      unsigned char b = (i == sel) ? 0x54 : 0x66;
-      snprintf(row, sizeof(row), "%d: %s", i, (txt && txt[0]) ? txt : "(empty)");
-      font_draw_string_color(lx, y, row, r, g, b);
+      int filled = (txt && txt[0]);
+      char keystr[2], body[96];
+      int vr, vg, vb;
+      keystr[0] = (char)('0' + i); keystr[1] = 0;
+      if (i == sel)    { vr = 0xff; vg = 0xff; vb = 0xff; }                 /* selected */
+      else if (filled) { menu_value_rgb(OPTV_ON, &vr, &vg, &vb); }          /* has text */
+      else             { menu_value_rgb(OPTV_OFF, &vr, &vg, &vb); }         /* empty    */
+      /* "[n]" key like a menu shortcut; the selected slot's digit is yellow */
+      font_set_font(menu_font[0]);
+      font_draw_string_color(lx, y, "[", PAL_BRACKET);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(lx + 10, y, keystr, 0xff, 0xff, (i == sel) ? 0x54 : 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(lx + 20, y, "]", PAL_BRACKET);
+      snprintf(body, sizeof(body), "%s", filled ? txt : "(empty)");
+      font_draw_string_color(lx + 40, y, body, vr, vg, vb);
       if (editing && i == sel) {
-        /* caret under the insertion point ("n: " prefix is 3 chars) */
-        font_draw_string_color(lx + (3 + editpos) * 10, y, "_", 0xff, 0xff, 0xff);
+        /* caret under the insertion point ("[n] " prefix is 4 cells) */
+        font_draw_string_color(lx + 40 + editpos * 10, y, "_", 0xff, 0xff, 0xff);
       }
     }
 
     font_set_font(menu_font[0]);
     if (editing) {
       font_draw_string_color(lx, menu_height - 26,
-        "Arrows move, Enter saves, Esc cancels  (\\r = Return)", 0x60, 0x80, 0xff);
+        "Arrows move, Enter saves, Esc cancels  (\\r = Return)", PAL_HINT);
     } else {
       font_draw_string_color(lx, menu_height - 26,
-        "Up/Down select, E edit, Enter send, Esc back", 0x60, 0x80, 0xff);
+        "Up/Down select, E edit, Enter send, Esc back", PAL_HINT);
     }
 
     menu_dirty = SDL_TRUE;
@@ -3513,34 +3503,27 @@ int menu_choose_list(const char *title, const char **items, int count, int initi
 
 
 /* Value styles for an Options row. */
-enum { OPTV_OFF, OPTV_ON, OPTV_NUM, OPTV_ACT };
-
-/* Draw one Options row coloured like the main menu: cyan brackets, a bright
- * key, a light-blue label, dim dot leaders, and a highlighted value whose
- * colour depends on its style (on=green, off=muted, number=yellow, action=cyan). */
+/* One Options row in the shared palette: cyan brackets, white key, light-blue
+ * label, dim dot leaders, and a value coloured by style (on=green, off=muted,
+ * number=yellow, action=cyan). Same look as the main menu's setting rows. */
 static void menu_opt_row(int x, int y, const char *keys, const char *label,
                          const char *value, int vstyle) {
   int klen = (int)strlen(keys);
   int lx2, dotx, vcol = x + 310;
   int vr, vg, vb;
 
-  switch (vstyle) {
-    case OPTV_ON:  vr = 0x40; vg = 0xff; vb = 0x66; break;
-    case OPTV_NUM: vr = 0xff; vg = 0xff; vb = 0x54; break;
-    case OPTV_ACT: vr = 0x00; vg = 0xee; vb = 0xff; break;
-    default:       vr = 0x90; vg = 0x6a; vb = 0x6a; break;   /* off / muted */
-  }
+  menu_value_rgb(vstyle, &vr, &vg, &vb);
 
   font_set_font(menu_font[0]);
-  font_draw_string_color(x, y, "[", 0x00, 0xee, 0xff);
+  font_draw_string_color(x, y, "[", PAL_BRACKET);
   font_set_font(menu_font[1]);
-  font_draw_string_color(x + 10, y, keys, 0xff, 0xff, 0x54);
+  font_draw_string_color(x + 10, y, keys, PAL_KEY);
   font_set_font(menu_font[0]);
-  font_draw_string_color(x + 10 + klen * 10, y, "]", 0x00, 0xee, 0xff);
+  font_draw_string_color(x + 10 + klen * 10, y, "]", PAL_BRACKET);
   lx2 = x + 10 + klen * 10 + 20;
-  font_draw_string_color(lx2, y, label, 0x7a, 0xb0, 0xff);
+  font_draw_string_color(lx2, y, label, PAL_LABEL);
   dotx = lx2 + (int)strlen(label) * 10 + 10;
-  while (dotx + 6 <= vcol) { font_draw_string_color(dotx, y, ".", 0x38, 0x48, 0x60); dotx += 20; }
+  while (dotx + 6 <= vcol) { font_draw_string_color(dotx, y, ".", PAL_DOT); dotx += 20; }
   font_draw_string_color(vcol, y, value, vr, vg, vb);
 }
 
@@ -3582,6 +3565,7 @@ int menu_options(const char *capture_state) {
       menu_opt_row(lx, yy, "C", "Capture to file", capture_state, capoff ? OPTV_OFF : OPTV_ON); yy += line_h;
       menu_opt_row(lx, yy, "E", "Local echo", cfg_localecho ? "on" : "off", cfg_localecho ? OPTV_ON : OPTV_OFF); yy += line_h;
       menu_opt_row(lx, yy, "8", "Columns", cfg_columns == 80 ? "80" : "40", OPTV_NUM); yy += line_h;
+      menu_opt_row(lx, yy, "W", "Window scaling", cfg_smoothscale ? "smooth (fill)" : "crisp (zoom)", OPTV_NUM); yy += line_h;
       menu_opt_row(lx, yy, "M", "Macros", "edit / send", OPTV_ACT); yy += line_h;
       font_set_font(menu_font[0]);
       font_draw_string_color(lx, menu_height - 30, "Press a key to change, Esc to back", 0x60, 0x80, 0xff);

@@ -72,6 +72,8 @@ const char *cfg_recvspeed_label(int ms);
 int cfg_recvspeed_next(int ms);
 /* Text macros, sent on Meta+0..9 (issue #8) */
 extern char cfg_macros[10][256];
+/* 0 = crisp integer zoom, 1 = stretch to fill the window (issue #1) */
+extern int cfg_smoothscale;
 
 /* Per-user data file: Unix "$HOME/.<name>", Windows "%APPDATA%\CGTerm\<name>". */
 void cfg_user_file(char *out, size_t size, const char *name);

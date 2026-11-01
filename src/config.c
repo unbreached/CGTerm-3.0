@@ -91,6 +91,7 @@ char cfg_connect_name[128] = "";
 int cfg_charset = 0;
 int cfg_bookmark_termmode[40];
 char cfg_macros[10][256];   /* text macros, sent on Meta+0..9 (issue #8) */
+int cfg_smoothscale = 0;    /* 0 = crisp integer zoom, 1 = stretch to fill window (issue #1) */
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
 int cfg_splash = 1;
@@ -487,7 +488,10 @@ static int cfg_parse_line(const char *linebuf, char *key, size_t keysz, char *va
   }
   while (n && (value[n - 1] == ' ' || value[n - 1] == '\t')) n--;
   value[n] = 0;
-  return n > 0 ? 2 : 0;
+  /* A key with an "=" but an empty value is valid, e.g. an empty macro slot
+   * ("macro0 = ") that cfg_save_setting writes. Returning 0 here made the
+   * reader treat that line as a fatal error and refuse the whole config. */
+  return 2;
 }
 
 
@@ -634,6 +638,9 @@ signed int cfg_readconfig(char *configfile) {
         } else if (strcmp("no", value) == 0) {
             cfg_modem = 0;
         }
+
+    } else if (strcmp(key, "smoothscale") == 0) {
+        cfg_smoothscale = (strcmp("yes", value) == 0 || strcmp("1", value) == 0) ? 1 : 0;
 
     } else if (strncmp(key, "macro", 5) == 0 && key[5] >= '0' && key[5] <= '9' && key[6] == 0) {
         /* macro0..macro9: text sent on Meta+0..9 (issue #8) */

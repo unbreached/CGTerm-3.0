@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── REPORTED FIXES · NOVEMBER 2026 ───
+─── 3.0.2 · NOVEMBER 2026 ───
 
 [!]Window no longer opens as an unusable black rectangle when a saved zoom is too large for the display: the zoom is clamped to what actually fits and the stored value is corrected (#12)
 [!]Window is repainted after alt-tab or being uncovered, instead of staying blank until the next change (#11)
@@ -18,10 +18,13 @@ Genesis*Project · 2026
 [!]Menu keys [O] Options, [X] Copy screen and [Y] History now work (they were listed but the menu swallowed the keypress), dragging the window no longer flickers, and the Options panel is colour-coded
 [+]Options panel [O] is now listed in the main menu, and local echo shows its ON/OFF state there (#7, #10)
 [+]Help screen documents the special keys (RUN/STOP, cursor, DEL, f-keys, Alt+Shift) and a working C*Base auto-login example (#4)
+[+]Window scaling can be set to smooth (stretch to fill any window size) or crisp (snap to whole zoom steps) from Options [W] (#1)
+[+]One colour palette across all the menus, so [D], labels and values look the same on every screen
+[!]An empty macro slot no longer breaks config loading (the parser used to reject any key with an empty value)
 
-Thanks to mrdudz for the careful, detailed bug reports that drove these fixes.
+Thanks to mrdudz and THE-MrMicro for the careful, detailed reports that drove these fixes.
 
-─── SECURITY & STABILITY · NOVEMBER 2026 ───
+─── 3.0.2 · SECURITY & STABILITY ───
 
 [!]Fixed a heap overflow when switching 40/80 columns at an odd zoom (the font surface and the dirty-line array were sized with a stale character height)
 [!]File transfers can no longer hang the client: ESC cancels even while a board keeps sending, and the ZMODEM, XMODEM and Rainbow receive loops are all bounded against a byte flood

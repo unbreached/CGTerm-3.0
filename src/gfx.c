@@ -293,6 +293,16 @@ int gfx_init(int fullscreen, char *appname) {
   gfx_d800 = gfx_d800_buffer + gfx_maxoffset;
   gfx_bg = gfx_bg_buffer + gfx_maxoffset;
 
+  /* Pick the scaling filter sdl12-compat uses when it stretches our surface to
+   * the window: linear (smooth) in fill mode, nearest (crisp pixels) otherwise.
+   * Read at SDL_Init, so a change takes effect on the next launch. (issue #1) */
+#ifdef WINDOWS
+  _putenv(cfg_smoothscale ? "SDL12COMPAT_SCALE_METHOD=linear"
+                          : "SDL12COMPAT_SCALE_METHOD=nearest");
+#else
+  setenv("SDL12COMPAT_SCALE_METHOD", cfg_smoothscale ? "linear" : "nearest", 1);
+#endif
+
   if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_NOPARACHUTE) < 0) {
     printf("Unable to init SDL: %s\n", SDL_GetError());
     return(1);
@@ -1578,6 +1588,10 @@ void gfx_handle_resize(int w, int h) {
   int z;
 
   if (cfg_fullscreen) return;
+  /* Smooth-scale mode: let the SDL backend stretch the fixed-resolution
+   * surface to whatever size the window is, so it fills any size the user
+   * drags to (issue #1). We just ignore the resize instead of snapping. */
+  if (cfg_smoothscale) return;
   if (w == gfx_width && h == gfx_height + gfx_status_rows * charheight) return;   /* our own re-mode */
   z = (w + GFX_WIDTH / 2) / GFX_WIDTH;
   {

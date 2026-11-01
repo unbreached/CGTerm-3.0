@@ -1445,6 +1445,14 @@ static int ui_options(void) {
       net_send_naws();
       break;
     }
+    case 'w':
+      /* Window scaling: crisp integer zoom vs stretch-to-fill (issue #1). */
+      cfg_smoothscale ^= 1;
+      cfg_save_setting("smoothscale", cfg_smoothscale ? "yes" : "no");
+      if (!cfg_smoothscale) {
+        gfx_set_zoom(cfg_zoom);   /* snap the window back to the exact zoom size */
+      }
+      break;
     case 'm': {
       /* Macro manager: edit the 10 text macros, or pick one to send. */
       int slot = menu_macros();
