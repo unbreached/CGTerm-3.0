@@ -1107,6 +1107,33 @@ const char *cfg_get_bookmark_login(const char *host, int port) {
 }
 
 
+/* Receive-speed limit. cfg_recvdelay is stored as milliseconds per character
+ * (one byte is pulled off the socket at most that often), but boards these days
+ * fly by far too fast to read, so the Options panel presents it as an old-modem
+ * baud rate instead (GitHub issue #3). 10 bits/byte (8N1) -> ms/char = 10000/baud. */
+const char *cfg_recvspeed_label(int ms) {
+  if (ms <= 0)  return "unlimited";
+  if (ms <= 1)  return "9600 baud";
+  if (ms <= 4)  return "2400 baud";
+  if (ms <= 8)  return "1200 baud";
+  if (ms <= 33) return "300 baud";
+  return "slow";
+}
+
+/* Next value when the user presses [R]: unlimited -> 2400 -> 1200 -> 300 ->
+ * 9600 -> unlimited. Any off-preset value drops back to unlimited. */
+int cfg_recvspeed_next(int ms) {
+  switch (ms) {
+    case 0:  return 4;    /* unlimited -> 2400 baud */
+    case 4:  return 8;    /* 2400 -> 1200 */
+    case 8:  return 33;   /* 1200 -> 300 */
+    case 33: return 1;    /* 300 -> 9600 */
+    case 1:  return 0;    /* 9600 -> unlimited */
+    default: return 0;
+  }
+}
+
+
 /* Save/overwrite note for a given host:port */
 void cfg_set_bookmark_note(const char *host, int port, const char *note) {
   FILE *f, *tmp;

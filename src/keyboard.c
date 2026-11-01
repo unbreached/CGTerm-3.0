@@ -583,7 +583,12 @@ int kbd_getkey() {
                         case SDLK_RIGHT:
                             key = 0x1D; goto petscii_done;  /* cursor right */
                         case SDLK_TAB:
-                            key = 0x09; goto petscii_done;  /* RUN/STOP */
+                            /* RUN/STOP. Must be CHR$(3): that is the byte C*Base
+                             * and friends check for to abort a listing or the
+                             * more/pause prompt. It used to send 0x09, which did
+                             * nothing, so there was no way to stop a scroll
+                             * (GitHub issue #4). */
+                            key = 0x03; goto petscii_done;
                         case SDLK_F1:  key = shift ? 0x89 : 0x85; goto petscii_done;
                         case SDLK_F2:  key = 0x89; goto petscii_done;
                         case SDLK_F3:  key = shift ? 0x8A : 0x86; goto petscii_done;

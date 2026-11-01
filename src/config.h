@@ -67,6 +67,9 @@ const char *cfg_get_bookmark_note(const char *host, int port);
 void cfg_set_bookmark_note(const char *host, int port, const char *note);
 /* "login=" / "login:" line of the bookmark note, or "" */
 const char *cfg_get_bookmark_login(const char *host, int port);
+/* Receive-speed limit, presented as a baud rate (issue #3) */
+const char *cfg_recvspeed_label(int ms);
+int cfg_recvspeed_next(int ms);
 
 /* Per-user data file: Unix "$HOME/.<name>", Windows "%APPDATA%\CGTerm\<name>". */
 void cfg_user_file(char *out, size_t size, const char *name);

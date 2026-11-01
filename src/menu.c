@@ -519,6 +519,7 @@ void menu_print_menu(struct menu *menu) {
       font_draw_string_color(mx + 210 + (int)strlen(mname) * 10, my, "]", 0x00, 0xee, 0xff);
     }
 
+    menu_draw_item(rx, ty + 112, "O", "Options");
     menu_draw_item(rx, ty + 126, "?", "Help");
     menu_draw_item_redkey(rx, ty + 154, "Q", "Quit CGTerm");
   }
@@ -2523,6 +2524,7 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
   int editing = 0;
   char editbuf[1024];
   int editlen = 0;
+  int editpos = 0;   /* insertion point within editbuf (issue #5) */
   int done = 0;
 
   note = cfg_get_bookmark_note(host, port);
@@ -2559,29 +2561,31 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
     if (editing) {
       /* Show edit buffer with cursor */
       font_set_font(menu_font[0]);
-      font_draw_string_color(lx, ty, "Edit note (Enter=save, Esc=cancel):", 0xff, 0x40, 0x80);
+      font_draw_string_color(lx, ty, "Arrows move, Enter saves, Esc cancels", 0xff, 0x40, 0x80);
       ty += 16;
 
-      /* Render edit buffer line by line */
+      /* Render edit buffer line by line, placing the cursor at editpos. The
+       * line breaking here (on '\n' or at 60 chars) must match the walk used
+       * to locate the cursor so the "_" lands under the right character. */
       {
         int ei = 0;
         int cursor_x = lx, cursor_y = ty;
+        int found = 0;
         y = ty;
         while (ei <= editlen && y < menu_height - 40) {
           char line[80];
           int li = 0;
           while (ei < editlen && editbuf[ei] != '\n' && li < 60) {
+            if (ei == editpos) { cursor_x = lx + li * 10; cursor_y = y; found = 1; }
             line[li++] = editbuf[ei++];
           }
           line[li] = 0;
+          if (!found && ei == editpos) { cursor_x = lx + li * 10; cursor_y = y; found = 1; }
           if (ei < editlen && editbuf[ei] == '\n') ei++;
           font_draw_string_color(lx, y, line, 0x00, 0xff, 0x66);
-          cursor_x = lx + li * 10;
-          cursor_y = y;
           y += 14;
           if (ei >= editlen) break;
         }
-        /* Cursor at end of text */
         font_draw_string_color(cursor_x, cursor_y, "_", 0xff, 0xff, 0xff);
       }
     } else {
@@ -2623,6 +2627,8 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
       if (ev.type == SDL_QUIT) exit(0);
       if (ev.type == SDL_KEYDOWN) {
         if (editing) {
+          if (editpos > editlen) editpos = editlen;
+          if (editpos < 0) editpos = 0;
           switch (ev.key.keysym.sym) {
           case SDLK_ESCAPE:
             editing = 0;
@@ -2635,9 +2641,36 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
             note = cfg_get_bookmark_note(host, port);
             editing = 0;
             break;
+          case SDLK_LEFT:
+            if (editpos > 0) editpos--;
+            break;
+          case SDLK_RIGHT:
+            if (editpos < editlen) editpos++;
+            break;
+          case SDLK_HOME:
+            /* start of the current line */
+            while (editpos > 0 && editbuf[editpos - 1] != '\n') editpos--;
+            break;
+          case SDLK_END:
+            /* end of the current line */
+            while (editpos < editlen && editbuf[editpos] != '\n') editpos++;
+            break;
           case SDLK_BACKSPACE:
-            if (editlen > 0) editlen--;
-            editbuf[editlen] = 0;
+            /* delete the character before the cursor */
+            if (editpos > 0) {
+              memmove(editbuf + editpos - 1, editbuf + editpos, editlen - editpos);
+              editpos--;
+              editlen--;
+              editbuf[editlen] = 0;
+            }
+            break;
+          case SDLK_DELETE:
+            /* delete the character under the cursor */
+            if (editpos < editlen) {
+              memmove(editbuf + editpos, editbuf + editpos + 1, editlen - editpos - 1);
+              editlen--;
+              editbuf[editlen] = 0;
+            }
             break;
           default:
             {
@@ -2645,7 +2678,11 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
               if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
                 uc = ev.key.keysym.sym;
               if (uc >= 32 && uc < 127 && editlen < (int)sizeof(editbuf) - 2) {
-                editbuf[editlen++] = (char)uc;
+                /* insert at the cursor, pushing the rest of the text right */
+                memmove(editbuf + editpos + 1, editbuf + editpos, editlen - editpos);
+                editbuf[editpos] = (char)uc;
+                editpos++;
+                editlen++;
                 editbuf[editlen] = 0;
               }
             }
@@ -2669,6 +2706,7 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
               editbuf[0] = 0;
               editlen = 0;
             }
+            editpos = editlen;   /* start at the end of the existing text */
             break;
           default:
             break;
@@ -3293,7 +3331,7 @@ int menu_options(const char *capture_state) {
       snprintf(rows[0], 96, "[S] Sound effects ........ %s", cfg_sound ? "on" : "off");
       snprintf(rows[1], 96, "[+] [-] Music volume ..... %d/128", cfg_musicvolume);
       snprintf(rows[2], 96, "[D] Send delay (baud) .... %d ms/char", cfg_senddelay);
-      snprintf(rows[3], 96, "[R] Receive delay ........ %d ms/char", cfg_recvdelay);
+      snprintf(rows[3], 96, "[R] Receive speed ........ %s", cfg_recvspeed_label(cfg_recvdelay));
       snprintf(rows[4], 96, "[Z] Zoom ................. %dx", cfg_zoom);
       snprintf(rows[5], 96, "[L] Status line .......... %s", cfg_statusline ? "on" : "off");
       snprintf(rows[6], 96, "[A] Auto-start ZMODEM .... %s", cfg_autozmodem ? "on" : "off");

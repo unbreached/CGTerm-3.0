@@ -1378,17 +1378,21 @@ static void ui_options(void) {
       cfg_save_setting("musicvolume", val);
       music_set_volume(cfg_sound ? cfg_musicvolume : 0);
       break;
-    case 'd':
-    case 'r': {
+    case 'd': {
       static const int steps[] = {0, 5, 10, 20, 50, 100};
-      int *v = (key == 'd') ? &cfg_senddelay : &cfg_recvdelay;
       int i, next = 0;
-      for (i = 0; i < 6; i++) if (*v == steps[i]) { next = (i + 1) % 6; break; }
-      *v = steps[next];
-      snprintf(val, sizeof(val), "%d", *v);
-      cfg_save_setting(key == 'd' ? "senddelay" : "receivedelay", val);
+      for (i = 0; i < 6; i++) if (cfg_senddelay == steps[i]) { next = (i + 1) % 6; break; }
+      cfg_senddelay = steps[next];
+      snprintf(val, sizeof(val), "%d", cfg_senddelay);
+      cfg_save_setting("senddelay", val);
       break;
     }
+    case 'r':
+      /* Receive speed, cycled as baud presets (issue #3). */
+      cfg_recvdelay = cfg_recvspeed_next(cfg_recvdelay);
+      snprintf(val, sizeof(val), "%d", cfg_recvdelay);
+      cfg_save_setting("receivedelay", val);
+      break;
     case 'z': {
       int z = cfg_zoom + 1;
       if (z > 4) z = 1;

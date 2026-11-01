@@ -30,7 +30,10 @@
   OPTIONS PANEL [O]
   -----------------
   S  Sound on/off      +/- Music volume
-  D  Send delay        R   Receive delay
+  D  Send delay        R   Receive speed
+  R cycles a baud limit (2400/1200/300
+  ...) so text does not scroll past too
+  fast to read; "unlimited" is full speed.
   Z  Zoom 1x-4x        L   Status line
   A  Auto-start ZMODEM T   Transfer log
   C  Capture to file   E   Local echo
@@ -44,11 +47,27 @@
   ----------------------------
   ALT (Option) = Commodore key
     Hold ALT + letter for PETSCII graphics
+  ALT+SHIFT = switch upper/lower case
+    (like CBM+SHIFT on a real C64)
   CTRL = C64 Control key
     Ctrl+1 Black    Ctrl+5 Green
     Ctrl+2 White    Ctrl+6 Blue
     Ctrl+3 Red      Ctrl+7 Yellow
     Ctrl+4 Cyan     Ctrl+8 Orange
+
+  SPECIAL KEYS (PETSCII MODE)
+  ---------------------------
+  Tab          RUN/STOP. Aborts a listing
+               or a C*Base pause/more prompt
+  Backspace    INST/DEL (delete back)
+  Delete       INSERT
+  Home         CLR/HOME (Shift+Home clears)
+  Arrow keys   Cursor up/down/left/right
+  Return       RETURN (Shift+Return = sh-RET)
+  F1-F8        C64 function keys
+  ` (backtick) C64 left-arrow key
+  Any key can be remapped in default.kbd;
+  find a key's code with ESC -> K -> T.
 
   FILE TRANSFERS [T]
   ------------------
@@ -86,10 +105,15 @@
   AUTO-LOGIN
   ----------
   Put a line in a bookmark's notes [N]:
-    login=w:Handle;s:name;cr;w:Password;s:pw;cr
+    login=w:handle;s:M00P;cr;w:password;s:secret;cr
   w: wait for text   s: send text
   cr send RETURN     p:N pause N ms
-  It runs after dialing that bookmark.
+  The wait text is matched against the
+  letters on screen - colour, cursor and
+  case codes are ignored - so on C*Base
+  just wait for w:handle and w:password
+  (case does not matter). Runs right after
+  you dial; ESC aborts the script.
 
   C*BASE BBS COMMANDS (USER)
   --------------------------

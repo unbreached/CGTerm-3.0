@@ -97,7 +97,8 @@ static void run_next_step(void) {
       size_t i;
       wait_len = 0;
       for (i = 0; t[i] && wait_len < (int)sizeof(wait_text) - 1; i++) {
-        wait_text[wait_len++] = normalise((unsigned char)t[i]);
+        char n = normalise((unsigned char)t[i]);
+        if (n >= 0x20 && n <= 0x7e) wait_text[wait_len++] = n;   /* match the filtered stream */
       }
       wait_text[wait_len] = 0;
       if (wait_len == 0) continue;
@@ -134,11 +135,21 @@ int login_tick(int c) {
   if (!step && !wait_len && !pausing) {
     return 0;
   }
-  if (c >= 0 && ring_len < (int)sizeof(ring)) {
-    ring[ring_len++] = normalise(c);
-  } else if (c >= 0) {
-    memmove(ring, ring + 1, sizeof(ring) - 1);
-    ring[sizeof(ring) - 1] = normalise(c);
+  if (c >= 0) {
+    char n = normalise(c);
+    /* Keep only visible text in the match buffer. Boards (C*Base especially)
+     * sprinkle colour, reverse, cursor and case codes through their prompts;
+     * if those bytes stayed in the ring they would split a word and a plain
+     * "w:password" could never match. Dropping them lets the expect string be
+     * just the letters you see on screen (GitHub issue #2). */
+    if (n >= 0x20 && n <= 0x7e) {
+      if (ring_len < (int)sizeof(ring)) {
+        ring[ring_len++] = n;
+      } else {
+        memmove(ring, ring + 1, sizeof(ring) - 1);
+        ring[sizeof(ring) - 1] = n;
+      }
+    }
   }
 
   if (wait_len) {

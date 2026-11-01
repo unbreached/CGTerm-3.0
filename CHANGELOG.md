@@ -7,10 +7,15 @@ Genesis*Project · 2026
 
 [!]Window no longer opens as an unusable black rectangle when a saved zoom is too large for the display: the zoom is clamped to what actually fits and the stored value is corrected (#12)
 [!]Window is repainted after alt-tab or being uncovered, instead of staying blank until the next change (#11)
-[+]Commodore+Shift (Alt+Shift) now switches the display charset case straight from the terminal, like a real C64 — no trip through the menu (#9)
-[+]Local echo shows its ON/OFF state in the menu, so you can see the setting before you connect (#7)
+[!]Auto-login now ignores colour, cursor and case codes in a board's prompts, so the expect text just needs the letters you see on screen; C*Base logins work (#2)
+[!]RUN/STOP (Tab) now sends CHR$(3), so it actually aborts a listing or a C*Base pause prompt (it used to send a dead byte) (#4)
+[+]Commodore+Shift (Alt+Shift) now switches the display charset case straight from the terminal, like a real C64, no trip through the menu (#9)
+[+]Receive speed can be capped to an old-modem baud rate (2400/1200/300 ...) in Options [R], so text does not scroll past faster than you can read (#3)
+[+]Bookmark notes editor now has a real cursor: arrow keys, Home/End, and Insert/Delete, so you can fix a typo without retyping the line (#5)
+[+]Options panel [O] is now listed in the main menu, and local echo shows its ON/OFF state there (#7, #10)
+[+]Help screen documents the special keys (RUN/STOP, cursor, DEL, f-keys, Alt+Shift) and a working C*Base auto-login example (#4)
 
-Thanks to mrdudz for the careful bug reports that drove these fixes.
+Thanks to mrdudz for the careful, detailed bug reports that drove these fixes.
 
 ─── SECURITY & STABILITY · NOVEMBER 2026 ───
 
