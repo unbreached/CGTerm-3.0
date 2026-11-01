@@ -14,6 +14,8 @@ Genesis*Project · 2026
 [+]Bookmark notes editor now has a real cursor: arrow keys, Home/End, and Insert/Delete, so you can fix a typo without retyping the line (#5)
 [+]Text macros: 10 editable macros fired with Cmd/Win+0-9 (or from Options [M]), stored as macro0..macro9, with \r for RETURN, for canned logins and commands (#8)
 [+]Menu now scales with the window instead of staying tiny on big screens: it is drawn at a fixed design size and scaled to fit, so the text grows with the zoom (#6)
+[+]The offline / startup CGTerm logo now scales to fill the window instead of sitting in black bars once you zoom past 2x
+[!]Menu keys [O] Options, [X] Copy screen and [Y] History now work (they were listed but the menu swallowed the keypress), dragging the window no longer flickers, and the Options panel is colour-coded
 [+]Options panel [O] is now listed in the main menu, and local echo shows its ON/OFF state there (#7, #10)
 [+]Help screen documents the special keys (RUN/STOP, cursor, DEL, f-keys, Alt+Shift) and a working C*Base auto-login example (#4)
 

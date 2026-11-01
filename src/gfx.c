@@ -1283,21 +1283,30 @@ void gfx_show_startup_bg(void) {
 
 
 void gfx_show_background(const char *bmpfile) {
-  SDL_Surface *bg = SDL_LoadBMP(bmpfile);
+  SDL_Surface *raw = SDL_LoadBMP(bmpfile);
+  SDL_Surface *bg;
+  if (!raw) return;
+  /* Match the screen's pixel format so SDL_SoftStretch can scale it. */
+  bg = SDL_DisplayFormat(raw);
+  SDL_FreeSurface(raw);
   if (!bg) return;
 
-  /* Scale to screen if needed */
-  if (bg->w != gfx_width || bg->h != gfx_height) {
-    /* Simple nearest-neighbor scale by blitting to screen directly
-     * SDL 1.2 doesn't have scaling, so we just center/crop */
-    SDL_Rect dst;
-    dst.x = (gfx_width - bg->w) / 2;
-    dst.y = (gfx_height - bg->h) / 2;
-    if (dst.x < 0) dst.x = 0;
-    if (dst.y < 0) dst.y = 0;
-    SDL_BlitSurface(bg, NULL, gfx_screen, &dst);
-  } else {
+  if (bg->w == gfx_width && bg->h == gfx_height) {
     SDL_BlitSurface(bg, NULL, gfx_screen, NULL);
+  } else {
+    /* Scale the art to fill the screen. The backgrounds and the C64 screen
+     * share the same 1.6 aspect, so this is a clean uniform scale with no
+     * black bars at any zoom (the old code centred it and left big margins). */
+    SDL_Rect dst;
+    dst.x = 0; dst.y = 0; dst.w = gfx_width; dst.h = gfx_height;
+    if (SDL_SoftStretch(bg, NULL, gfx_screen, &dst) != 0) {
+      /* Stretch unsupported for this format: centre at native size. */
+      SDL_Rect c;
+      c.x = (gfx_width - bg->w) / 2; if (c.x < 0) c.x = 0;
+      c.y = (gfx_height - bg->h) / 2; if (c.y < 0) c.y = 0;
+      SDL_FillRect(gfx_screen, NULL, SDL_MapRGB(gfx_screen->format, 0, 0, 0));
+      SDL_BlitSurface(bg, NULL, gfx_screen, &c);
+    }
   }
   SDL_FreeSurface(bg);
   SDL_UpdateRect(gfx_screen, 0, 0, 0, 0);
@@ -1567,7 +1576,6 @@ void gfx_delete_cells(int x, int y, int n, int fg, int bg) {
  * size therefore steps the zoom like the Options panel does. */
 void gfx_handle_resize(int w, int h) {
   int z;
-  int want_h;
 
   if (cfg_fullscreen) return;
   if (w == gfx_width && h == gfx_height + gfx_status_rows * charheight) return;   /* our own re-mode */
@@ -1580,9 +1588,12 @@ void gfx_handle_resize(int w, int h) {
   if (z > 8) z = 8;
   if (z > gfx_max_zoom()) z = gfx_max_zoom();   /* never grow past the display (issue #12) */
   if (cfg_columns == 80 && (z & 1)) z = (z > 1) ? z - 1 : 2;
-  want_h = z * GFX_HEIGHT + gfx_status_rows * 8 * z;
-  if (z != cfg_zoom || w != z * GFX_WIDTH || h != want_h) {
-    gfx_set_zoom(z);             /* also snaps the window back to the exact size */
+  /* Only re-create the window when the zoom step actually changes. A drag
+   * fires a stream of VIDEORESIZE events; re-moding on every one made the
+   * window flicker and thrash. While dragging within one zoom step the
+   * SDL2 backend scales our surface to the window, so nothing is lost. */
+  if (z != cfg_zoom) {
+    gfx_set_zoom(z);             /* snaps to the exact integer-zoom size */
     if (z == cfg_zoom) {
       char val[8];
       snprintf(val, sizeof(val), "%d", cfg_zoom);

@@ -3512,6 +3512,39 @@ int menu_choose_list(const char *title, const char **items, int count, int initi
 }
 
 
+/* Value styles for an Options row. */
+enum { OPTV_OFF, OPTV_ON, OPTV_NUM, OPTV_ACT };
+
+/* Draw one Options row coloured like the main menu: cyan brackets, a bright
+ * key, a light-blue label, dim dot leaders, and a highlighted value whose
+ * colour depends on its style (on=green, off=muted, number=yellow, action=cyan). */
+static void menu_opt_row(int x, int y, const char *keys, const char *label,
+                         const char *value, int vstyle) {
+  int klen = (int)strlen(keys);
+  int lx2, dotx, vcol = x + 310;
+  int vr, vg, vb;
+
+  switch (vstyle) {
+    case OPTV_ON:  vr = 0x40; vg = 0xff; vb = 0x66; break;
+    case OPTV_NUM: vr = 0xff; vg = 0xff; vb = 0x54; break;
+    case OPTV_ACT: vr = 0x00; vg = 0xee; vb = 0xff; break;
+    default:       vr = 0x90; vg = 0x6a; vb = 0x6a; break;   /* off / muted */
+  }
+
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x, y, "[", 0x00, 0xee, 0xff);
+  font_set_font(menu_font[1]);
+  font_draw_string_color(x + 10, y, keys, 0xff, 0xff, 0x54);
+  font_set_font(menu_font[0]);
+  font_draw_string_color(x + 10 + klen * 10, y, "]", 0x00, 0xee, 0xff);
+  lx2 = x + 10 + klen * 10 + 20;
+  font_draw_string_color(lx2, y, label, 0x7a, 0xb0, 0xff);
+  dotx = lx2 + (int)strlen(label) * 10 + 10;
+  while (dotx + 6 <= vcol) { font_draw_string_color(dotx, y, ".", 0x38, 0x48, 0x60); dotx += 20; }
+  font_draw_string_color(vcol, y, value, vr, vg, vb);
+}
+
+
 /* ---- options panel ----
  * Shows the live values and returns the key the user pressed (lower case)
  * so ui_term.c can apply and persist the change, then calls again. 0 = Esc. */
@@ -3522,8 +3555,9 @@ int menu_options(const char *capture_state) {
 
   while (!result) {
     if (redraw) {
-      int lx = 30, ty = 30, line_h = 20, i;
-      char rows[12][96];
+      int lx = 30, ty = 30, line_h = 20, yy;
+      char v[64];
+      int capoff = (capture_state[0] == 'o' && capture_state[1] == 'f');
       Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
 
       SDL_FillRect(menu_surface, NULL, solidbg);
@@ -3533,22 +3567,23 @@ int menu_options(const char *capture_state) {
       font_draw_string_color(lx + 20, ty, "OPTIONS", 0xff, 0x40, 0x80);
       font_draw_string_color(lx + 110, ty, " ]", 0x00, 0xee, 0xff);
 
-      snprintf(rows[0], 96, "[S] Sound effects ........ %s", cfg_sound ? "on" : "off");
-      snprintf(rows[1], 96, "[+] [-] Music volume ..... %d/128", cfg_musicvolume);
-      snprintf(rows[2], 96, "[D] Send delay (baud) .... %d ms/char", cfg_senddelay);
-      snprintf(rows[3], 96, "[R] Receive speed ........ %s", cfg_recvspeed_label(cfg_recvdelay));
-      snprintf(rows[4], 96, "[Z] Zoom ................. %dx", cfg_zoom);
-      snprintf(rows[5], 96, "[L] Status line .......... %s", cfg_statusline ? "on" : "off");
-      snprintf(rows[6], 96, "[A] Auto-start ZMODEM .... %s", cfg_autozmodem ? "on" : "off");
-      snprintf(rows[7], 96, "[T] Transfer log ......... %s", cfg_transferlog ? "on" : "off");
-      snprintf(rows[8], 96, "[C] Capture to file ...... %s", capture_state);
-      snprintf(rows[9], 96, "[E] Local echo ........... %s", cfg_localecho ? "on" : "off");
-      snprintf(rows[10], 96, "[8] Columns .............. %d (PETSCII 80 col needs an even zoom)", cfg_columns);
-      snprintf(rows[11], 96, "[M] Macros ............... edit / send (also Cmd/Win+0-9)");
+      yy = ty + 40;
+      menu_opt_row(lx, yy, "S", "Sound effects", cfg_sound ? "on" : "off", cfg_sound ? OPTV_ON : OPTV_OFF); yy += line_h;
+      snprintf(v, sizeof(v), "%d/128", cfg_musicvolume);
+      menu_opt_row(lx, yy, "+/-", "Music volume", v, OPTV_NUM); yy += line_h;
+      snprintf(v, sizeof(v), "%d ms/char", cfg_senddelay);
+      menu_opt_row(lx, yy, "D", "Send delay", v, OPTV_NUM); yy += line_h;
+      menu_opt_row(lx, yy, "R", "Receive speed", cfg_recvspeed_label(cfg_recvdelay), OPTV_NUM); yy += line_h;
+      snprintf(v, sizeof(v), "%dx", cfg_zoom);
+      menu_opt_row(lx, yy, "Z", "Zoom", v, OPTV_NUM); yy += line_h;
+      menu_opt_row(lx, yy, "L", "Status line", cfg_statusline ? "on" : "off", cfg_statusline ? OPTV_ON : OPTV_OFF); yy += line_h;
+      menu_opt_row(lx, yy, "A", "Auto-start ZMODEM", cfg_autozmodem ? "on" : "off", cfg_autozmodem ? OPTV_ON : OPTV_OFF); yy += line_h;
+      menu_opt_row(lx, yy, "T", "Transfer log", cfg_transferlog ? "on" : "off", cfg_transferlog ? OPTV_ON : OPTV_OFF); yy += line_h;
+      menu_opt_row(lx, yy, "C", "Capture to file", capture_state, capoff ? OPTV_OFF : OPTV_ON); yy += line_h;
+      menu_opt_row(lx, yy, "E", "Local echo", cfg_localecho ? "on" : "off", cfg_localecho ? OPTV_ON : OPTV_OFF); yy += line_h;
+      menu_opt_row(lx, yy, "8", "Columns", cfg_columns == 80 ? "80" : "40", OPTV_NUM); yy += line_h;
+      menu_opt_row(lx, yy, "M", "Macros", "edit / send", OPTV_ACT); yy += line_h;
       font_set_font(menu_font[0]);
-      for (i = 0; i < 12; i++) {
-        font_draw_string_color(lx, ty + 40 + i * line_h, rows[i], 0x00, 0xff, 0x66);
-      }
       font_draw_string_color(lx, menu_height - 30, "Press a key to change, Esc to back", 0x60, 0x80, 0xff);
       menu_dirty = SDL_TRUE;
       menu_show();
