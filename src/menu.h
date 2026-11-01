@@ -8,6 +8,8 @@ struct menu {
 extern SDL_bool menu_visible;
 extern SDL_bool menu_dirty;
 extern SDL_Surface *menu_surface;
+extern SDL_Surface *menu_composite;   /* window-sized, scaled from menu_surface (issue #6) */
+void menu_update_composite(void);     /* rebuild menu_composite from menu_surface */
 extern int menu_width, menu_height;
 
 

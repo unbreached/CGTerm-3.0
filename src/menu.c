@@ -12,9 +12,18 @@
 
 SDL_bool menu_visible;
 SDL_bool menu_dirty;
-SDL_Surface *menu_surface;
+SDL_Surface *menu_surface;      /* fixed design size; all menu drawing goes here */
+SDL_Surface *menu_composite;    /* window-sized; menu_surface scaled to fit (issue #6) */
 SDL_Surface *cursorsurface;
-int menu_width, menu_height;
+int menu_width, menu_height;    /* == design size, so the layout never changes */
+
+/* The menu is laid out at a fixed design size and then scaled to whatever the
+ * window is, so the font grows with the window instead of staying tiny on big
+ * screens (issue #6). The window menu area is always zoom*320 x zoom*200, the
+ * same 1.6 aspect as this design, so the scale fills the screen with no bars. */
+#define MENU_DESIGN_W 640
+#define MENU_DESIGN_H 400
+static int menu_comp_w, menu_comp_h;   /* window size the composite targets */
 static Uint32 transparent;
 static Uint32 bgcolor;
 static Uint32 fgcolor;
@@ -164,21 +173,26 @@ static void menu_free_resources(void) {
   for (i = 0; i < 6; ++i) menu_font[i] = NULL;
   if (cursorsurface) { SDL_FreeSurface(cursorsurface); cursorsurface = NULL; }
   if (menu_surface) { SDL_FreeSurface(menu_surface); menu_surface = NULL; }
+  if (menu_composite) { SDL_FreeSurface(menu_composite); menu_composite = NULL; }
 }
 
 
 int menu_init(int width, int height) {
   SDL_Surface *tempsurface;
   char fname[1024];
-  menu_width = width;
-  menu_height = height;
+  /* Draw at the fixed design size; the composite is the real window, which the
+   * design is scaled onto (issue #6). */
+  menu_comp_w = width;
+  menu_comp_h = height;
+  menu_width = MENU_DESIGN_W;
+  menu_height = MENU_DESIGN_H;
   menu_visible = SDL_FALSE;
 
   /* menu_init() is called again on every 40/80-column switch; release the
    * previous surfaces and fonts so they don't leak on each mode change. */
   menu_free_resources();
 
-  if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE|SDL_SRCALPHA, width, height, 32,
+  if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE|SDL_SRCALPHA, menu_width, menu_height, 32,
 					   0x000000ff,
 					   0x0000ff00,
 					   0x00ff0000,
@@ -188,6 +202,16 @@ int menu_init(int width, int height) {
   menu_surface = SDL_DisplayFormatAlpha(tempsurface);
   SDL_FreeSurface(tempsurface);
   if (menu_surface == NULL) {
+    return(1);
+  }
+  /* Window-sized composite the design surface is scaled onto for display. */
+  if ((tempsurface = SDL_CreateRGBSurface(SDL_SWSURFACE|SDL_SRCALPHA, menu_comp_w, menu_comp_h, 32,
+					   0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000)) == NULL) {
+    return(1);
+  }
+  menu_composite = SDL_DisplayFormatAlpha(tempsurface);
+  SDL_FreeSurface(tempsurface);
+  if (menu_composite == NULL) {
     return(1);
   }
   transparent = SDL_MapRGBA(menu_surface->format, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
@@ -262,6 +286,49 @@ int menu_init(int width, int height) {
   SDL_SetAlpha(cursorsurface, SDL_SRCALPHA|SDL_RLEACCEL, 0x80);
 
   return(0);
+}
+
+
+/* Rebuild the window-sized composite by scaling the fixed-size menu_surface to
+ * fit, nearest-neighbour, keeping the alpha channel. The window menu area has
+ * the same 1.6 aspect as the design, so this fills it exactly; at the 2x zoom
+ * the layout was tuned for it is a straight 1:1 copy (issue #6). */
+void menu_update_composite(void) {
+  int dw, dh, sw, sh, x, y;
+  SDL_Surface *src = menu_surface, *dst = menu_composite;
+
+  if (!src || !dst) return;
+  dw = src->w; dh = src->h; sw = dst->w; sh = dst->h;
+  if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+
+  if (src->format->BytesPerPixel != 4 || dst->format->BytesPerPixel != 4) {
+    /* Unexpected format: fall back to a centred 1:1 copy so the menu still
+     * shows (just not scaled). */
+    SDL_Rect d;
+    SDL_FillRect(dst, NULL, SDL_MapRGBA(dst->format, 0, 0, 0, SDL_ALPHA_TRANSPARENT));
+    d.x = (sw - dw) / 2; d.y = (sh - dh) / 2; d.w = dw; d.h = dh;
+    SDL_SetAlpha(src, 0, 0);
+    SDL_BlitSurface(src, NULL, dst, &d);
+    return;
+  }
+
+  if (SDL_MUSTLOCK(src)) SDL_LockSurface(src);
+  if (SDL_MUSTLOCK(dst)) SDL_LockSurface(dst);
+  {
+    Uint8 *sp = (Uint8 *)src->pixels;
+    Uint8 *dp = (Uint8 *)dst->pixels;
+    int spitch = src->pitch, dpitch = dst->pitch;
+    for (y = 0; y < sh; y++) {
+      int syr = (y * dh) / sh;                    /* nearest source row */
+      Uint32 *drow = (Uint32 *)(dp + y * dpitch);
+      Uint32 *srow = (Uint32 *)(sp + syr * spitch);
+      for (x = 0; x < sw; x++) {
+        drow[x] = srow[(x * dw) / sw];            /* nearest source column */
+      }
+    }
+  }
+  if (SDL_MUSTLOCK(dst)) SDL_UnlockSurface(dst);
+  if (SDL_MUSTLOCK(src)) SDL_UnlockSurface(src);
 }
 
 

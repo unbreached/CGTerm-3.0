@@ -654,7 +654,8 @@ void gfx_draw_line(int ypos) {
     src.y = ypos * charheight - gfx_menu_ypos;
     dest.x = gfx_menu_xpos;
     dest.y = ypos * charheight;
-    SDL_BlitSurface(menu_surface, &src, gfx_screen, &dest);
+    /* menu_composite is the window-sized, scaled copy of the design surface */
+    SDL_BlitSurface(menu_composite, &src, gfx_screen, &dest);
   }
 }
 
@@ -776,6 +777,7 @@ void gfx_vbl(void) {
 
   if (menu_dirty) {
     menu_dirty = SDL_FALSE;
+    menu_update_composite();   /* scale the freshly-drawn menu to the window (issue #6) */
     for (l = gfx_menu_firstline; l <= gfx_menu_lastline; ++l) {
       dirty[l] = SDL_TRUE;
     }
