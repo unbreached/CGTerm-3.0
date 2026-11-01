@@ -48,3 +48,4 @@ void menu_show_help(const char *filename);
 
 int menu_choose_list(const char *title, const char **items, int count, int initial);
 int menu_options(const char *capture_state);
+int menu_macros(void);   /* text-macro manager (issue #8); returns slot to send or -1 */

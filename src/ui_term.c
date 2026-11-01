@@ -1350,9 +1350,12 @@ void ui_autostart_zmodem(void) {
 }
 
 
-/* Options panel: apply one change per key and persist it. */
-static void ui_options(void) {
+/* Options panel: apply one change per key and persist it. Returns 1 if the
+ * user sent a macro from here (the caller should drop back to the terminal so
+ * it actually transmits), 0 otherwise. */
+static int ui_options(void) {
   int key;
+  int sent_macro = 0;
   for (;;) {
     char cap[128];
     char val[16];
@@ -1442,10 +1445,22 @@ static void ui_options(void) {
       net_send_naws();
       break;
     }
+    case 'm': {
+      /* Macro manager: edit the 10 text macros, or pick one to send. */
+      int slot = menu_macros();
+      if (slot >= 0) {
+        macro_send_slot(slot);
+        sent_macro = 1;
+        break;    /* leave the options loop so the macro transmits */
+      }
+      break;
+    }
     default:
       break;
     }
+    if (sent_macro) break;
   }
+  return sent_macro;
 }
 
 
@@ -1741,10 +1756,15 @@ void ui_metakey(SDL_keysym *keysym) {
     exit(0);
     break;
   case SDLK_o:
-    ui_options();
-    menu_print_menu(termmenu);
-    menu_show();
-    kbd_focus = FOCUS_MENU;
+    if (ui_options()) {
+      /* a macro was queued: go back to the terminal so it transmits */
+      menu_hide();
+      kbd_focus = FOCUS_TERM;
+    } else {
+      menu_print_menu(termmenu);
+      menu_show();
+      kbd_focus = FOCUS_MENU;
+    }
     break;
   case SDLK_x:
     ui_copy_screen();

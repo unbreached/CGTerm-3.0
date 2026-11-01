@@ -12,6 +12,7 @@ Genesis*Project · 2026
 [+]Commodore+Shift (Alt+Shift) now switches the display charset case straight from the terminal, like a real C64, no trip through the menu (#9)
 [+]Receive speed can be capped to an old-modem baud rate (2400/1200/300 ...) in Options [R], so text does not scroll past faster than you can read (#3)
 [+]Bookmark notes editor now has a real cursor: arrow keys, Home/End, and Insert/Delete, so you can fix a typo without retyping the line (#5)
+[+]Text macros: 10 editable macros fired with Cmd/Win+0-9 (or from Options [M]), stored as macro0..macro9, with \r for RETURN, for canned logins and commands (#8)
 [+]Options panel [O] is now listed in the main menu, and local echo shows its ON/OFF state there (#7, #10)
 [+]Help screen documents the special keys (RUN/STOP, cursor, DEL, f-keys, Alt+Shift) and a working C*Base auto-login example (#4)
 

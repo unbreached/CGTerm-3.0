@@ -115,6 +115,17 @@
   (case does not matter). Runs right after
   you dial; ESC aborts the script.
 
+  MACROS
+  ------
+  10 text macros you can fire while online.
+  Fastest: Cmd+0-9 (macOS) or Win+0-9. If
+  your desktop grabs the Win key, open the
+  menu, [O] Options, [M], and press Return
+  on a macro to send it. Edit them there or
+  in the config as macro0 .. macro9. Use \r
+  for RETURN, e.g.
+    macro0 = myhandle\rsecret\r
+
   C*BASE BBS COMMANDS (USER)
   --------------------------
   S  Sub Boards      O  Oneliners

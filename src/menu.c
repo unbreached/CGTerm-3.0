@@ -2719,6 +2719,144 @@ void menu_show_bookmark_info(const char *alias, const char *host, int port) {
 }
 
 
+/* Text-macro manager (issue #8). Lists the 10 macros, lets you edit each one
+ * as a single line of text, and send one. Returns the slot to send (0..9) when
+ * the user picks one with Return, or -1 when they just back out. Macros are
+ * also fired straight from the terminal with Cmd/Win + 0..9. */
+int menu_macros(void) {
+  SDL_Event ev;
+  int sel = 0;
+  int editing = 0;
+  char editbuf[256];
+  int editlen = 0, editpos = 0;
+  int result = -1;
+  int done = 0;
+  int i;
+
+  while (!done) {
+    int lx = 20;
+    int ty = 20;
+    Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
+    int line_h = 16;
+
+    SDL_FillRect(menu_surface, NULL, solidbg);
+    menu_draw_borderbox(10, 10, menu_width - 11, menu_height - 11);
+
+    font_set_font(menu_font[1]);
+    font_draw_string_color(lx, ty, "MACROS", 0xff, 0x40, 0x80);
+    ty += 18;
+    font_set_font(menu_font[0]);
+    font_draw_string_color(lx, ty, "Cmd/Win + 0-9 sends a macro from the terminal.", 0x60, 0x80, 0xff);
+    ty += 18;
+
+    for (i = 0; i < 10; i++) {
+      char row[96];
+      const char *txt = (editing && i == sel) ? editbuf : cfg_macros[i];
+      int y = ty + i * line_h;
+      unsigned char r = (i == sel) ? 0xff : 0x00;
+      unsigned char g = (i == sel) ? 0xff : 0xff;
+      unsigned char b = (i == sel) ? 0x54 : 0x66;
+      snprintf(row, sizeof(row), "%d: %s", i, (txt && txt[0]) ? txt : "(empty)");
+      font_draw_string_color(lx, y, row, r, g, b);
+      if (editing && i == sel) {
+        /* caret under the insertion point ("n: " prefix is 3 chars) */
+        font_draw_string_color(lx + (3 + editpos) * 10, y, "_", 0xff, 0xff, 0xff);
+      }
+    }
+
+    font_set_font(menu_font[0]);
+    if (editing) {
+      font_draw_string_color(lx, menu_height - 26,
+        "Arrows move, Enter saves, Esc cancels  (\\r = Return)", 0x60, 0x80, 0xff);
+    } else {
+      font_draw_string_color(lx, menu_height - 26,
+        "Up/Down select, E edit, Enter send, Esc back", 0x60, 0x80, 0xff);
+    }
+
+    menu_dirty = SDL_TRUE;
+    menu_show();
+    gfx_vbl();
+
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type != SDL_KEYDOWN) continue;
+      if (editing) {
+        if (editpos > editlen) editpos = editlen;
+        if (editpos < 0) editpos = 0;
+        switch (ev.key.keysym.sym) {
+        case SDLK_ESCAPE:
+          editing = 0;
+          break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER: {
+          char key[12];
+          editbuf[editlen] = 0;
+          snprintf(cfg_macros[sel], sizeof(cfg_macros[sel]), "%s", editbuf);
+          snprintf(key, sizeof(key), "macro%d", sel);
+          cfg_save_setting(key, editbuf);
+          editing = 0;
+          break;
+        }
+        case SDLK_LEFT:  if (editpos > 0) editpos--; break;
+        case SDLK_RIGHT: if (editpos < editlen) editpos++; break;
+        case SDLK_HOME:  editpos = 0; break;
+        case SDLK_END:   editpos = editlen; break;
+        case SDLK_BACKSPACE:
+          if (editpos > 0) {
+            memmove(editbuf + editpos - 1, editbuf + editpos, editlen - editpos);
+            editpos--; editlen--; editbuf[editlen] = 0;
+          }
+          break;
+        case SDLK_DELETE:
+          if (editpos < editlen) {
+            memmove(editbuf + editpos, editbuf + editpos + 1, editlen - editpos - 1);
+            editlen--; editbuf[editlen] = 0;
+          }
+          break;
+        default: {
+          int uc = ev.key.keysym.unicode;
+          if ((uc < 32 || uc >= 127) && ev.key.keysym.sym >= 32 && ev.key.keysym.sym < 127)
+            uc = ev.key.keysym.sym;
+          if (uc >= 32 && uc < 127 && editlen < (int)sizeof(editbuf) - 2) {
+            memmove(editbuf + editpos + 1, editbuf + editpos, editlen - editpos);
+            editbuf[editpos] = (char)uc;
+            editpos++; editlen++; editbuf[editlen] = 0;
+          }
+          break;
+        }
+        }
+      } else {
+        switch (ev.key.keysym.sym) {
+        case SDLK_ESCAPE:
+        case SDLK_q:
+          done = 1;
+          break;
+        case SDLK_UP:    if (sel > 0) sel--; break;
+        case SDLK_DOWN:  if (sel < 9) sel++; break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+          if (cfg_macros[sel][0]) { result = sel; done = 1; }
+          break;
+        case SDLK_e:
+          editing = 1;
+          snprintf(editbuf, sizeof(editbuf), "%s", cfg_macros[sel]);
+          editlen = (int)strlen(editbuf);
+          editpos = editlen;
+          break;
+        default:
+          if (ev.key.keysym.sym >= SDLK_0 && ev.key.keysym.sym <= SDLK_9) {
+            sel = ev.key.keysym.sym - SDLK_0;
+          }
+          break;
+        }
+      }
+    }
+    SDL_Delay(20);
+  }
+  return result;
+}
+
+
 void menu_print_bookmark(int slot, int col, char *text) {
   int y, x;
   char label[12];
@@ -3318,7 +3456,7 @@ int menu_options(const char *capture_state) {
   while (!result) {
     if (redraw) {
       int lx = 30, ty = 30, line_h = 20, i;
-      char rows[11][96];
+      char rows[12][96];
       Uint32 solidbg = SDL_MapRGBA(menu_surface->format, 0x0a, 0x0a, 0x1e, SDL_ALPHA_OPAQUE);
 
       SDL_FillRect(menu_surface, NULL, solidbg);
@@ -3339,8 +3477,9 @@ int menu_options(const char *capture_state) {
       snprintf(rows[8], 96, "[C] Capture to file ...... %s", capture_state);
       snprintf(rows[9], 96, "[E] Local echo ........... %s", cfg_localecho ? "on" : "off");
       snprintf(rows[10], 96, "[8] Columns .............. %d (PETSCII 80 col needs an even zoom)", cfg_columns);
+      snprintf(rows[11], 96, "[M] Macros ............... edit / send (also Cmd/Win+0-9)");
       font_set_font(menu_font[0]);
-      for (i = 0; i < 11; i++) {
+      for (i = 0; i < 12; i++) {
         font_draw_string_color(lx, ty + 40 + i * line_h, rows[i], 0x00, 0xff, 0x66);
       }
       font_draw_string_color(lx, menu_height - 30, "Press a key to change, Esc to back", 0x60, 0x80, 0xff);

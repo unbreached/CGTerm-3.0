@@ -70,6 +70,8 @@ const char *cfg_get_bookmark_login(const char *host, int port);
 /* Receive-speed limit, presented as a baud rate (issue #3) */
 const char *cfg_recvspeed_label(int ms);
 int cfg_recvspeed_next(int ms);
+/* Text macros, sent on Meta+0..9 (issue #8) */
+extern char cfg_macros[10][256];
 
 /* Per-user data file: Unix "$HOME/.<name>", Windows "%APPDATA%\CGTerm\<name>". */
 void cfg_user_file(char *out, size_t size, const char *name);

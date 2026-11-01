@@ -458,6 +458,13 @@ int kbd_getkey() {
                          * is swallowed as a meta key on macOS and never pastes. */
                         clipboard_paste();
                         return 0;
+                    } else if ((event.key.keysym.mod & KMOD_META) &&
+                               event.key.keysym.sym >= SDLK_0 && event.key.keysym.sym <= SDLK_9) {
+                        /* Cmd/Win+0..9 fires text macro 0..9 (issue #8). Checked
+                         * before the generic META handler so the digit isn't
+                         * swallowed as a meta key. */
+                        macro_send_slot(event.key.keysym.sym - SDLK_0);
+                        return 0;
                     } else if (event.key.keysym.mod & KMOD_META) {
                         ui_metakey(&event.key.keysym);
                     } else if (cfg_termmode == 1) {

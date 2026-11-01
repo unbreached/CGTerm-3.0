@@ -90,6 +90,7 @@ int cfg_termmode = 0;
 char cfg_connect_name[128] = "";
 int cfg_charset = 0;
 int cfg_bookmark_termmode[40];
+char cfg_macros[10][256];   /* text macros, sent on Meta+0..9 (issue #8) */
 int cfg_editmode = 0;
 int cfg_debugmode = 0;
 int cfg_splash = 1;
@@ -633,6 +634,11 @@ signed int cfg_readconfig(char *configfile) {
         } else if (strcmp("no", value) == 0) {
             cfg_modem = 0;
         }
+
+    } else if (strncmp(key, "macro", 5) == 0 && key[5] >= '0' && key[5] <= '9' && key[6] == 0) {
+        /* macro0..macro9: text sent on Meta+0..9 (issue #8) */
+        int slot = key[5] - '0';
+        snprintf(cfg_macros[slot], sizeof(cfg_macros[slot]), "%s", value);
 
 	} else if (strcmp(key, "zoom") == 0) {
 	  cfg_zoom = strtol(value, (char **)NULL, 10);
