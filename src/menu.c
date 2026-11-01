@@ -465,7 +465,22 @@ void menu_print_menu(struct menu *menu) {
     menu_draw_item(lx, ty + 140, "A", "Abort");
 
     menu_draw_section_centered(rx, menu_width - lx, ty, "SETTINGS");
-    menu_draw_item(rx, ty + 28, "E", "Local echo");
+    /* Local echo shows its on/off state like Charset/Terminal do, so you know
+     * which way it is set before you connect (GitHub issue #7). */
+    {
+      int mx = rx;
+      int my = ty + 28;
+      const char *ename = cfg_localecho ? "ON" : "OFF";
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx, my, "[", 0x00, 0xee, 0xff);
+      font_set_font(menu_font[1]);
+      font_draw_string_color(mx + 10, my, "E", 0xff, 0xff, 0xff);
+      font_set_font(menu_font[0]);
+      font_draw_string_color(mx + 20, my, "] Local echo ", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 200, my, "[", 0x00, 0xee, 0xff);
+      font_draw_string_color(mx + 210, my, ename, 0xff, 0xff, 0x54);
+      font_draw_string_color(mx + 210 + (int)strlen(ename) * 10, my, "]", 0x00, 0xee, 0xff);
+    }
     menu_draw_item(rx, ty + 42, "F", "Fullscreen");
     menu_draw_item(rx, ty + 56, "Z", "Font settings");
     menu_draw_item(rx, ty + 70, "K", "Keyboard layout");

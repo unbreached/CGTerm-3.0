@@ -41,6 +41,8 @@ static int cursor_hidden = 0;   /* gfx_cursor_show(0): no blink at all */
  * and cgedit keep the plain window). The text is kept as ASCII and converted
  * to the active font's codes at draw time. */
 static int gfx_status_rows = 0;
+static int gfx_desktop_w = 0;   /* desktop resolution, captured before the first */
+static int gfx_desktop_h = 0;   /* SDL_SetVideoMode so we can clamp the zoom to it */
 static char status_text[81];
 static unsigned char status_color = 1;
 static unsigned char status_bg = 0;
@@ -240,6 +242,33 @@ SDL_Surface *gfx_loadfont(char *fontname) {
 }
 
 
+/* Largest integer zoom (1..8) whose window fits on the desktop, leaving a
+ * little headroom for the title bar and taskbar/panel. Guards against a config
+ * (or a window drag) asking for a window bigger than the screen, which the WM
+ * then clips to a useless black rectangle (GitHub issue #12). When the desktop
+ * size is unknown we don't restrict anything. */
+int gfx_max_zoom(void) {
+  int z, avail_w, avail_h;
+  if (gfx_desktop_w <= 0 || gfx_desktop_h <= 0) return 8;
+  avail_w = gfx_desktop_w;
+  avail_h = gfx_desktop_h - 80;   /* title bar + taskbar/menu-bar headroom */
+  for (z = 8; z > 1; --z) {
+    if (GFX_WIDTH * z <= avail_w && (GFX_HEIGHT + 8) * z <= avail_h) return z;
+  }
+  return 1;
+}
+
+/* Clamp a requested zoom to something that is both displayable and valid for
+ * the current column mode (80 columns needs an even zoom). */
+static int gfx_clamp_zoom(int z) {
+  int mx = gfx_max_zoom();
+  if (z > mx) z = mx;
+  if (z < 1) z = 1;
+  if (cfg_columns == 80 && (z & 1)) { z -= 1; if (z < 2) z = 2; }
+  return z;
+}
+
+
 int gfx_init(int fullscreen, char *appname) {
   const SDL_VideoInfo *vidinfo;
   char fname[1024];
@@ -272,6 +301,29 @@ int gfx_init(int fullscreen, char *appname) {
   vidinfo = SDL_GetVideoInfo();
   if ((gfx_bpp = vidinfo->vfmt->BitsPerPixel) < 15) {
     gfx_bpp = 16;
+  }
+  /* current_w/current_h are the desktop resolution here, because this is
+   * before the first SDL_SetVideoMode. Remember it so the zoom can be clamped
+   * to a window that actually fits on screen. */
+  if (vidinfo->current_w > 0 && vidinfo->current_h > 0) {
+    gfx_desktop_w = vidinfo->current_w;
+    gfx_desktop_h = vidinfo->current_h;
+  }
+  /* A stale or hand-edited config can carry a zoom too large for this display,
+   * which opens as an unusable black window (issue #12). Clamp it, and persist
+   * the corrected value so the config stops fighting us. */
+  if (!fullscreen) {
+    int clamped = gfx_clamp_zoom(cfg_zoom);
+    if (clamped != cfg_zoom) {
+      char val[8];
+      cfg_zoom = clamped;
+      charwidth = (cfg_columns == 40 ? 8 : 4) * cfg_zoom;
+      charheight = 8 * cfg_zoom;
+      gfx_width = cfg_zoom * GFX_WIDTH;
+      gfx_height = cfg_zoom * GFX_HEIGHT;
+      snprintf(val, sizeof(val), "%d", cfg_zoom);
+      cfg_save_setting("zoom", val);
+    }
   }
   if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, (SDL_FULLSCREEN * fullscreen)|(fullscreen ? 0 : SDL_RESIZABLE)|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
     printf("Unable to open window: %s\n", SDL_GetError());
@@ -1063,8 +1115,8 @@ void gfx_set_zoom(int zoom) {
   int old_zoom = cfg_zoom;
   SDL_Surface *newscreen;
 
-  if (zoom < 1 || zoom > 8) return;
-  if (cfg_columns == 80 && (zoom & 1)) return;   /* 80 columns needs 4*zoom pixel cells */
+  if (zoom < 1) return;
+  zoom = gfx_clamp_zoom(zoom);   /* keep the window on-screen and column-valid */
 
   cfg_zoom = zoom;
   charwidth = (cfg_columns == 40 ? 8 : 4) * cfg_zoom;
@@ -1524,6 +1576,7 @@ void gfx_handle_resize(int w, int h) {
   }
   if (z < 1) z = 1;
   if (z > 8) z = 8;
+  if (z > gfx_max_zoom()) z = gfx_max_zoom();   /* never grow past the display (issue #12) */
   if (cfg_columns == 80 && (z & 1)) z = (z > 1) ? z - 1 : 2;
   want_h = z * GFX_HEIGHT + gfx_status_rows * 8 * z;
   if (z != cfg_zoom || w != z * GFX_WIDTH || h != want_h) {
@@ -1533,5 +1586,16 @@ void gfx_handle_resize(int w, int h) {
       snprintf(val, sizeof(val), "%d", cfg_zoom);
       cfg_save_setting("zoom", val);
     }
+  }
+}
+
+
+/* Re-present the entire window after the OS discarded its contents — e.g. the
+ * window was raised from behind another, un-minimized, or regained focus after
+ * an alt-tab. The pixels are intact in the software surface, so a full-surface
+ * UpdateRect simply pushes them back to the display (GitHub issue #11). */
+void gfx_force_redraw(void) {
+  if (gfx_screen) {
+    SDL_UpdateRect(gfx_screen, 0, 0, 0, 0);   /* 0,0,0,0 == whole surface */
   }
 }

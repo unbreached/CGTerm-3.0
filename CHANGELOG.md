@@ -3,6 +3,15 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── REPORTED FIXES · NOVEMBER 2026 ───
+
+[!]Window no longer opens as an unusable black rectangle when a saved zoom is too large for the display: the zoom is clamped to what actually fits and the stored value is corrected (#12)
+[!]Window is repainted after alt-tab or being uncovered, instead of staying blank until the next change (#11)
+[+]Commodore+Shift (Alt+Shift) now switches the display charset case straight from the terminal, like a real C64 — no trip through the menu (#9)
+[+]Local echo shows its ON/OFF state in the menu, so you can see the setting before you connect (#7)
+
+Thanks to mrdudz for the careful bug reports that drove these fixes.
+
 ─── SECURITY & STABILITY · NOVEMBER 2026 ───
 
 [!]Fixed a heap overflow when switching 40/80 columns at an odd zoom (the font surface and the dirty-line array were sized with a stale character height)

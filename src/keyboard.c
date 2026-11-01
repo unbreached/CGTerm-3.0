@@ -412,10 +412,34 @@ int kbd_getkey() {
             case SDL_VIDEORESIZE:
                 gfx_handle_resize(event.resize.w, event.resize.h);
                 break;
-                
+
+            case SDL_VIDEOEXPOSE:
+                /* Window uncovered/redraw requested by the WM. */
+                gfx_force_redraw();
+                break;
+
+            case SDL_ACTIVEEVENT:
+                /* Regained focus/visibility (e.g. after alt-tab): the window
+                 * contents were lost, so repaint the whole surface. */
+                if (event.active.gain) {
+                    gfx_force_redraw();
+                }
+                break;
+
             case SDL_KEYDOWN:
                 
                 if (kbd_focus == FOCUS_TERM) {
+                    /* Commodore+Shift (Alt+Shift) flips the display charset case,
+                     * just like it does on a real C64 — handy when a board leaves
+                     * you in the wrong case. PETSCII mode only; fires the moment
+                     * the second modifier goes down. (GitHub issue #9) */
+                    if (cfg_termmode == 0 &&
+                        (event.key.keysym.mod & KMOD_ALT) && (event.key.keysym.mod & KMOD_SHIFT) &&
+                        (event.key.keysym.sym == SDLK_LSHIFT || event.key.keysym.sym == SDLK_RSHIFT ||
+                         event.key.keysym.sym == SDLK_LALT   || event.key.keysym.sym == SDLK_RALT)) {
+                        gfx_toggle_font();
+                        return 0;
+                    }
                     /* Ctrl+ESC or Alt+ESC sends ESC byte to BBS (for ANSI mode) */
                     if (event.key.keysym.sym == SDLK_ESCAPE &&
                         ((event.key.keysym.mod & KMOD_CTRL) || (event.key.keysym.mod & KMOD_ALT))) {
