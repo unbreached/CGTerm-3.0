@@ -26,7 +26,7 @@ are replaced:
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
 | `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 49d7b71acc3da4af5acab82d9e8c612b0f5e09c83fc23ccf566ee13d323c8be0 |
-| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 4555c7b1d97bb587a768d05304593d131406290ac7c299a84b98a4be10ca17f4 |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 9e6566659a3c6c3cda695362e3d55d5e43dca6dae356b3f9441c31c76269eede |
 | `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | 04f2134e28351f744ac4296e7cd25ba8ff2213ebf75da63448729cb1f41dc2ae |
 
 The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
