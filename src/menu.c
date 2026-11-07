@@ -706,8 +706,10 @@ char *dir[] = {
 };
 
 
-/* Stored state for the transfer progress display */
-static char xfer_disp_filename[32];
+/* Stored state for the transfer progress display. A C*Base multi-punter
+ * announcement can carry more than a bare 16-char C64 name, so keep enough
+ * room that the shown name is not clipped mid-filename. */
+static char xfer_disp_filename[64];
 static char xfer_disp_direction[16];
 static char xfer_disp_protocol[16];
 

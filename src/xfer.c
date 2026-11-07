@@ -744,10 +744,14 @@ signed int xfer_recv_byte_error(int timeout, int errorcnt) {
   return(c);
 }
 
-/* ftell can exceed INT_MAX for a >2 GiB local file; a bare (int) cast would
- * wrap negative and corrupt the progress math. Clamp it. */
-static int xfer_clamp_filesize(long sz) {
-  if (sz < 0 || sz > XFER_MAX_DOWNLOAD) return 0;
+/* Upload size clamp. Uploads must NOT be clamped to the *download* cap: the
+ * Punter/Multi-Punter/Rainbow send loops drive off xfer_file_size, so zeroing
+ * a legitimate local file here would make them transmit an empty file while
+ * XMODEM (which reads to EOF) still worked. Only guard against a negative or
+ * past-INT_MAX ftell. */
+static int xfer_clamp_upload_size(long sz) {
+  if (sz < 0) return 0;
+  if (sz > 0x7fffffff) return 0x7fffffff;
   return (int)sz;
 }
 
@@ -1054,7 +1058,7 @@ int xfer_send(const char *filename, const unsigned char *rawname) {
       gfx_vbl();
       return 0;
     }
-    xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
+    xfer_file_size = xfer_clamp_upload_size(ftell(xfer_sendfile));
     fseek(xfer_sendfile, 0, SEEK_SET);
     punter_send_filetype = punter_filetype_from_name(filename);
 
@@ -1587,7 +1591,7 @@ void xfer_send_multipunter(FileSelector *fs) {
         de = de->next;
         continue;
       }
-      xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
+      xfer_file_size = xfer_clamp_upload_size(ftell(xfer_sendfile));
       fseek(xfer_sendfile, 0, SEEK_SET);
       xfer_saved_bytes = 0;
       punter_send_filetype = punter_filetype_from_name(de->name);
@@ -1760,7 +1764,7 @@ void xfer_send_zmodem(FileSelector *fs) {
       continue;
     }
     fseek(xfer_sendfile, 0, SEEK_END);
-    xfer_file_size = xfer_clamp_filesize(ftell(xfer_sendfile));
+    xfer_file_size = xfer_clamp_upload_size(ftell(xfer_sendfile));
     fseek(xfer_sendfile, 0, SEEK_SET);
     xfer_saved_bytes = 0;
     t0 = timer_get_ticks();

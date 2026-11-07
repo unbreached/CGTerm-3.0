@@ -1,80 +1,64 @@
-# Website changes for the 3.0.2 release (www.cgterm.se)
+# Website changes for the 3.0.3 release (www.cgterm.se)
 
 The live page's source is not in this repository, so the text below is
 written to be pasted into the live page. Package file names stay
 `CGTerm-3.0-*` (matching the repo, the branding and the graphics); only
-the program version moves to 3.0.2.
+the program version moves to 3.0.3.
 
 ## 1. Version and credits (everywhere on the page)
 
-- Bump every version string to **3.0.2**: header badge "3.0.2", title
-  "CGTerm 3.0.2: Scene Edition", changelog heading
-  "CGTERM 3.0.2 / SCENE EDITION", footer
-  "CGTerm 3.0.2 · Genesis*Project · 2026".
+- Bump every version string to **3.0.3**: header badge "3.0.3", title
+  "CGTerm 3.0.3: Scene Edition", changelog heading
+  "CGTERM 3.0.3 / SCENE EDITION", footer
+  "CGTerm 3.0.3 · Genesis*Project · 2026".
 - Credits unchanged: Code **David "m00p" Jacoby (Genesis*Project)**,
   music Mr.Death, QA **Larry, Jucke, SkyHawk, hedning**.
-- Add a thank-you line for the bug reporters: **mrdudz** and
-  **THE-MrMicro** (GitHub issues). Optional but nice.
+- Thank-you for the reports stays: **mrdudz** and **THE-MrMicro**
+  (GitHub issues), and **Larry** (transfer testing).
 
 ## 2. Download files
 
-Upload the packages from the GitHub release `v3.0.2` (draft until
-published) under exactly the names the Download section links. The names
-do not change from 3.0.1, so existing links keep working once the files
-are replaced:
+Upload the packages from the GitHub release `v3.0.3` under exactly the
+names the Download section links. The names do not change from 3.0.2, so
+existing links keep working once the files are replaced:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
-| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 30ae47030e754bb613c6680cdb7f5e92ba45a58e78936fffea4bd386e058d27a |
-| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 4e5e5e5c750ef37eb5c6f0ce186d424f21523944ac987bd3f3a70c6d7479a3b9 |
-| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | 93040d3fe6d5a41caa2b3616f82fa59c253f0e8440bab6dd164a0ba30f2a5494 |
+| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | WIN32_SHA |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | MACOS_SHA |
+| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | SOURCE_SHA |
 
 The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 `tar xzf CGTerm-3.0-source.tar.gz` and `cd CGTerm-3.0`.
 
-## 3. Changelog: add this 3.0.2 block above the 3.0.1 block
+## 3. Changelog: add this 3.0.3 block above the 3.0.2 block
 
 ```
-─── 3.0.2 · november 2026 ───
+─── 3.0.3 · november 2026 ───
 
-Reported fixes (thanks to mrdudz and THE-MrMicro):
-[!] Auto-login ignores the colour/cursor/case codes boards sprinkle
-    through their prompts, so the expect text is just the letters you
-    see on screen. C*Base logins work now.
-[!] RUN/STOP (Tab) sends CHR$(3), so it actually aborts a listing or a
-    C*Base pause/more prompt.
-[!] A too-large saved zoom can no longer open the window as an unusable
-    black rectangle; the zoom is clamped to what fits the display.
-[!] The window repaints after alt-tab or being uncovered instead of
-    staying blank; dragging it no longer flickers.
-[+] Commodore+Shift (Alt+Shift) switches the display case from the
-    terminal, like a real C64.
-[+] Receive speed can be capped to an old-modem baud rate
-    (2400/1200/300 ...) in Options [R], so you can read the scroll.
-[+] Window scaling is selectable in Options [W]: smooth (fills any
-    window size) or crisp (snaps to whole zoom steps); the menu and the
-    offline logo scale with the window.
-[+] Ten editable text macros, fired with Cmd/Win+0-9 or from Options
-    [M]; stored as macro0..macro9, \r sends RETURN.
-[+] Bookmark notes editor has a real cursor (arrows, Home/End, Delete).
-[+] Options panel [O] is listed in the menu, local echo shows its
-    state, and every menu shares one colour scheme.
-[!] Plus a full security and stability pass (overflow, transfer
-    freezes, DoS and resource-leak fixes); detail in REVIEW-2026-10-31.md
-    in the source package.
+[!] PETSCII starts in upper case / graphics like a real C64 again, so
+    boards that do not send a case code first keep their graphics
+    instead of showing letters where graphics should be.
+[!] The "case = upper" / "case = lower" config setting now actually
+    sticks (it was being overwritten at startup), and Commodore+Shift
+    (Alt+Shift) still flips the case live from the terminal.
+[!] The keyboard profiles (mac-se-c64.kbd and friends) now ship in
+    assets/, so "cgterm -k assets/mac-se-c64.kbd" works as the README
+    says instead of failing to open the file.
+[!] Fixed an upload regression from 3.0.2: a Punter, Multi Punter or
+    Rainbow upload could send an empty file because the upload size was
+    clamped to the download limit. XMODEM was never affected.
+[!] The transfer window no longer clips a long announced filename.
 ```
 
 ## 4. Feature boxes: text to adjust
 
-- **UI**: replace the resize sentence with: "Drag the window to any
-  size: crisp mode snaps to whole zoom steps, smooth mode fills any
-  size. The menu and logo scale with the window."
-- **Sessions / Bookmarks**: add "Ten text macros on Cmd/Win+0-9, and a
-  cursor-editable notes field for auto-login scripts."
-- **Transfers**: add "Cap the receive speed to a retro baud rate so
-  message scroll stays readable."
+- **Terminal**: add "Starts in C64 upper/graphics case; set `case = lower`
+  in the config, or flip it live with Commodore+Shift."
+- **Keyboard**: "Pick a layout at startup, e.g.
+  `cgterm -k assets/mac-se-c64.kbd` (US/SE for mac, linux and windows)."
 
-## 5. Still true from 3.0.1 (leave as is, re-check once)
+## 5. Still true from 3.0.2 (leave as is, re-check once)
 
 - HTTPS still serves the "NO SIGNAL" placeholder with a self-signed
   cert; only `http://cgterm.se` has the site. Point the TLS vhost at the

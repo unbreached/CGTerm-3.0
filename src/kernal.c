@@ -4,6 +4,7 @@
 #include "keyboard.h"
 #include "kernal.h"
 #include "sound.h"
+#include "config.h"
 
 
 unsigned char screencode[256];
@@ -33,7 +34,7 @@ int kernal_init(void) {
   enableshiftcbm = 1;
   rvson = 0;
 
-  gfx_setfont(1);
+  gfx_setfont(cfg_case);   /* 0 = upper/graphics like a real C64 at power-on; config "case" overrides */
   gfx_bgcolor(0);
   ffd2(154);
   ffd2(147);
