@@ -24,9 +24,9 @@ existing links keep working once the files are replaced:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
-| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | WIN32_SHA |
-| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | MACOS_SHA |
-| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | SOURCE_SHA |
+| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 9b6d309664aa09c0c6dc7f6da3b6a46030541eed0e15bc4b92e7f5f75b9d96c2 |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 20864dfd8e0c056bebf9f4e468e69dd34c8533932ab1c211803e6173e443a62e |
+| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | f2e4684a74ed74de16d08477b8be80abac8c6eb573f07fdd3dd5732626f29821 |
 
 The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 `tar xzf CGTerm-3.0-source.tar.gz` and `cd CGTerm-3.0`.
