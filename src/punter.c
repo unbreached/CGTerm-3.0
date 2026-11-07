@@ -441,43 +441,43 @@ static void punter_build_checksum(unsigned char *buf, int len) {
  * where the BBS (receiver) speaks first.
  */
 static int punter_wait_handshake(char *waitstring, char *sendstring) {
-  char p[4];
-  int bytecnt;
-  int errorcnt = 20;
   signed int c;
+  int errorcnt = 20;   /* quiet gaps tolerated (a board writing to a 1541 is slow) */
+  int pos = 0;
+  int scanned = 0;
 
-  while (errorcnt-- > 0 && !xfer_cancel) {
-    memset(p, 0, 4);
-    bytecnt = 0;
-
-    while (bytecnt < 3) {
-      c = xfer_recv_byte(3000);
-      if (c < 0) {
-        break;
-      }
-      p[bytecnt++] = (char)c;
+  /* Scan the incoming stream byte-by-byte for waitstring, discarding stray
+   * bytes and resynchronising on a mismatch — exactly like the download side's
+   * ACK scan and punter_scan_for_string(). The previous version read rigid
+   * 3-byte groups and compared them, so a single stray byte around the GOO/ACK
+   * or SYN exchange (status-screen output, a prompt character, a late byte from
+   * the prior block) misaligned every following group and failed the whole
+   * upload. A real board emits such bytes; the clean scripted test and
+   * single-byte XMODEM never do, which is why download and XMODEM worked while
+   * Punter / Multi Punter uploads did not. Byte scanning also subsumes the old
+   * rotated-ACK (CKA/KAC) special case: "ACK" is matched wherever it appears. */
+  while (!xfer_cancel) {
+    c = xfer_recv_byte(3000);
+    if (c == -2) {
+      return 0;          /* disconnected */
     }
-
-    if (bytecnt == 3) {
-      p[3] = 0;
-      if (strcmp(waitstring, p) == 0) {
+    if (c < 0) {
+      if (--errorcnt <= 0) {
+        return 0;        /* ~60 s of silence: give up */
+      }
+      pos = 0;           /* a real gap resets any partial match */
+      continue;
+    }
+    if ((char)c == waitstring[pos]) {
+      if (++pos == 3) {
         punter_send_string(sendstring);
         return 1;
       }
-      /* Handle rotated ACK variants */
-      if (strcmp("ACK", waitstring) == 0) {
-        if (strcmp("CKA", p) == 0) {
-          xfer_recv_byte(100);
-          xfer_recv_byte(100);
-          punter_send_string(sendstring);
-          return 1;
-        }
-        if (strcmp("KAC", p) == 0) {
-          xfer_recv_byte(100);
-          punter_send_string(sendstring);
-          return 1;
-        }
-      }
+    } else {
+      pos = ((char)c == waitstring[0]) ? 1 : 0;
+    }
+    if (++scanned > 4096) {
+      return 0;          /* bound a junk flood so this can't spin forever */
     }
   }
   return 0;

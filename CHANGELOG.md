@@ -3,6 +3,12 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── 3.0.4 · NOVEMBER 2026 ───
+
+[!]Punter and Multi Punter uploads work on real boards again. The handshake that waits for the board's GOO/ACK/SYN read the stream in rigid 3-byte groups, so the moment a board printed any status byte around the transfer the groups misaligned and the whole upload failed. It now scans the byte stream for the handshake word and skips stray bytes, the way the download path, the Rainbow block start and the block S/B wait already do (XMODEM waits on single bytes, which is why XMODEM upload and all downloads were never affected). Added a regression test with a noisy scripted C*Base receiver that reproduced the failure
+
+Thanks to Larry for the upload report.
+
 ─── 3.0.3 · NOVEMBER 2026 ───
 
 [!]The "case = upper" / "case = lower" setting in the config file now actually takes effect: it was read at startup and then overwritten by a hardcoded case switch, so the setting did nothing. The startup default is unchanged (lower/upper case, which is what PETSCII boards expect); you can now select upper/graphics in the config if you want it, or flip the case live from the terminal with Commodore+Shift (Alt+Shift)

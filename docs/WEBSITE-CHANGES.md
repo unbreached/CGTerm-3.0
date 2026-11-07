@@ -1,16 +1,16 @@
-# Website changes for the 3.0.3 release (www.cgterm.se)
+# Website changes for the 3.0.4 release (www.cgterm.se)
 
 The live page's source is not in this repository, so the text below is
 written to be pasted into the live page. Package file names stay
 `CGTerm-3.0-*` (matching the repo, the branding and the graphics); only
-the program version moves to 3.0.3.
+the program version moves to 3.0.4.
 
 ## 1. Version and credits (everywhere on the page)
 
-- Bump every version string to **3.0.3**: header badge "3.0.3", title
-  "CGTerm 3.0.3: Scene Edition", changelog heading
-  "CGTERM 3.0.3 / SCENE EDITION", footer
-  "CGTerm 3.0.3 · Genesis*Project · 2026".
+- Bump every version string to **3.0.4**: header badge "3.0.4", title
+  "CGTerm 3.0.4: Scene Edition", changelog heading
+  "CGTERM 3.0.4 / SCENE EDITION", footer
+  "CGTerm 3.0.4 · Genesis*Project · 2026".
 - Credits unchanged: Code **David "m00p" Jacoby (Genesis*Project)**,
   music Mr.Death, QA **Larry, Jucke, SkyHawk, hedning**.
 - Thank-you for the reports stays: **mrdudz** and **THE-MrMicro**
@@ -18,9 +18,9 @@ the program version moves to 3.0.3.
 
 ## 2. Download files
 
-Upload the packages from the GitHub release `v3.0.3` under exactly the
-names the Download section links. The names do not change from 3.0.2, so
-existing links keep working once the files are replaced:
+Upload the packages from the GitHub release `v3.0.4` under exactly the
+names the Download section links. The names do not change, so existing
+links keep working once the files are replaced:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
@@ -31,7 +31,17 @@ existing links keep working once the files are replaced:
 The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 `tar xzf CGTerm-3.0-source.tar.gz` and `cd CGTerm-3.0`.
 
-## 3. Changelog: add this 3.0.3 block above the 3.0.2 block
+## 3. Changelog: add this 3.0.4 block above the 3.0.3 block
+
+```
+─── 3.0.4 · november 2026 ───
+
+[!] Punter and Multi Punter uploads work on real boards again. The
+    handshake that waits for the board read fixed 3-byte groups, so any
+    status byte the board printed around the transfer knocked it out of
+    sync and the upload failed. It now scans the stream and skips stray
+    bytes. Downloads and XMODEM were never affected.
+```
 
 ```
 ─── 3.0.3 · november 2026 ───

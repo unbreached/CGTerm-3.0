@@ -29,7 +29,7 @@
 
 
 #ifndef CGTERM_VERSION
-#define CGTERM_VERSION "3.0.3"
+#define CGTERM_VERSION "3.0.4"
 #endif
 
 int sendcrlf = 0;

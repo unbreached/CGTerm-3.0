@@ -179,7 +179,18 @@ static int mp_checksum_ok(const unsigned char *b, int len) {
   for (i = 4; i < len; i++) { ck += b[i]; clc ^= b[i]; clc = (clc << 1) | (clc >> 15); }
   return ck == (b[0] | (b[1] << 8)) && clc == (b[2] | (b[3] << 8));
 }
-static void mp_send(const char *s) { feed((const unsigned char *)s, 3); }
+static int mp_noisy = 0;
+static void mp_send(const char *s) {
+  if (mp_noisy) {
+    /* A real board prints status text to the user between protocol bytes. Inject
+       a couple of stray bytes (count NOT a multiple of 3, so a rigid 3-byte read
+       desyncs) before each 3-byte response, to mimic that. A correct scanner
+       skips them; the old fixed-window reader fails the upload. */
+    static const unsigned char noise[2] = { '.', ' ' };
+    feed(noise, 2);
+  }
+  feed((const unsigned char *)s, 3);
+}
 /* states: 0 wait TAB, 1 reading name, 2 wait ACK(after GOO) phase1, 3 wait S/B? no: we send S/B and read 8 bytes (state 3 = reading block),
  * 4 wait ACK after GOO (block accepted), 5 wait SYN, 6 wait S/B (end of SYN exchange), 7 wait ACK (phase 2 GOO),
  * 8 reading header/data block, 9 wait ACK after GOO for data block, 10 wait SYN (final), 11 wait S/B (final) */
@@ -333,6 +344,12 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   { int sz[3] = {494, 248, 1}; run_multipunter_send("3 files (494, 248, 1 bytes)", 3, sz, 0); }
   { int sz[1] = {3000}; run_multipunter_send("1 file, one block rejected with BAD then resent", 1, sz, 1); }
   { int sz[2] = {0, 100}; run_multipunter_send("empty file followed by a normal one", 2, sz, 0); }
+  /* Real boards emit status bytes around the handshake. This fails on the old
+     rigid 3-byte read (the Punter/Multi Punter upload bug) and passes once
+     punter_wait_handshake scans for its string. */
+  mp_noisy = 1;
+  { int sz[2] = {494, 200}; run_multipunter_send("stray status bytes around every handshake (real board)", 2, sz, 0); }
+  mp_noisy = 0;
 
   printf("\n%s (%d failures)\n", fails ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED", fails);
   return fails != 0;
