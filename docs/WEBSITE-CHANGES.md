@@ -36,12 +36,11 @@ The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 ```
 ─── 3.0.3 · november 2026 ───
 
-[!] PETSCII starts in upper case / graphics like a real C64 again, so
-    boards that do not send a case code first keep their graphics
-    instead of showing letters where graphics should be.
 [!] The "case = upper" / "case = lower" config setting now actually
-    sticks (it was being overwritten at startup), and Commodore+Shift
-    (Alt+Shift) still flips the case live from the terminal.
+    sticks (it was being overwritten at startup and did nothing). The
+    default is unchanged (lower/upper, what PETSCII boards expect); you
+    can now pick upper/graphics in the config, or flip the case live
+    with Commodore+Shift (Alt+Shift).
 [!] The keyboard profiles (mac-se-c64.kbd and friends) now ship in
     assets/, so "cgterm -k assets/mac-se-c64.kbd" works as the README
     says instead of failing to open the file.
@@ -53,8 +52,8 @@ The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 
 ## 4. Feature boxes: text to adjust
 
-- **Terminal**: add "Starts in C64 upper/graphics case; set `case = lower`
-  in the config, or flip it live with Commodore+Shift."
+- **Terminal**: add "Pick the display case: set `case = upper` or
+  `case = lower` in the config, or flip it live with Commodore+Shift."
 - **Keyboard**: "Pick a layout at startup, e.g.
   `cgterm -k assets/mac-se-c64.kbd` (US/SE for mac, linux and windows)."
 

@@ -37,7 +37,7 @@ extern int cfg_termmode;
 extern int cfg_bookmark_termmode[];
 extern char cfg_connect_name[];
 extern int cfg_charset;  /* 0=standard, 1=swedish, 2=german */
-extern int cfg_case;     /* 0=upper/graphics (C64 power-on default), 1=lower/upper */
+extern int cfg_case;     /* 1=lower/upper (default, what PETSCII boards expect), 0=upper/graphics */
 extern int cfg_statusline;    /* show the status row under the terminal */
 extern int cfg_autozmodem;    /* start a ZMODEM receive when the board sends ZRQINIT */
 extern int cfg_lastprotocol;  /* Protocol enum value preselected in the transfer menu */

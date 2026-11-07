@@ -89,7 +89,7 @@ char cfg_screendir[256];
 int cfg_termmode = 0;
 char cfg_connect_name[128] = "";
 int cfg_charset = 0;
-int cfg_case = 0;   /* 0 = upper/graphics (real C64 power-on), 1 = lower/upper */
+int cfg_case = 1;   /* 1 = lower/upper (CGTerm default, what PETSCII boards expect), 0 = upper/graphics */
 int cfg_bookmark_termmode[40];
 char cfg_macros[10][256];   /* text macros, sent on Meta+0..9 (issue #8) */
 int cfg_smoothscale = 0;    /* 0 = crisp integer zoom, 1 = stretch to fill window (issue #1) */

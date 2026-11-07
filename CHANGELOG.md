@@ -5,8 +5,7 @@ Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
 ─── 3.0.3 · NOVEMBER 2026 ───
 
-[!]PETSCII now starts in upper case / graphics like a real C64 at power-on, instead of lower case. Boards that assume the C64 default and do not send a case code first (CHR$(142)) no longer render their shifted-letter graphics as plain letters
-[!]The "case = upper" / "case = lower" setting in the config file now actually takes effect: it was being read at startup and then overwritten by a hardcoded lower-case switch, so there was no way to pick the case. You can also flip it live from the terminal with Commodore+Shift (Alt+Shift)
+[!]The "case = upper" / "case = lower" setting in the config file now actually takes effect: it was read at startup and then overwritten by a hardcoded case switch, so the setting did nothing. The startup default is unchanged (lower/upper case, which is what PETSCII boards expect); you can now select upper/graphics in the config if you want it, or flip the case live from the terminal with Commodore+Shift (Alt+Shift)
 [!]The keyboard layout profiles (mac-se-c64.kbd, mac-us-c64.kbd, linux/win variants) now live in assets/ where the README and in-app help point, so "cgterm -k assets/mac-se-c64.kbd" works out of the box instead of failing to open
 [!]Uploads are no longer measured against the download size cap. A regression in the 3.0.2 hardening pass clamped the upload size to the 64 MB download limit and returned zero past it, which could make a Punter, Multi Punter or Rainbow upload send an empty file (XMODEM was not affected). Upload size is now bounded only by the integer range
 [!]The transfer progress window no longer clips a long announced filename (the stored name buffer was too small)

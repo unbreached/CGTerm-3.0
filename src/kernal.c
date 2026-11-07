@@ -34,7 +34,7 @@ int kernal_init(void) {
   enableshiftcbm = 1;
   rvson = 0;
 
-  gfx_setfont(cfg_case);   /* 0 = upper/graphics like a real C64 at power-on; config "case" overrides */
+  gfx_setfont(cfg_case);   /* default lower/upper (what PETSCII boards expect); config "case = upper" overrides */
   gfx_bgcolor(0);
   ffd2(154);
   ffd2(147);
