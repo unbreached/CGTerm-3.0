@@ -516,6 +516,49 @@ Robustness (gfx.c, font.c, keyboard.c, music.c, ui_edit.c, xfer.c)
   build with no warnings)
 
 
+--------------------------------------------------
+[ PATCH: 2026-11-08 // CASE, KEYBOARD, UPLOAD FIX  ]
+--------------------------------------------------
+
+Punter / Multi Punter Upload Fix (punter.c)
+-------------------------------------------
+- Uploads work on real boards again. The GOO/ACK/SYN
+  handshake read the stream in rigid 3-byte groups, so
+  any status byte a board prints around the transfer
+  knocked it out of sync and the upload failed (XMODEM
+  and all downloads were never affected)
+- Now scans the stream for the handshake word and skips
+  stray bytes, like the download path already does
+- Added a noisy scripted-receiver regression test that
+  reproduced the failure
+
+Display Case (kernal.c, config.c)
+---------------------------------
+- PETSCII starts in lower/upper case again, the default
+  that PETSCII boards expect (a brief build defaulted to
+  upper/graphics and garbled mixed-case board content)
+- The "case = upper" / "case = lower" config setting now
+  actually takes effect (it was overwritten at startup);
+  Commodore+Shift (Alt+Shift) still flips it live
+
+Keyboard Profiles (assets/)
+---------------------------
+- The mac/linux/win US+SE layouts now ship in assets/,
+  so "cgterm -k assets/mac-se-c64.kbd" works as the
+  [LAYOUTS] section above says instead of failing to open
+
+Transfer Filename Display (menu.c)
+----------------------------------
+- The progress window no longer clips a long announced
+  filename (the stored name buffer was too small)
+
+Upload Size (xfer.c)
+--------------------
+- Uploads are no longer measured against the download
+  size cap, which could make a Punter / Multi Punter /
+  Rainbow upload of a large file send an empty file
+
+
 TODO:
 - Add support for connection status
 - Add support for larger bookmarks
