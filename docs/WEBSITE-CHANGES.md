@@ -1,21 +1,21 @@
-# Website changes for the 3.0.5 release (www.cgterm.se)
+# Website changes for the 3.0.6 release (www.cgterm.se)
 
 The live page's source is not in this repository, so the text below is
 written to be pasted into the live page. Package file names stay
 `CGTerm-3.0-*` (matching the repo, the branding and the graphics); only
-the program version moves to 3.0.5.
+the program version moves to 3.0.6.
 
-Status: 3.0.5 passes the build, the test suite and the sanitizer runs on
-all three platforms' packages, but the transfer fixes have not yet been
-confirmed on a real board. Hold the site update until the GitHub release
-`v3.0.5` is published (it is created as a draft first).
+Status: 3.0.6 follows 3.0.5 by a few hours. If the page was not yet
+updated for 3.0.5, do everything below in one go; sections 3 to 5 cover
+both versions. 3.0.6 passes the build and the test suite for all three
+packages and is published as GitHub release `v3.0.6`.
 
 ## 1. Version and credits (everywhere on the page)
 
-- Bump every version string to **3.0.5**: header badge "3.0.5", title
-  "CGTerm 3.0.5: Scene Edition", changelog heading
-  "CGTERM 3.0.5 / SCENE EDITION", footer
-  "CGTerm 3.0.5 · Genesis*Project · 2026".
+- Bump every version string to **3.0.6**: header badge "3.0.6", title
+  "CGTerm 3.0.6: Scene Edition", changelog heading
+  "CGTERM 3.0.6 / SCENE EDITION", footer
+  "CGTerm 3.0.6 · Genesis*Project · 2026".
 - Credits unchanged: Code **David "m00p" Jacoby (Genesis*Project)**,
   music Mr.Death, QA **Larry, Jucke, SkyHawk, hedning**.
 - Thank-you for the reports stays: **mrdudz** and **THE-MrMicro**
@@ -23,27 +23,47 @@ confirmed on a real board. Hold the site update until the GitHub release
 
 ## 2. Download files
 
-Upload the packages from the GitHub release `v3.0.5` under exactly the
+Upload the packages from the GitHub release `v3.0.6` under exactly the
 names the Download section links. The names do not change, so existing
 links keep working once the files are replaced:
 
 | Link on the site | File | SHA-256 |
 |------------------|------|---------|
-| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 36fa0259a3cc2d850f1e1ee679c6f1da0bb2446c1d6f8b471412734cc934f992 |
-| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | d678bff805a9d075c80ed6082d5c380e21f77bca3fa715dbf43d3fea28fbed82 |
-| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | 547dad28acee34c8d839d25a38298c2840227804d683ca1a0f81b7af3e8400eb |
+| `./files/CGTerm-3.0-win32.zip` | CGTerm-3.0-win32.zip | 00cba976c6cef73d3d0dd7eff2713c0d463caf59186c2c733925a7c9a00a4d27 |
+| `./files/CGTerm-3.0-macos.zip` | CGTerm-3.0-macos.zip | 9e9273739af03e55d5b3775406f0504fb69dd8edbd60745c9fab1c150478162f |
+| `./files/CGTerm-3.0-source.tar.gz` | CGTerm-3.0-source.tar.gz | 5e84c59f5edb07ef5aecb75a57457ed30810bc8b4654e1da13be320f8c4b2019 |
 
 The release also carries a `SHA256SUMS` file with the same three sums;
 linking it next to the downloads is optional.
 
-Because the file names are the same as for 3.0.4, a browser or proxy may
+Because the file names are the same as for 3.0.4 and 3.0.5, a browser or proxy may
 serve the old file from cache. After uploading, download each file once
 and compare its SHA-256 with the table.
 
 The tarball unpacks to `CGTerm-3.0/`, so the Linux instructions stay
 `tar xzf CGTerm-3.0-source.tar.gz` and `cd CGTerm-3.0`.
 
-## 3. Changelog: add this 3.0.5 block above the 3.0.4 block
+## 3. Changelog: add the 3.0.6 block, then the 3.0.5 block, above the 3.0.4 block
+
+```
+─── 3.0.6 · november 2026 ───
+
+TRANSFERS (aligned with the C*Base board)
+[!] Files uploaded from a disk image keep their type. Every SEQ and
+    USR file used to go out as PRG (Punter, Multi Punter, Rainbow).
+[!] Multi Punter uploads start on C*Base. The file type letter was
+    sent as the wrong PETSCII byte, so the board could not create the
+    file and the upload never began.
+[!] Punter upload waits for the board while it writes a block to
+    disk, instead of giving up after 3 seconds.
+[!] Punter single upload repeats its start signal until the board
+    answers.
+[!] Multi Punter download notices at once when the board refuses a
+    file and ends the batch.
+[!] Rainbow upload answers the board's ready signal immediately.
+[!] XMODEM upload picks CRC or checksum from the receiver's latest
+    request; cancelling during the start tells the receiver.
+```
 
 ```
 ─── 3.0.5 · november 2026 ───
@@ -132,9 +152,9 @@ GitHub release notes.
 
 ## 6. Checklist for the web team
 
-1. Wait for the GitHub release `v3.0.5` to be published.
+1. Take the files from the GitHub release `v3.0.6`.
 2. Replace the three files under `./files/` and verify the SHA-256 sums.
 3. Bump the version strings (section 1).
-4. Paste the changelog block (section 3) above the 3.0.4 block.
+4. Paste the changelog blocks (section 3) above the 3.0.4 block.
 5. Apply the text changes in section 4, the macOS line in particular.
 6. Reload the page without cache and test all three download links.
