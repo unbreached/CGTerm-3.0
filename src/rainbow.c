@@ -7,6 +7,7 @@
 #include "menu.h"
 #include "xfer.h"
 #include "rainbow.h"
+#include "punter.h"
 #include "timer.h"
 
 #define RB_CAN 0xc1
@@ -127,6 +128,13 @@ static int rainbow_send_block(unsigned char blockno, const unsigned char *data, 
         if ((unsigned char)c == RB_CAN) {
           rainbow_fail("Rainbow: cancelled by remote");
           return 0;
+        }
+        if ((unsigned char)c == RB_GOO) {
+          /* The receiver is announcing that it is ready and has not seen
+           * our SOH (C*Base clears its input buffer when it starts). Answer
+           * at once; skipping the GOO restarted our 10 s wait each time, so
+           * the two sides could stay out of step until the board gave up. */
+          xfer_send_byte(RB_SOH);
         }
       }
       if (!got_ack) {
@@ -519,6 +527,14 @@ int rainbow_send(const char *filename) {
     } else if (strcasecmp(ext, ".rel") == 0) {
       filetype = 'R';
     }
+  }
+
+  /* A file sent from a disk image has no extension: use its directory type
+   * (xfer.c puts it in punter_send_filetype: 2 = SEQ, 3 = USR). */
+  if (punter_send_filetype == 2) {
+    filetype = 'S';
+  } else if (punter_send_filetype == 3) {
+    filetype = 'U';
   }
 
   block[0] = 0x01;

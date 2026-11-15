@@ -3,6 +3,17 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── 3.0.6 · NOVEMBER 2026 ───
+
+Transfers (aligned with the C*Base board after a protocol audit of both sides)
+[!]Files uploaded from a disk image keep their type. The type was read from the file name, which has no extension inside an image, so every SEQ and USR file went out as PRG (Punter, Multi Punter and Rainbow)
+[!]Multi Punter announces the file type as the letter the drive expects (,P ,S ,U) and always sends one. The lower-case letter used before is a different PETSCII byte: the board could not create the file and the upload never started. Names are cut to 16 characters and characters the drive treats as syntax are replaced
+[!]Punter upload waits for the board's verdict while it writes the block to disk. It used to give up after one quiet 3 s read, never acknowledged the late GOO, and the board aborted
+[!]Punter single upload repeats its start signal until the board answers, instead of sending it once
+[!]Multi Punter download: a board that refuses a file and ends the batch is recognised at once, instead of sending GOO for a minute
+[!]Rainbow upload answers the board's ready signal immediately, so the two sides can no longer stay out of step at the start
+[!]XMODEM upload uses the receiver's latest start request to choose CRC or checksum; cancelling while waiting for the receiver now tells it (CAN CAN)
+
 ─── 3.0.5 · NOVEMBER 2026 ───
 
 Transfers

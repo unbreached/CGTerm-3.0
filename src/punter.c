@@ -12,6 +12,7 @@
 
 int punter_last_filetype = 0;
 int punter_send_filetype = 1;   /* Punter file type: 1 = PRG, 2 = SEQ, 3 = USR (set by xfer.c) */
+int punter_batch_end_seen = 0;  /* set by punter_recv() when the board sent its end-of-batch marker */
 static int punter_last_block = -1;  /* last data block number saved (duplicate guard) */
 static int punter_scan_for_string(const char *target, int timeout_ms, int max_bytes);
 
@@ -263,6 +264,7 @@ int punter_recv(void) {
 
   menu_update_xfer_progress("Starting...", xfer_saved_bytes, 0);
   gfx_vbl();
+  punter_batch_end_seen = 0;
 
   /*
    * Initial handshake: send "GOO" repeatedly while consuming incoming
@@ -271,6 +273,7 @@ int punter_recv(void) {
   {
     int got_ack = 0;
     int ackpos = 0;
+    int eots = 0;
     signed int c;
     unsigned int last_goo_time = 0;
     unsigned int now;
@@ -296,6 +299,20 @@ int punter_recv(void) {
       if (c < 0) {
         continue;
       }
+
+      /* Multi Punter: a board that refuses the announced file (no credits,
+       * download limit) sends its end-of-batch marker, a run of $04, instead
+       * of starting Punter. Without this we sent GOO for a full minute and
+       * the letters landed in the board's prompt. */
+      if (c == 0x04) {
+        if (++eots >= 3) {
+          punter_batch_end_seen = 1;
+          punter_fail("Refused by the board");
+          return(0);
+        }
+        continue;
+      }
+      eots = 0;
 
       /* running match, so "AACK" and "ACACK" are still seen */
       if (c == "ACK"[ackpos]) {
@@ -531,11 +548,26 @@ static int punter_send_block(int len) {
       int total = 0;
       signed int c;
 
+      int quiet = 0;
+
       memset(resp, 0, 4);
       while (total < 64 && !xfer_cancel) {
         c = xfer_recv_byte(3000);
+        if (c == -2) {
+          punter_fail("Disconnected");
+          return 0;
+        }
         if (c < 0) {
-          break;
+          /* The board answers GOO/BAD only after it has written the block to
+           * disk and repeats it for about 23 s. Giving up after one quiet 3 s
+           * read sent us back to waiting for S/B, so a late GOO was never
+           * ACKed and the board aborted the upload. Wait as long as the board
+           * keeps trying. */
+          if (++quiet >= 9) {
+            break;
+          }
+          punter_retry("Waiting for receiver...");
+          continue;
         }
         total++;
         resp[pos++] = (char)c;
@@ -615,17 +647,55 @@ static int punter_send_internal(int send_presignal) {
    * to sys51008 (initrecv2). No pre-signal needed.
    */
 
-  if (send_presignal) {
-    /* Send GOO to signal the BBS we're ready to upload */
-    punter_send_string("GOO");
-  }
-
   /* Now BBS enters initrecv2 → recvblk → sends GOO, waits ACK */
 
   menu_update_xfer_progress("Waiting for BBS...", 0, xfer_file_size);
   gfx_vbl();
 
-  if (!punter_wait_handshake("GOO", "ACK")) {
+  if (send_presignal) {
+    /* Send GOO to signal the BBS we're ready to upload, and repeat it every
+     * 3 s until the board says anything: a single GOO that got lost left
+     * both sides waiting for each other until they timed out. The board
+     * leaves its wait loop on the first 'G', so repeats are harmless, and
+     * we stop repeating as soon as it starts talking. */
+    signed int c;
+    int pos = 0, tries = 20, heard = 0, scanned = 0, ok = 0;
+
+    punter_send_string("GOO");
+    while (!xfer_cancel) {
+      c = xfer_recv_byte(3000);
+      if (c == -2) {
+        break;
+      }
+      if (c < 0) {
+        if (--tries <= 0) {
+          break;
+        }
+        if (!heard) {
+          punter_send_string("GOO");
+        }
+        pos = 0;
+        continue;
+      }
+      heard = 1;
+      if ((char)c == "GOO"[pos]) {
+        if (++pos == 3) {
+          punter_send_string("ACK");
+          ok = 1;
+          break;
+        }
+      } else {
+        pos = ((char)c == 'G') ? 1 : 0;
+      }
+      if (++scanned > 4096) {
+        break;
+      }
+    }
+    if (!ok) {
+      punter_fail("Initial handshake failed");
+      return 0;
+    }
+  } else if (!punter_wait_handshake("GOO", "ACK")) {
     punter_fail("Initial handshake failed");
     return 0;
   }

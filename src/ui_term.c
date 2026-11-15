@@ -1316,7 +1316,10 @@ void select_send_file(FileSelector *fs) {
   if (fs->selectedfile->name == NULL) {
     return;
   }
+  /* from a disk image the file type is in the directory entry, not the name */
+  xfer_send_cbm_type = path_is_disk_image(cfg_xferdir) ? fs->selectedfile->type : 0;
   ok = xfer_send(fs->selectedfile->name, raw);
+  xfer_send_cbm_type = 0;
   /* Force full redraw of completion message */
   menu_cls();
   menu_draw_message(ok ? "Transfer complete. Press any key." : "Transfer failed. Press any key.");

@@ -299,7 +299,7 @@ static void run_multipunter_send(const char *label, int nfiles, const int *sizes
   printf("  [%s] files=%d batch_end=%d vclock=%us\n", label, mp_files, mp_batch_end, vclock / 1000);
   if (mp_files != nfiles || !mp_batch_end) ok = 0;
   for (i = 0; i < nfiles && ok; i++) {
-    char want[64]; snprintf(want, sizeof(want), "FILE%d,p", i);
+    char want[64]; snprintf(want, sizeof(want), "FILE%d,P", i);
     if (mp_rx_len[i] != sizes[i] || memcmp(mp_rx[i], data[i], sizes[i]) != 0) { printf("    file %d: got %d bytes, want %d\n", i, mp_rx_len[i], sizes[i]); ok = 0; }
     if (strcmp(mp_names[i], want) != 0) { printf("    file %d: announced as '%s', want '%s'\n", i, mp_names[i], want); ok = 0; }
     if (mp_filetypes[i] != 1) { printf("    file %d: filetype %d, want 1 (PRG)\n", i, mp_filetypes[i]); ok = 0; }

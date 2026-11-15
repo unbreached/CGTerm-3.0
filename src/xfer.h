@@ -40,6 +40,7 @@ struct fileselector;
 int xfer_recv(void);
 /* rawname: exact 16-byte PETSCII name when sending from inside a disk
  * image (may be NULL). Returns 1 on success. */
+extern int xfer_send_cbm_type;   /* CBM dir type of an upload from a disk image, 0 = unknown */
 int xfer_send(const char *filename, const unsigned char *rawname);
 void xfer_send_multipunter(struct fileselector *fs);
 void xfer_send_zmodem(struct fileselector *fs);

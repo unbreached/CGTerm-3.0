@@ -415,7 +415,8 @@ int xmodem_send(int send1k) {
         return 0;
       }
       if (xfer_cancel) {
-        xfer_progress_status("Canceled", 0, xfer_file_size);
+        /* tell the receiver, or it keeps sending NAKs for another minute */
+        xmodem_fail("Cancelled");
         return 0;
       }
       if (c == -1 && ++waited >= 60) {
@@ -427,7 +428,6 @@ int xmodem_send(int send1k) {
     }
   }
 
-  usecrc = (c == XM_C) ? 1 : 0;
   /* A receiver repeats its NAK / 'C' every few seconds while the user is
    * still picking a file. Purge the queued copies: each one used to be
    * taken as a NAK for block 1, the block went out several times, and the
@@ -435,9 +435,19 @@ int xmodem_send(int send1k) {
    * receiver had never acknowledged. */
   {
     int purged = 0;
-    while (xm_recv_byte_dbg(100) >= 0 && ++purged < 256) {
+    int p;
+    /* The LAST handshake byte is the receiver's current mode. A receiver
+     * that asks for CRC a few times and then falls back to checksum (C*Base
+     * does after 30 s) has both kinds queued if the user took a while to
+     * pick the file; taking the first one sent CRC blocks to a receiver that
+     * had already switched to checksum. */
+    while ((p = xm_recv_byte_dbg(100)) >= 0 && ++purged < 256) {
+      if (p == XM_C || p == XM_NAK) {
+        c = p;
+      }
     }
   }
+  usecrc = (c == XM_C) ? 1 : 0;
   XMDBG("[XMODEM] send negotiated mode=%s via %s\n", usecrc ? "CRC" : "CHECKSUM", xm_name(c));
 
   bytesleft = xfer_file_size;

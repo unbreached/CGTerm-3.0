@@ -591,6 +591,16 @@ static int multipunter_recv(void) {
     if (!punter_recv()) {
       xfer_cleanup_temp_download();
       xfer_batch_mode = 0;
+      if (punter_batch_end_seen) {
+        /* the board refused this file and ended the batch cleanly */
+        char endmsg[96];
+        snprintf(endmsg, sizeof(endmsg), "Board refused '%s' - %d file%s received",
+                 remote_name, filecount, filecount == 1 ? "" : "s");
+        menu_draw_message(endmsg);
+        menu_show();
+        gfx_vbl();
+        return filecount > 0;
+      }
       menu_draw_message("Multi Punter receive failed");
       menu_show();
       gfx_vbl();
@@ -1017,6 +1027,53 @@ int xfer_copy_from_image(char *imgname, const char *src, const unsigned char *ex
   return(1);
 }
 
+/* CBM directory type of the file being uploaded when it comes from a disk
+ * image (1 = SEQ, 2 = PRG, 3 = USR, 4 = REL), 0 when unknown (a host file).
+ * Set by the caller around xfer_send(). Image entries carry no ".seq"/",s"
+ * in their name, so without this every file from a disk image went out as
+ * PRG. */
+int xfer_send_cbm_type = 0;
+
+/* Punter filetype byte (1 = PRG, 2 = SEQ, 3 = USR) from a CBM directory type. */
+static int punter_filetype_from_cbm(int cbmtype) {
+  if (cbmtype == 1) return 2;
+  if (cbmtype == 3) return 3;
+  return 1;
+}
+
+/* Name announced to the board for one Multi Punter file: at most 16 name
+ * characters, then ",P" / ",S" / ",U". The type letter is upper case ASCII,
+ * which is the unshifted PETSCII letter CBM DOS expects (a lower case ASCII
+ * letter is a different PETSCII byte and the drive rejects it). Characters
+ * the board or the drive would treat as syntax are replaced. */
+static void multipunter_announce_name(const char *src, int strip_suffix, int ptype, char *out, size_t outsz) {
+  char base[256];
+  size_t len, n = 0;
+  const char *s;
+
+  snprintf(base, sizeof(base), "%s", src);
+  len = strlen(base);
+  if (strip_suffix && len >= 2 && base[len - 2] == ',') {
+    base[len - 2] = 0;
+  }
+  for (s = base; *s && n < 16 && n + 3 < outsz; s++) {
+    unsigned char ch = (unsigned char)*s;
+    if (ch < 0x20) {
+      continue;
+    }
+    if (ch == ',' || ch == ':' || ch == '*' || ch == '?' || ch == '=' || ch == '"') {
+      ch = '-';
+    }
+    out[n++] = (char)ch;
+  }
+  if (n == 0 && n + 3 < outsz) {
+    out[n++] = 'X';
+  }
+  out[n++] = ',';
+  out[n++] = (ptype == 2) ? 'S' : (ptype == 3) ? 'U' : 'P';
+  out[n] = 0;
+}
+
 /* Punter filetype byte for an upload, from the local name: ",s"/".seq" is
  * SEQ (2), ",u"/".usr" is USR (3), everything else PRG (1). */
 static int punter_filetype_from_name(const char *name) {
@@ -1078,7 +1135,8 @@ int xfer_send(const char *filename, const unsigned char *rawname) {
     }
     xfer_file_size = xfer_clamp_upload_size(ftell(xfer_sendfile));
     fseek(xfer_sendfile, 0, SEEK_SET);
-    punter_send_filetype = punter_filetype_from_name(filename);
+    punter_send_filetype = xfer_send_cbm_type ? punter_filetype_from_cbm(xfer_send_cbm_type)
+                                              : punter_filetype_from_name(filename);
 
     if (xfer_protocol == PROT_XMODEM) {
       ok = xmodem_send(0);
@@ -1631,19 +1689,23 @@ void xfer_send_multipunter(FileSelector *fs) {
       xfer_file_size = xfer_clamp_upload_size(ftell(xfer_sendfile));
       fseek(xfer_sendfile, 0, SEEK_SET);
       xfer_saved_bytes = 0;
-      punter_send_filetype = punter_filetype_from_name(de->name);
+      punter_send_filetype = from_image ? punter_filetype_from_cbm(de->type)
+                                        : punter_filetype_from_name(de->name);
 
-      /* Send file announcement: 0x09 + filename + \r */
+      /* Send file announcement: 0x09 + name + "," + type letter + \r */
       {
         char c64name[256];
         const char *s;
 
         if (from_image) {
-          /* D64 filenames are already PETSCII — send as-is */
-          snprintf(c64name, sizeof(c64name), "%s", de->name);
+          /* D64 filenames are already PETSCII; the type comes from the
+           * directory entry, not from the name */
+          multipunter_announce_name(de->name, 0, punter_send_filetype, c64name, sizeof(c64name));
         } else {
-          /* PC filesystem: convert .prg→,p etc. */
-          pc_to_c64_filename(de->name, c64name, sizeof(c64name));
+          /* PC filesystem: drop .prg/.seq/.usr (or a ",x" suffix), upper-case */
+          char tmp[256];
+          pc_to_c64_filename(de->name, tmp, sizeof(tmp));
+          multipunter_announce_name(tmp, 1, punter_send_filetype, c64name, sizeof(c64name));
         }
 
         dbg("MP-SEND: announcing '%s' as C64 name '%s' (%d/%d) from_image=%d\n",
@@ -1667,7 +1729,7 @@ void xfer_send_multipunter(FileSelector *fs) {
       dbg(" MP-SEND: file size=%d, calling punter_send_no_presignal\n", xfer_file_size);
 
       /* Punter send without the GOO pre-signal — the BBS already started
-       * initrecv2 after reading our filename announcement (bbs.bas line 3677) */
+       * initrecv2 after reading our filename announcement (bbs.bas line 3676) */
       send_result = punter_send_no_presignal();
       dbg(" MP-SEND: punter_send_no_presignal returned %d\n", send_result);
 
