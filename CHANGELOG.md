@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── 3.0.5 · NOVEMBER 2026 (not yet released) ───
+─── 3.0.5 · NOVEMBER 2026 ───
 
 Transfers
 [!]Rainbow uploads recover from a retry. The block sender consumed its own length and data pointer, so any resend (a NAK, a timeout, one stray byte from the board) went out with a bogus length and no data and the upload could never finish. Only an upload where every block was accepted first time worked. The reply after each block is now scanned for, so a status byte in front of the board's ACK no longer forces a resend
