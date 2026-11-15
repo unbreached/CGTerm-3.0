@@ -11,6 +11,7 @@
 #include <direct.h>
 #else
 #include <unistd.h>
+#include <fcntl.h>
 #endif
 #include "net.h"
 #include "timer.h"
@@ -41,6 +42,7 @@ static void dbg(const char *fmt, ...) {
     cfg_user_file(path, sizeof(path), "cgterm-debug.log");
     dbglog = fopen(path, "a");
     if (!dbglog) return;
+    cfg_make_private(dbglog);   /* the byte trace includes typed passwords */
     fprintf(dbglog, "\n=== NEW SESSION ===\n");
   }
   va_start(ap, fmt);
@@ -424,7 +426,11 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
   xfer_progress("Multi Punter: waiting for filename...");
   gfx_vbl();
 
-  /* Wait for first 0x09 (tab) — BBS sends multiple (typically 10) */
+  /* Wait for first 0x09 (tab) — BBS sends multiple (typically 10).
+   * Bounded: a board that never announces used to hold the transfer
+   * screen until the user pressed ESC. */
+  {
+  int quiet = 0;
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
     if (c == -2) {
@@ -432,6 +438,10 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
       return 0;
     }
     if (c < 0) {
+      if (++quiet >= 90) {
+        xfer_progress("No file announced by the board");
+        return 0;
+      }
       gfx_vbl();
       xfer_check_kbd();
       continue;
@@ -440,12 +450,15 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
       break;
     }
   }
+  }
 
   if (xfer_cancel) {
     return 0;
   }
 
   /* Consume any additional 0x09 bytes and 0x04 (EOT) markers */
+  {
+  int quiet = 0;
   while (!xfer_cancel) {
     c = xfer_recv_byte(1000);
     if (c == -2) {
@@ -453,6 +466,10 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
       return 0;
     }
     if (c < 0) {
+      if (++quiet >= 30) {
+        xfer_progress("Filename announcement timed out");
+        return 0;
+      }
       continue;
     }
     if (c == 0x04) {
@@ -467,6 +484,7 @@ static int multipunter_read_announcement(char *namebuf, size_t namebufsz, int *i
       namebuf[pos] = 0;
       break;
     }
+  }
   }
 
   if (xfer_cancel) {
@@ -1314,6 +1332,8 @@ static int xfer_validate_filename(const char *filename) {
       if (ch >= 'A' && ch <= 'Z') ch = (char)(ch - 'A' + 'a');
       stem[sl++] = ch;
     }
+    /* Windows ignores trailing spaces here: "CON .txt" is still CON */
+    while (sl > 0 && stem[sl - 1] == ' ') sl--;
     stem[sl] = 0;
 
     if (strcmp(stem, "con") == 0 || strcmp(stem, "prn") == 0 ||
@@ -1364,6 +1384,12 @@ int xfer_save_file_in_dir(char *filename) {
 
   /* Create safe copy of filename */
   snprintf(safe_filename, sizeof(safe_filename), "%.240s", filename);
+  /* A board must not be able to drop a dotfile (".profile", ".bashrc")
+   * into the download directory: such names are hidden and some are read
+   * by shells and tools. Keep the file, lose the leading dot. */
+  if (safe_filename[0] == '.') {
+    safe_filename[0] = '_';
+  }
 
   if ((from = fopen(xfer_tempdlname, "rb")) == NULL) {
     menu_draw_message("Couldn't open temp file!");
@@ -1407,7 +1433,18 @@ int xfer_save_file_in_dir(char *filename) {
     }
   }
 
+#ifdef WINDOWS
   to = fopen(name, "wb");
+#else
+  /* Exclusive create, no symlink following: the probe above and this open
+   * are not atomic, so without O_EXCL a file or symlink planted in between
+   * would be overwritten or written through. */
+  {
+    int fd = open(name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
+    to = (fd >= 0) ? fdopen(fd, "wb") : NULL;
+    if (fd >= 0 && to == NULL) close(fd);
+  }
+#endif
   if (to == NULL) {
     fclose(from);
     menu_draw_message("Couldn't write file!");
@@ -1651,8 +1688,14 @@ void xfer_send_multipunter(FileSelector *fs) {
        * be writing to disk and sending status bytes. */
       {
         int drain_pass;
-        for (drain_pass = 0; drain_pass < 3; drain_pass++) {
-          timer_delay(1500);
+        for (drain_pass = 0; drain_pass < 3 && !xfer_cancel; drain_pass++) {
+          /* same 1.5 s wait, in slices, so ESC and the window stay alive */
+          int slice;
+          for (slice = 0; slice < 15 && !xfer_cancel; slice++) {
+            timer_delay(100);
+            xfer_check_kbd();
+            gfx_vbl();
+          }
           while (net_receive_raw() >= 0) { /* drain */ }
         }
         dbg("MP-SEND: drain complete after file %d\n", filecount);
@@ -1779,12 +1822,14 @@ void xfer_send_zmodem(FileSelector *fs) {
       fclose(xfer_sendfile);
       xfer_sendfile = NULL;
       xfer_log_result("send", de->name, r ? (long)xfer_file_size : (long)xfer_saved_bytes,
-                      timer_get_ticks() - t0, r ? "ok" : (xfer_cancel ? "cancelled" : "FAILED"));
-      if (r) {
+                      timer_get_ticks() - t0, r == 2 ? "skipped" : r ? "ok" : (xfer_cancel ? "cancelled" : "FAILED"));
+      if (r == 1) {
         filecount++;
-      } else {
+      } else if (r == 0) {
         ok = 0;
       }
+      /* r == 2: the receiver skipped it (already has the file): not an
+       * error, but not "sent" either */
     }
     if (deletetmp) xfer_cleanup_temp_upload();
   }

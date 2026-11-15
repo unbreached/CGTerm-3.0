@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "net.h"
+#include "config.h"
 #include "clipboard.h"
 
 #ifdef WINDOWS
@@ -30,8 +31,13 @@ static int utf8_need = 0;
  * convention), keep printable ASCII and TAB, drop other controls.
  * Returns -1 to emit nothing. */
 static int paste_translate_ascii(unsigned char c) {
-  if (c >= 'A' && c <= 'Z') return c + 32;
-  if (c >= 'a' && c <= 'z') return c - 32;
+  /* The case swap is a PETSCII convention only. An ANSI board takes plain
+   * ASCII, like typed keys do; swapping there sent "Secret" as "sECRET"
+   * and broke pasted text, macros and auto-login passwords. */
+  if (cfg_termmode != 1) {
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    if (c >= 'a' && c <= 'z') return c - 32;
+  }
   if (c < 32 && c != '\t') return -1;
   if (c >= 127) return -1;
   return c;

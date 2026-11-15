@@ -16,6 +16,7 @@ int cfg_transferlog = 0;
 char cfg_connect_name[128] = "";
 char *cfg_host = NULL;
 void cfg_user_file(char *out, size_t sz, const char *name) { snprintf(out, sz, "/tmp/%s", name); }
+void cfg_make_private(FILE *f) { (void)f; }
 char cfg_dldir[256] = "/tmp";
 char cfg_xferdir[256] = "/tmp";
 Focus kbd_focus;
@@ -104,6 +105,8 @@ static void run_xmodem_recv(const char *label, int usecrc, int ignoreC, int corr
 static unsigned char pfile[4096]; static int pfile_len;
 static int ps_sb, ps_blk, ps_resend_once, ps_last_sent, ps_done;
 static char ps_acc[4];
+static int ps_noisy;   /* stray bytes before every 3-letter reply, like a real board's status output */
+static void ps_word(const char *w) { if (ps_noisy) feed((const unsigned char *)"A.", 2); feed((const unsigned char *)w, 3); }
 static void ps_build(unsigned char *buf, int datalen, int blknum, int nextsize) {
   unsigned short ck = 0, clc = 0; int i; int len = datalen + 7;
   buf[4] = (unsigned char)nextsize; buf[5] = blknum & 0xff; buf[6] = (blknum >> 8) & 0xff;
@@ -121,15 +124,15 @@ static void ps_send_data_block(int blk) {
 static void ps_peer(unsigned char c) {
   unsigned char buf[16];
   ps_acc[0] = ps_acc[1]; ps_acc[1] = ps_acc[2]; ps_acc[2] = (char)c; ps_acc[3] = 0;
-  if (strcmp(ps_acc, "GOO") == 0 || strcmp(ps_acc, "BAD") == 0) { feed((const unsigned char *)"ACK", 3); memset(ps_acc, 0, 4); return; }
-  if (strcmp(ps_acc, "SYN") == 0) { feed((const unsigned char *)"S/B", 3); memset(ps_acc, 0, 4); return; }
+  if (strcmp(ps_acc, "GOO") == 0 || strcmp(ps_acc, "BAD") == 0) { ps_word("ACK"); memset(ps_acc, 0, 4); return; }
+  if (strcmp(ps_acc, "SYN") == 0) { ps_word("S/B"); memset(ps_acc, 0, 4); return; }
   if (strcmp(ps_acc, "S/B") != 0) return;
   memset(ps_acc, 0, 4);
   ps_sb++;
   if (ps_sb == 1) { memset(buf, 0, 8); buf[7] = 2; ps_build(buf, 1, 0xffff, 0); feed(buf, 8); return; }
-  if (ps_sb == 2) { feed((const unsigned char *)"SYN", 3); return; }
+  if (ps_sb == 2) { ps_word("SYN"); return; }
   if (ps_sb == 3) { memset(buf, 0, 7); ps_build(buf, 0, 0, ps_datalen(1) + 7); feed(buf, 7); ps_blk = 1; return; }
-  if (ps_done) { feed((const unsigned char *)"SYN", 3); return; }
+  if (ps_done) { ps_word("SYN"); return; }
   if (ps_resend_once && ps_last_sent == 1) { ps_resend_once = 0; ps_send_data_block(1); return; }  /* sender missed our GOO: same block again */
   ps_send_data_block(ps_blk++);
 }
@@ -155,6 +158,7 @@ static void xr_peer(unsigned char c) {
   if (n == 133) { /* SOH blk ~blk 128 crc2 */
     unsigned short crc = crc16_calc(blk + 3, 128), rc = (blk[131] << 8) | blk[132];
     if (blk[0] == 1 && blk[1] == (xr_expect & 0xff) && crc == rc) { memcpy(xr_data + xr_datalen, blk + 3, 128); xr_datalen += 128; xr_expect++; feedb(0x06); }
+    else if (blk[0] == 1 && blk[1] == ((xr_expect - 1) & 0xff) && crc == rc) feedb(0x06);   /* duplicate: ACK again, like a real receiver */
     else feedb(0x15);
     n = 0;
   }
@@ -304,6 +308,93 @@ static void run_multipunter_send(const char *label, int nfiles, const int *sizes
   for (i = 0; i < nfiles; i++) free(ents[i].name);
 }
 
+/* ---------------- Rainbow upload: scripted receiver ----------------
+ * SOH -> ACK, then blk ~blk len ~len data EOD sum ~sum -> ACK / NAK.
+ * rb_nak_block: reject that block once (forces one retry).
+ * rb_noisy: print a stray status byte before every reply. */
+static unsigned char rb_rx[8192]; static int rb_rx_len, rb_state, rb_pos, rb_expect, rb_eot;
+static int rb_nak_block, rb_nak_done, rb_noisy, rb_blocks;
+static unsigned char rb_blk[300];
+static void rb_reply(int c) { if (rb_noisy) feedb('.'); feedb(c); }
+static void rb_peer(unsigned char c) {
+  if (rb_eot) return;
+  if (rb_state == 0) {
+    if (c == 0x89) { rb_reply(0x81); rb_state = 1; rb_pos = 0; }
+    else if (c == 0xa1) { rb_reply(0x81); rb_eot = 1; }
+    return;
+  }
+  rb_blk[rb_pos++] = c;
+  if (rb_pos == 4 && ((rb_blk[0] ^ rb_blk[1]) != 0xff || (rb_blk[2] ^ rb_blk[3]) != 0xff)) { rb_state = 0; rb_reply(0x83); return; }
+  if (rb_pos >= 4 && rb_pos == 4 + rb_blk[2] + 3) {
+    int len = rb_blk[2], i; unsigned char sum = 0;
+    for (i = 0; i < len; i++) sum += rb_blk[4 + i];
+    rb_state = 0;
+    if (rb_blk[4 + len] != 0x91 || rb_blk[5 + len] != sum || (rb_blk[5 + len] ^ rb_blk[6 + len]) != 0xff) { rb_reply(0x85); return; }
+    if (rb_blk[0] == rb_nak_block && !rb_nak_done) { rb_nak_done = 1; rb_reply(0x85); return; }
+    if (rb_blk[0] == (unsigned char)(rb_expect - 1)) { rb_reply(0x81); return; }   /* duplicate */
+    if (rb_blk[0] != (unsigned char)rb_expect) { rb_reply(0x83); return; }
+    if (rb_expect > 0) { memcpy(rb_rx + rb_rx_len, rb_blk + 4, len); rb_rx_len += len; }
+    rb_expect++; rb_blocks++;
+    rb_reply(0x81);
+  }
+}
+static void run_rainbow_send(const char *label, int len, int nak_block, int noisy) {
+  static unsigned char data[8192]; int rc, i; FILE *f;
+  peer_reset();
+  for (i = 0; i < len; i++) data[i] = (unsigned char)(i * 17 + 3);
+  f = fopen("/tmp/cgt-rb.prg", "wb"); fwrite(data, 1, len, f); fclose(f);
+  rb_rx_len = 0; rb_state = 0; rb_pos = 0; rb_expect = 0; rb_eot = 0; rb_blocks = 0;
+  rb_nak_block = nak_block; rb_nak_done = (nak_block < 0); rb_noisy = noisy;
+  snprintf(cfg_xferdir, 256, "/tmp");
+  peer_on_byte = rb_peer;
+  xfer_protocol = PROT_RAINBOW; xfer_direction = DIR_SEND;
+  rc = xfer_send("cgt-rb.prg", NULL);
+  printf("  [%s] rc=%d got=%d blocks=%d eot=%d vclock=%us\n", label, rc, rb_rx_len, rb_blocks, rb_eot, vclock / 1000);
+  CHECK(rc == 1 && rb_eot && rb_rx_len == len && memcmp(rb_rx, data, len) == 0, label);
+}
+
+/* ---------------- Rainbow download: scripted sender ----------------
+ * Waits for GOO, then SOH -> (ACK) -> block -> (ACK), EOT at the end.
+ * rs_corrupt_block: send that block once with a bad header whose payload
+ * contains protocol bytes (EOT, CAN, SOH) so a receiver that fails to drain
+ * the rest of the block misreads them as control bytes. */
+static unsigned char rs_file[4096]; static int rs_len, rs_blk, rs_state, rs_corrupt_block, rs_corrupt_done, rs_done;
+static void rs_send_block(void) {
+  unsigned char b[300]; int len, i, n = 0; unsigned char sum = 0; int bad = 0;
+  if (rs_blk == 0) { b[4] = 1; b[5] = 2; b[6] = 0; b[7] = 'P'; b[8] = 0; len = 5; }
+  else { int off = (rs_blk - 1) * 255; len = rs_len - off; if (len > 255) len = 255; memcpy(b + 4, rs_file + off, len); }
+  b[0] = (unsigned char)rs_blk; b[1] = 0xff ^ b[0]; b[2] = (unsigned char)len; b[3] = 0xff ^ b[2];
+  for (i = 0; i < len; i++) sum += b[4 + i];
+  if (rs_blk == rs_corrupt_block && !rs_corrupt_done) { rs_corrupt_done = 1; bad = 1; }
+  if (bad) b[3] ^= 0x40;   /* broken length complement: the whole payload is left in flight */
+  n = 4 + len; b[n++] = 0x91; b[n++] = sum; b[n++] = 0xff ^ sum;
+  feed(b, n);
+}
+static void rs_peer(unsigned char c) {
+  if (rs_done) return;
+  switch (rs_state) {
+  case 0: if (c == 0x83) { feedb(0x89); rs_state = 1; } break;          /* GOO -> SOH */
+  case 1: if (c == 0x81) { rs_send_block(); rs_state = 2; } break;      /* ACK -> block */
+  case 2:                                                               /* block verdict */
+    if (c == 0x81) { rs_blk++; }
+    else if (c != 0x83 && c != 0x85) break;
+    if ((rs_blk - 1) * 255 >= rs_len && rs_blk > 0) { feedb(0xa1); rs_done = 1; }
+    else { feedb(0x89); rs_state = 1; }
+    break;
+  }
+}
+static void run_rainbow_recv(const char *label, int len, int corrupt_block) {
+  int rc, i;
+  peer_reset();
+  rs_len = len; for (i = 0; i < len; i++) rs_file[i] = (unsigned char)((i % 3 == 0) ? 0xa1 : (i % 3 == 1) ? 0xc1 : 0x89);
+  rs_blk = 0; rs_state = 0; rs_done = 0; rs_corrupt_block = corrupt_block; rs_corrupt_done = (corrupt_block < 0);
+  peer_on_byte = rs_peer;
+  xfer_protocol = PROT_RAINBOW; xfer_direction = DIR_RECV;
+  rc = xfer_recv();
+  printf("  [%s] rc=%d saved=%d vclock=%us\n", label, rc, xfer_saved_bytes, vclock / 1000);
+  CHECK(rc == 1 && xfer_saved_bytes == len && tempfile_matches(rs_file, len), label);
+}
+
 int main(int argc, char **argv) { (void)argc; (void)argv;
   int rc, i;
   crc_init();
@@ -329,6 +420,14 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
   rc = xfer_send("cgt-up.bin", NULL);
   CHECK(rc == 1 && xr_got_eot && xr_datalen == 384 && memcmp(xr_data, xfile, 300) == 0, "CRC send delivers the file and EOT");
+  /* The receiver repeated 'C' while the user picked a file. The queued
+     copies used to be read as NAKs, and the duplicate ACKs then made the
+     sender skip blocks the receiver never got. */
+  peer_reset(); xr_state = 0; xr_expect = 1; xr_got_eot = 0; xr_datalen = 0; peer_on_byte = xr_peer;
+  feedb('C'); feedb('C'); feedb('C'); feedb('C');
+  xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
+  rc = xfer_send("cgt-up.bin", NULL);
+  CHECK(rc == 1 && xr_got_eot && xr_datalen == 384 && memcmp(xr_data, xfile, 300) == 0, "queued start bytes do not desync the send");
   peer_reset(); disconnected = 1; xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
   rc = xfer_send("cgt-up.bin", NULL); CHECK(rc == 0 && vclock < 20000, "send to a dead socket fails fast");
   peer_reset(); xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
@@ -339,6 +438,11 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   run_punter_recv("248 bytes: last block carries 1 data byte", 248, 0);
   run_punter_recv("1 byte file", 1, 0);
   run_punter_recv("block 1 retransmitted (lost GOO)", 500, 1);
+  /* Fails on the old rigid 3-byte punter_handshake: one stray byte before
+     SYN or S/B misaligned every following group. */
+  ps_noisy = 1;
+  run_punter_recv("stray status bytes before every handshake word", 600, 0);
+  ps_noisy = 0;
 
   puts("[Multi Punter upload to a C*Base-style receiver]");
   { int sz[3] = {494, 248, 1}; run_multipunter_send("3 files (494, 248, 1 bytes)", 3, sz, 0); }
@@ -350,6 +454,17 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   mp_noisy = 1;
   { int sz[2] = {494, 200}; run_multipunter_send("stray status bytes around every handshake (real board)", 2, sz, 0); }
   mp_noisy = 0;
+
+  puts("[Rainbow upload]");
+  run_rainbow_send("clean, 600 bytes", 600, -1, 0);
+  run_rainbow_send("block 2 rejected once with NAK, then resent", 600, 2, 0);
+  run_rainbow_send("header block rejected once", 300, 0, 0);
+  run_rainbow_send("stray status byte before every reply", 600, -1, 1);
+  run_rainbow_send("empty file", 0, -1, 0);
+
+  puts("[Rainbow download]");
+  run_rainbow_recv("clean, 600 bytes of protocol-looking payload", 600, -1);
+  run_rainbow_recv("block 1 corrupted once: rest of block must be drained", 600, 1);
 
   printf("\n%s (%d failures)\n", fails ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED", fails);
   return fails != 0;

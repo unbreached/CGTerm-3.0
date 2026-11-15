@@ -20,7 +20,9 @@
 #include <errno.h>
 #include <time.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <SDL.h>
+#include <SDL_thread.h>
 #include "net.h"
 #include "config.h"
 #include "gfx.h"
@@ -62,6 +64,11 @@ signed int buflen;
 
 void (*net_status)(int, char *);
 
+/* Called whenever a connection starts or ends, so the application can drop
+ * anything still queued for the old peer (paste queue, login script). Left
+ * NULL by programs that have no such state (cgchat, the tests). */
+void (*net_session_reset_hook)(void) = NULL;
+
 /* Persistent Telnet IAC parser state, so an IAC sequence split across
  * recv() boundaries resumes correctly on the next net_receive() call
  * instead of desynchronising and leaking the command byte as data. */
@@ -74,12 +81,32 @@ static int tn_sb_iter = 0;      /* subnegotiation byte counter (abuse cap) */
 static int net_telnet_seen = 0; /* peer negotiated Telnet -> escape outgoing 0xFF,
                                    un-escape incoming IAC IAC (also in raw mode) */
 static int tn_pushback = -1;    /* one byte held back for the next read (raw-peer 0xFF) */
+static int tn_data_bytes = 0;   /* data bytes delivered since connect (detection window) */
+static int tn_replies = 0;      /* negotiation replies sent this connection (flood cap) */
+static int tn_sb_first = -1;    /* first data byte of the current subnegotiation */
+
+/* A Telnet server negotiates at the very start of the connection. A raw
+ * C64 board never does, but its PETSCII art can contain pi (0xFF) followed
+ * by a graphics byte 0xFA-0xFE, which looks exactly like IAC SB/WILL/WONT/
+ * DO/DONT. Honouring that latched Telnet mode for the rest of the session
+ * and corrupted every later binary transfer (outgoing 0xFF doubled,
+ * incoming 0xFF pairs eaten). So in PETSCII mode a first negotiation is
+ * only believed inside this many data bytes from connect. */
+#define TN_DETECT_WINDOW 512
+#define TN_MAX_REPLIES 256
+
+static int tn_may_start(void) {
+  return net_telnet_seen || cfg_termmode == 1 || tn_data_bytes < TN_DETECT_WINDOW;
+}
 
 static void net_reset_telnet(void) {
   tn_state = TN_DATA;
   tn_cmd = tn_sb_opt = tn_sb_prev = tn_sb_iter = 0;
   net_telnet_seen = 0;
   tn_pushback = -1;
+  tn_data_bytes = 0;
+  tn_replies = 0;
+  tn_sb_first = -1;
 }
 
 static signed int net_raw_byte(void);
@@ -147,6 +174,134 @@ static void net_address_string(const struct sockaddr *sa, socklen_t len, char *o
   }
 }
 
+/* Text for a socket error. Winsock does not set errno and strerror() knows
+ * nothing about WSA codes, so Windows users saw "No error" for a refused
+ * connection. */
+static const char *net_errstr(int err) {
+#if defined(__WIN32__) || defined(WIN32) || defined(WINDOWS)
+  static char buf[48];
+  switch (err) {
+  case WSAECONNREFUSED: return "Connection refused";
+  case WSAETIMEDOUT:    return "Connection timed out";
+  case WSAENETUNREACH:  return "Network unreachable";
+  case WSAEHOSTUNREACH: return "Host unreachable";
+  case WSAECONNRESET:   return "Connection reset by peer";
+  case WSAECONNABORTED: return "Connection aborted";
+  case WSAENETDOWN:     return "Network is down";
+  case 0:               return "Connection failed";
+  default:
+    snprintf(buf, sizeof(buf), "Socket error %d", err);
+    return buf;
+  }
+#else
+  return err ? strerror(err) : "Connection failed";
+#endif
+}
+
+static int net_lasterr(void) {
+#if defined(__WIN32__) || defined(WIN32) || defined(WINDOWS)
+  return WSAGetLastError();
+#else
+  return errno;
+#endif
+}
+
+/* ---- Hostname lookup on a worker thread ----
+ * getaddrinfo() can block for the whole resolver timeout (tens of seconds
+ * with a dead DNS server). Run on the UI thread it froze the window with no
+ * way to cancel, and again on every automatic redial. The job is heap
+ * allocated and owned by whoever finishes last: if the user cancels, the
+ * thread frees it when the lookup finally returns. */
+typedef struct {
+  char host[256];
+  char port[16];
+  struct addrinfo hints;
+  struct addrinfo *result;
+  int rc;
+  int done;
+  int abandoned;
+  SDL_mutex *lock;
+} ResolveJob;
+
+static int net_resolve_thread(void *arg) {
+  ResolveJob *job = (ResolveJob *)arg;
+  struct addrinfo *res = NULL;
+  int rc = getaddrinfo(job->host, job->port, &job->hints, &res);
+  int abandoned;
+
+  SDL_mutexP(job->lock);
+  job->rc = rc;
+  job->result = res;
+  job->done = 1;
+  abandoned = job->abandoned;
+  SDL_mutexV(job->lock);
+  if (abandoned) {
+    if (res) freeaddrinfo(res);
+    SDL_DestroyMutex(job->lock);
+    free(job);
+  }
+  return 0;
+}
+
+/* Returns 0 with *out set, 1 on failure, 2 if the user pressed ESC. */
+static int net_resolve(const char *host, const char *port, const struct addrinfo *hints, struct addrinfo **out) {
+  ResolveJob *job = calloc(1, sizeof(*job));
+  SDL_Thread *th;
+  int rc;
+
+  *out = NULL;
+  if (!job) return 1;
+  snprintf(job->host, sizeof(job->host), "%s", host);
+  snprintf(job->port, sizeof(job->port), "%s", port);
+  job->hints = *hints;
+  job->lock = SDL_CreateMutex();
+  th = job->lock ? SDL_CreateThread(net_resolve_thread, job) : NULL;
+  if (!th) {
+    /* no thread available: fall back to the blocking call */
+    if (job->lock) SDL_DestroyMutex(job->lock);
+    free(job);
+    return (getaddrinfo(host, port, hints, out) != 0 || *out == NULL) ? 1 : 0;
+  }
+
+  for (;;) {
+    SDL_Event ev;
+    int done, cancel = 0;
+
+    SDL_mutexP(job->lock);
+    done = job->done;
+    SDL_mutexV(job->lock);
+    if (done) break;
+
+    while (SDL_PollEvent(&ev)) {
+      if (ev.type == SDL_QUIT) exit(0);
+      if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) cancel = 1;
+    }
+    if (cancel) {
+      SDL_mutexP(job->lock);
+      if (!job->done) {
+        job->abandoned = 1;      /* the thread cleans up when it returns */
+        SDL_mutexV(job->lock);
+        return 2;
+      }
+      SDL_mutexV(job->lock);
+      break;
+    }
+    gfx_vbl();
+    SDL_Delay(20);
+  }
+
+  SDL_WaitThread(th, NULL);
+  rc = job->rc;
+  *out = job->result;
+  SDL_DestroyMutex(job->lock);
+  free(job);
+  if (rc != 0 || *out == NULL) {
+    if (*out) { freeaddrinfo(*out); *out = NULL; }
+    return 1;
+  }
+  return 0;
+}
+
 /* Non-blocking connect to one address with a 10 s limit and ESC to cancel.
  * Returns 0 connected (conn set), 1 failed (conn closed), 2 cancelled. */
 static int net_try_connect(const struct addrinfo *ai) {
@@ -183,7 +338,7 @@ static int net_try_connect(const struct addrinfo *ai) {
 #endif
     if (!inprogress) {
       /* Immediate failure (network unreachable, no route, ...) */
-      if (net_status) net_status(2, strerror(errno));
+      if (net_status) net_status(2, (char *)net_errstr(net_lasterr()));
       CLOSESOCKET(conn);
       conn = INVALID_SOCKET;
       return 1;
@@ -214,7 +369,7 @@ static int net_try_connect(const struct addrinfo *ai) {
           return 0;
         }
         /* Connect failed: say why (refused, unreachable, ...) */
-        if (net_status) net_status(2, err ? strerror(err) : "Connection failed");
+        if (net_status) net_status(2, (char *)net_errstr(err));
         CLOSESOCKET(conn);
         conn = INVALID_SOCKET;
         return 1;
@@ -262,6 +417,7 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
   if (ISCONNECTED()) {
     net_disconnect();
   }
+  if (net_session_reset_hook) net_session_reset_hook();
 #if !defined(__WIN32__) && !defined(WINDOWS)
   /* A write to a socket the peer already reset must not kill the process. */
   signal(SIGPIPE, SIG_IGN);
@@ -295,10 +451,12 @@ int net_connect(const char *host, int port, void (*status)(int, char *)) {
 #endif
   snprintf(port_str, sizeof(port_str), "%d", port);
   if (net_status) net_status(0, "Resolving...");
-  if (getaddrinfo(host, port_str, &hints, &result) != 0 || result == NULL) {
-    if (net_status) net_status(2, "Hostname resolution failed");
-    if (result) freeaddrinfo(result);
-    return(1);
+  {
+    int rr = net_resolve(host, port_str, &hints, &result);
+    if (rr != 0) {
+      if (net_status) net_status(2, rr == 2 ? "Cancelled" : "Hostname resolution failed");
+      return(1);
+    }
   }
 
   /* IPv4 first: most boards are IPv4-only and a stale AAAA record is a
@@ -368,7 +526,7 @@ static signed int net_raw_byte(void) {
       if (WOULDBLOCK() || errno == EINTR) {
 	return(-1);
       } else {
-	if (net_status) net_status(2, strerror(errno));
+	if (net_status) net_status(2, (char *)net_errstr(net_lasterr()));
 	net_disconnect();
 	return(-2);
       }
@@ -419,7 +577,10 @@ static signed int net_telnet_byte(void) {
     case TN_DATA:
       c = net_raw_byte();
       if (c < 0) return c;
-      if (c != 0xFF) return c;
+      if (c != 0xFF) {
+        if (tn_data_bytes < TN_DETECT_WINDOW) ++tn_data_bytes;
+        return c;
+      }
       tn_state = TN_IAC;
       break;
 
@@ -434,11 +595,11 @@ static signed int net_telnet_byte(void) {
           tn_pushback = 0xFF;
         }
         return 0xFF;          /* escaped 0xFF literal */
-      } else if (c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) {
+      } else if ((c == 0xFB || c == 0xFC || c == 0xFD || c == 0xFE) && tn_may_start()) {
         net_telnet_seen = 1;   /* real negotiation: peer speaks Telnet */
         tn_cmd = c;            /* WILL / WONT / DO / DONT */
         tn_state = TN_OPT;
-      } else if (c == 0xFA) {
+      } else if (c == 0xFA && tn_may_start()) {
         net_telnet_seen = 1;
         tn_state = TN_SB_OPT; /* subnegotiation */
       } else if (c >= 0xF0 && net_telnet_seen) {
@@ -464,11 +625,13 @@ static signed int net_telnet_byte(void) {
           /* Terminal Type / NAWS / Binary / SGA — we support these */
           response[1] = 0xFB; /* WILL */
         }
-        if (!already) {
+        if (!already && tn_replies < TN_MAX_REPLIES) {
+          ++tn_replies;
           net_write(response, 3);   /* an answer to our own offer needs no echo */
         }
-        if (c == 0x1F) {
-          /* Send window size now that NAWS was agreed */
+        if (c == 0x1F && !tn_naws_agreed) {
+          /* Send window size now that NAWS was agreed (once: a peer
+           * repeating DO NAWS must not get a 9-byte reply every time) */
           tn_naws_agreed = 1;
           net_send_naws_sb();
         }
@@ -479,7 +642,8 @@ static signed int net_telnet_byte(void) {
           /* Echo or Suppress Go Ahead — accept */
           response[1] = 0xFD; /* DO */
         }
-        if (!(c == 0x03 && tn_offered_sga)) {
+        if (!(c == 0x03 && tn_offered_sga) && tn_replies < TN_MAX_REPLIES) {
+          ++tn_replies;
           net_write(response, 3);
         }
       }
@@ -493,6 +657,7 @@ static signed int net_telnet_byte(void) {
       tn_sb_opt = c;
       tn_sb_prev = 0;
       tn_sb_iter = 0;
+      tn_sb_first = -1;
       tn_state = TN_SB_DATA;
       break;
 
@@ -502,7 +667,9 @@ static signed int net_telnet_byte(void) {
       if (c < 0) return c;
       if (tn_sb_prev == 0xFF && c == 0xF0) {
         /* Respond to Terminal Type request (option 24, SEND=1) */
-        if (tn_sb_opt == 0x18) {
+        /* ...and only to an actual SEND, within the reply budget */
+        if (tn_sb_opt == 0x18 && tn_sb_first == 0x01 && tn_replies < TN_MAX_REPLIES) {
+          ++tn_replies;
           /* CBM identifies us as a C64 client in PETSCII mode; ANSI otherwise */
           const char *ttype = cfg_termmode == 1 ? "ANSI" : "CBM";
           unsigned char resp[64];
@@ -521,6 +688,7 @@ static signed int net_telnet_byte(void) {
       } else if (tn_sb_prev == 0xFF && c == 0xFF) {
         tn_sb_prev = 0;   /* escaped 0xFF inside the subnegotiation data */
       } else {
+        if (tn_sb_iter == 0) tn_sb_first = c;
         tn_sb_prev = c;
         if (++tn_sb_iter >= 4096) {
           /* Unterminated subnegotiation — treat as protocol abuse. */
@@ -566,6 +734,7 @@ void net_disconnect(void) {
     conn = INVALID_SOCKET;
     buflen = 0;
     net_reset_telnet();
+    if (net_session_reset_hook) net_session_reset_hook();
     cfg_connect_name[0] = 0;
     gfx_set_title("CGTerm [DISCONNECTED]");
   }

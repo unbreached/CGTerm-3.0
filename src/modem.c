@@ -4,6 +4,7 @@
 #include <math.h>
 #include <time.h>
 #include <SDL.h>
+#include "version.h"
 #include "sound.h"
 #include "music.h"
 #include "kernal.h"
@@ -404,10 +405,10 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
     ffd2(0x12);  /* reverse on */
     print(" com1: 9600,8,n,1 ");
     {
-      int pad = cfg_columns - 18 - 11;
+      int pad = cfg_columns - 18 - (int)(sizeof("cgterm " CGTERM_VERSION " ") - 1);
       for (si = 0; si < pad; si++) ffd2(' ');
     }
-    print("cgterm 3.1 ");
+    print("cgterm " CGTERM_VERSION " ");
     ffd2(0x92);  /* reverse off */
     gfx_setcursxy(0, 0);
     gfx_vbl();
@@ -424,7 +425,7 @@ int modem_connect(const char *host, int port, void (*status)(int, char *)) {
   ffd2(0x9f); print("r");  /* cyan */
   ffd2(0x1f); print("m");  /* blue */
   ffd2(0x05); /* white */
-  print(" terminal v3.1\x0d");
+  print(" terminal v" CGTERM_VERSION "\x0d");
 
   /* Separator line — full width */
   {

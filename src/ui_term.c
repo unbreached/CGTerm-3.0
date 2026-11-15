@@ -1338,7 +1338,26 @@ void select_send_zmodem(FileSelector *fs) {
 
 /* The board started sending with ZMODEM (ZRQINIT seen in the stream):
  * receive straight away, files are saved under their own names. */
+/* 0 = not asked on this connection, 1 = accepted, -1 = declined */
+static int zmodem_auto_answer = 0;
+
+void ui_autostart_reset(void) {
+  zmodem_auto_answer = 0;
+}
+
 void ui_autostart_zmodem(void) {
+  /* Anyone who can post a ZRQINIT header in a message base can trigger
+   * this for every reader, and the receive saves remote-named files. So
+   * the first offer on each connection needs a yes; a "no" silences
+   * auto-start until the next connection (a manual download still works). */
+  if (zmodem_auto_answer == 0) {
+    zmodem_auto_answer = fs_confirm("ZMODEM download offered. Accept? (Y/N)") ? 1 : -1;
+    menu_hide();
+  }
+  if (zmodem_auto_answer < 0) {
+    kbd_focus = FOCUS_TERM;
+    return;
+  }
   xfer_protocol = PROT_ZMODEM;
   xfer_direction = DIR_RECV;
   if (xfer_recv()) {
@@ -1760,6 +1779,12 @@ void ui_metakey(SDL_keysym *keysym) {
     break;
 
   case SDLK_q:
+    /* one stray key in the menu must not drop a live session */
+    if (net_connected() && !fs_confirm("Connected. Quit anyway? (Y/N)")) {
+      menu_hide();
+      kbd_focus = FOCUS_TERM;
+      break;
+    }
     gfx_crt_shutdown();
     exit(0);
     break;

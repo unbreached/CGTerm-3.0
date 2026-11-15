@@ -28,9 +28,7 @@
 #include "clipboard.h"
 
 
-#ifndef CGTERM_VERSION
-#define CGTERM_VERSION "3.0.4"
-#endif
+#include "version.h"
 
 int sendcrlf = 0;
 static int was_connected = 0;
@@ -102,6 +100,16 @@ static unsigned char main_getkey(void) {
     return 0;
   }
   return (unsigned char)kk;
+}
+
+/* A connection started or ended: drop whatever was still queued for the
+ * old peer. Without this the tail of a paste or of an auto-login "s:" step
+ * (a password) was sent to the next board that answered, including an
+ * automatic redial. */
+static void session_reset(void) {
+  clipboard_paste_clear();
+  login_abort();
+  ui_autostart_reset();
 }
 
 int main(int argc, char *argv[]) {
@@ -390,6 +398,16 @@ int main(int argc, char *argv[]) {
     }
   }
   atexit(session_capture_close);
+  net_session_reset_hook = session_reset;
+
+  /* Bad config lines are skipped, not fatal; say so on screen, since stdout
+   * is invisible when started from Finder or Explorer. */
+  if (cfg_warnings > 0) {
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Config: %d bad line%s ignored, check the config file",
+             cfg_warnings, cfg_warnings == 1 ? "" : "s");
+    menu_draw_message_timed(msg, 4000);
+  }
 
 
   for (;;) {
@@ -477,6 +495,8 @@ int main(int argc, char *argv[]) {
     if (k || c >= 0) {
 
       if (k) {
+	/* typing returns the view to the live screen */
+	if (gfx_offset != gfx_maxoffset) gfx_set_offset(gfx_maxoffset);
 	net_send(k);
 	lastsend = timer_get_ticks();
 	if (k == 13 && sendcrlf) {
@@ -491,7 +511,6 @@ int main(int argc, char *argv[]) {
       if (c >= 0) {
 	if (cfg_autozmodem && session_zmodem_sentinel(c)) {
 	  /* the board started a ZMODEM send: answer it without a menu trip */
-	  print("\x0d\x9e" "zMODEM DOWNLOAD...\x05\x0d");
 	  ui_autostart_zmodem();
 	  continue;
 	}
@@ -506,7 +525,7 @@ int main(int argc, char *argv[]) {
 
     } else {
 
-      timer_delay(1);
+      timer_delay(4);   /* idle: 250 wakeups/s is plenty, 1000 kept laptops awake */
 
     }
 

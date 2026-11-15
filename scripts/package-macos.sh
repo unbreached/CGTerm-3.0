@@ -13,7 +13,18 @@ MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 LIBS="$APP/Contents/libs"
 
-echo "[*] Building binaries..."
+# Version: single-sourced from src/version.h
+VERSION="$(sed -n 's/^#define CGTERM_VERSION "\(.*\)"/\1/p' "$ROOT_DIR/src/version.h")"
+[ -n "$VERSION" ] || { echo "[!] could not read the version from src/version.h"; exit 1; }
+echo "[*] CGTerm $VERSION"
+
+# Oldest macOS our own binaries should run on. The bundled Homebrew dylibs
+# are built for the build machine's macOS and usually need something newer;
+# the real minimum is worked out below and written into Info.plist.
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+
+echo "[*] Building binaries (deployment target $MACOSX_DEPLOYMENT_TARGET)..."
+make -C "$ROOT_DIR" clean >/dev/null
 make -C "$ROOT_DIR" >/dev/null
 
 echo "[*] Creating bundle layout..."
@@ -35,7 +46,7 @@ if [ -f "$ROOT_DIR/assets/AppIcon.icns" ]; then
   cp "$ROOT_DIR/assets/AppIcon.icns" "$RES/AppIcon.icns"
 fi
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -44,8 +55,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>CGTerm</string>
   <key>CFBundleExecutable</key><string>CGTerm</string>
   <key>CFBundleIdentifier</key><string>com.cgterm.app</string>
-  <key>CFBundleVersion</key><string>3.0.4</string>
-  <key>CFBundleShortVersionString</key><string>3.0.4</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -88,6 +99,28 @@ if strings "$LIBS/libSDL2-2.0.0.dylib" | grep -q "libSDL3.dylib"; then
   cp "$SDL3_SRC" "$LIBS/libSDL3.dylib"
   chmod u+w "$LIBS/libSDL3.dylib"
   install_name_tool -id "@loader_path/libSDL3.dylib" "$LIBS/libSDL3.dylib" 2> >(quiet_sig)
+fi
+
+# Info.plist used to claim macOS 11.0 while every binary in the bundle was
+# stamped for the build machine's macOS (minos 26.0), so on anything older
+# the app just failed to launch. Declare the real minimum: the highest
+# "minos" of anything we ship. macOS then says "requires macOS N or later"
+# instead of dying silently.
+REAL_MIN="0"
+for bin in "$MACOS"/* "$LIBS"/*.dylib; do
+  m="$(otool -l "$bin" 2>/dev/null | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')"
+  [ -n "$m" ] || continue
+  if [ "$(printf '%s\n%s\n' "$REAL_MIN" "$m" | sort -V | tail -1)" = "$m" ]; then REAL_MIN="$m"; fi
+done
+if [ "$REAL_MIN" != "0" ]; then
+  /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $REAL_MIN" "$APP/Contents/Info.plist"
+  echo "[*] Minimum macOS for this bundle: $REAL_MIN (set by the bundled libraries)"
+  case "$REAL_MIN" in
+    11.*|12.*|13.*|14.*) ;;
+    *) echo "[!] NOTE: this bundle will not run on macOS older than $REAL_MIN."
+       echo "    To support older systems the bundled libraries must be built"
+       echo "    with MACOSX_DEPLOYMENT_TARGET set, not taken from Homebrew bottles." ;;
+  esac
 fi
 
 echo "[*] Ad-hoc code signing (inside-out)..."

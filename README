@@ -87,7 +87,7 @@ Oldschool terminal. Modern systems.
   - Smooth-zooming "CGTERM" text with per-character wobble
   - Genesis Project plasma title
   - Sine wave scroller with scene greetings
-  - XM/MOD tracker music playback (SDL_mixer)
+  - XM/MOD tracker music playback (libopenmpt; SDL_mixer on Windows)
   - CRT power-off effect when quitting
 
   OLDSKOOL MODEM SiMULATiON
@@ -196,8 +196,8 @@ Oldschool terminal. Modern systems.
     function keys included)
 
   PLATFORM SUPPORT
-  - macOS (native .app bundle, arm64 + x86_64)
-  - Linux (make install, .deb-friendly paths)
+  - macOS (native .app bundle, Apple Silicon)
+  - Linux (build from source, make install)
   - Windows (portable zip, just unzip and run)
   - Cross-compilation from macOS using MinGW
 

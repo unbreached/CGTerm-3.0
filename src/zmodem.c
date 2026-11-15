@@ -815,6 +815,7 @@ int zmodem_recv(void) {
   int finished = 0;
   int file_open = 0;
   int tries = 0;
+  int empties = 0;   /* consecutive zero-length data subpackets */
   int ignored = 0;   /* well-formed but unexpected headers; bounded */
   int c;
 
@@ -937,7 +938,14 @@ int zmodem_recv(void) {
           goto out;
         }
         rxbytes += (unsigned long)zm_rxcount;
-        tries = 0;
+        if (zm_rxcount > 0) {
+          tries = 0;
+          empties = 0;
+        } else if (++empties > 64) {
+          /* a peer streaming empty subpackets never trips the size cap or
+           * the retry count and would hold us in the transfer forever */
+          goto fail;
+        }
         xfer_progress_status(name, (int)rxbytes, (int)size);
         if (c == ZCRCW) {
           zm_shhdr_pos(ZACK, rxbytes);
@@ -1333,7 +1341,7 @@ resync:
 
 skipped:
   xfer_progress_status("Skipped by receiver", (int)size, (int)size);
-  return 1;
+  return 2;   /* skipped, not sent: the caller must not count it */
 
 toomany:
   xfer_progress_status("Too many errors!", (int)pos, (int)size);
@@ -1381,7 +1389,7 @@ int zmodem_send_file(const char *displayname) {
       }
       if (c == ZSKIP) {
         xfer_progress_status("Skipped by receiver", xfer_file_size, xfer_file_size);
-        return 1;
+        return 2;
       }
       if (c == ZCRC) {
         /* answer once per ZFILE: each answer re-reads the whole file, so a

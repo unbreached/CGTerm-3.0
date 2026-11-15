@@ -17,9 +17,11 @@ SetCompressor /SOLID lzma
 ;-----------------------------------------------------
 ; Version info embedded in the .exe
 ;-----------------------------------------------------
-VIProductVersion "3.0.4.0"
+; version comes from src/version.h, the single source
+!searchparse /file "..\src\version.h" '#define CGTERM_VERSION "' CGTERM_VERSION '"'
+VIProductVersion "${CGTERM_VERSION}.0"
 VIAddVersionKey "ProductName" "CGTerm"
-VIAddVersionKey "ProductVersion" "3.0"
+VIAddVersionKey "ProductVersion" "${CGTERM_VERSION}"
 VIAddVersionKey "FileDescription" "CGTerm 3.0 - C64 BBS Terminal"
 VIAddVersionKey "LegalCopyright" "Genesis Project"
 

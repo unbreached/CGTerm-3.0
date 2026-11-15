@@ -66,6 +66,7 @@ int session_capture_open(const char *path) {
     printf("Couldn't open capture file %s\n", capture_name);
     return 0;
   }
+  cfg_make_private(capture);   /* a capture records typed passwords too */
   {
     time_t now = time(NULL);
     struct tm *tm_now = localtime(&now);
@@ -157,19 +158,50 @@ void session_status_tick(void) {
  * A ZMODEM sender announces itself with the ZRQINIT hex header
  * "**" ZDLE 'B' "00" ... ; seeing that in the terminal stream means the
  * board has started sending and we should answer with a receive. */
+static int zs_hexval(int c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;   /* some senders use upper case */
+  return -1;
+}
+
+/* Matches a complete ZRQINIT hex header: "**" ZDLE 'B', then 14 hex
+ * digits = frame type 00, four flag bytes and a CRC-16 that checks out.
+ * The old 6-byte prefix test fired on far less. */
 int session_zmodem_sentinel(int c) {
-  static const unsigned char pat[6] = {'*', '*', 0x18, 'B', '0', '0'};
+  static const unsigned char pat[4] = {'*', '*', 0x18, 'B'};
   static int pos = 0;
+  static unsigned char hex[14];
 
   if (c < 0) return 0;
-  if ((unsigned char)c == pat[pos]) {
-    if (++pos == 6) {
-      pos = 0;
-      return 1;
+  if (pos < 4) {
+    if ((unsigned char)c == pat[pos]) {
+      ++pos;
+    } else {
+      /* "***" keeps the two-star prefix alive; anything else restarts */
+      pos = ((unsigned char)c == '*') ? (pos >= 2 ? 2 : 1) : 0;
     }
-  } else {
-    /* "***" keeps the two-star prefix alive; anything else restarts */
-    pos = ((unsigned char)c == '*') ? (pos >= 2 ? 2 : 1) : 0;
+    return 0;
   }
-  return 0;
+  if (zs_hexval(c) < 0) {
+    pos = ((unsigned char)c == '*') ? 1 : 0;
+    return 0;
+  }
+  hex[pos - 4] = (unsigned char)c;
+  if (++pos < 18) return 0;
+  pos = 0;
+  {
+    unsigned char b[7];
+    unsigned short crc = 0;
+    int i, k;
+    for (i = 0; i < 7; i++) {
+      b[i] = (unsigned char)((zs_hexval(hex[i * 2]) << 4) | zs_hexval(hex[i * 2 + 1]));
+    }
+    if (b[0] != 0) return 0;                 /* not ZRQINIT */
+    for (i = 0; i < 5; i++) {                /* CRC-16/XMODEM over type + flags */
+      crc ^= (unsigned short)(b[i] << 8);
+      for (k = 0; k < 8; k++) crc = (crc & 0x8000) ? (unsigned short)((crc << 1) ^ 0x1021) : (unsigned short)(crc << 1);
+    }
+    return crc == (unsigned short)((b[5] << 8) | b[6]);
+  }
 }

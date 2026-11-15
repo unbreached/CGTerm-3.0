@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "paths.h"
 extern char *cfg_prefix;
 extern char *cfg_homedir;
@@ -37,7 +38,10 @@ extern int cfg_termmode;
 extern int cfg_bookmark_termmode[];
 extern char cfg_connect_name[];
 extern int cfg_charset;  /* 0=standard, 1=swedish, 2=german */
-extern int cfg_case;     /* 1=lower/upper (default, what PETSCII boards expect), 0=upper/graphics */
+extern int cfg_case;
+extern char cfg_warning[160];   /* first config problem, "" if none */
+extern int cfg_warnings;
+void cfg_make_private(FILE *f);   /* chmod 0600 a freshly opened file (no-op on Windows) */     /* 1=lower/upper (default, what PETSCII boards expect), 0=upper/graphics */
 extern int cfg_statusline;    /* show the status row under the terminal */
 extern int cfg_autozmodem;    /* start a ZMODEM receive when the board sends ZRQINIT */
 extern int cfg_lastprotocol;  /* Protocol enum value preselected in the transfer menu */

@@ -1,0 +1,13 @@
+# Kept in the repository, left out of the source tarball (git archive):
+# internal review notes, CI config, keyboard-profile backups and font
+# archives are not part of what users build from.
+REVIEW-*.md                 export-ignore
+SECURITY-FIXES-APPLIED.md   export-ignore
+MUSIC-IMPLEMENTATION.md     export-ignore
+docs/WEBSITE-CHANGES.md     export-ignore
+.github/                    export-ignore
+.gitattributes              export-ignore
+.gitignore                  export-ignore
+assets/kbd-backup/          export-ignore
+assets/*.zip                export-ignore
+assets/fonts/*.zip          export-ignore

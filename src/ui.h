@@ -13,7 +13,8 @@ void ui_inputcall(int width, char *title, char *text, void (*donecall)(char *), 
 void ui_inputcall_on_cancel(void (*cancelcall)(void));
 void ui_display_net_status(int code, char *message);
 void ui_connect(char *host);
-void ui_autostart_zmodem(void);   /* board sent ZRQINIT: receive now */
+void ui_autostart_zmodem(void);
+void ui_autostart_reset(void);   /* new connection: ask again */   /* board sent ZRQINIT: receive now */
 void ui_pageup(void);
 void ui_pagedown(void);
 void enter_ansi_mode(void);

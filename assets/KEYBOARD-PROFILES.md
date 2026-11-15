@@ -28,3 +28,17 @@ Select the profile explicitly instead of relying on a generic default. Example:
 - The Linux and Windows profiles are based on the existing `us.kbd`, `swedish.kbd` and `windows.kbd`.
 - The macOS profiles are based on the more complete `Mac5.kbd` table.
 - `mac-se-c64.kbd` is a best-effort Swedish profile and is the one most likely to need small follow-up adjustments after live testing.
+
+## What a profile controls
+
+In PETSCII mode ordinary typing does not go through the profile: letters,
+digits and punctuation are taken from the character your keyboard layout
+produces, so they follow the host layout. A profile supplies:
+
+- the Commodore column (left Alt + key: colours and graphics),
+- the Ctrl column (Ctrl + key: colours, reverse on/off),
+- the fallback for keys that produce no character of their own.
+
+RETURN, cursor keys, HOME/CLR, DEL/INST, RUN/STOP (Tab) and F1-F8 are fixed
+and cannot be remapped from a profile. Right Alt (AltGr) types its normal
+character on layouts that use it; left Alt is the Commodore key.

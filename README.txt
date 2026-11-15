@@ -559,10 +559,75 @@ Upload Size (xfer.c)
   Rainbow upload of a large file send an empty file
 
 
+--------------------------------------------------
+[ PATCH: 2026-11-15 // 3.0.5 REVIEW FIXES          ]
+--------------------------------------------------
+
+Transfers (rainbow.c, punter.c, xmodem.c, zmodem.c, xfer.c)
+-----------------------------------------------------------
+- Rainbow upload recovers from a retry: the block sender
+  consumed its own length and data pointer, so any resend
+  went out empty and the upload could never finish
+- Rainbow download drains a rejected block instead of
+  reading the leftover payload as control bytes
+- Punter download handshake scans the stream (the fix
+  3.0.4 made for uploads), so a stray byte no longer
+  ends in "Handshake timeout"
+- XMODEM upload purges queued start requests, caps
+  retries and checks that the end of file was confirmed
+- ZMODEM: a skipped file is not counted as sent
+- Multi Punter: the file announcement wait times out
+
+Telnet Detection (net.c)
+------------------------
+- A raw PETSCII board is no longer mistaken for Telnet
+  when its art contains pi followed by a graphics byte;
+  that corrupted every later binary transfer
+- Hostname lookup runs in the background, ESC cancels
+
+Security (cgterm.c, session.c, config.c, xfer.c)
+------------------------------------------------
+- A queued paste or auto-login password is dropped when
+  the connection ends; it used to go to the next board
+- Automatic ZMODEM download asks once per connection
+- Notes (auto-login), captures, history and the debug
+  trace are readable by your user only
+- Downloads: no dotfiles, exclusive create
+
+Config (config.c)
+-----------------
+- A bad config line is skipped with an on-screen notice
+  instead of stopping CGTerm from starting
+
+Keyboard (keyboard.c, clipboard.c, login.c)
+-------------------------------------------
+- AltGr types its character on non-US layouts (@ and [
+  on Swedish/German); left Alt is still the C= key
+- Caps Lock only affects letters
+- Paste / macros / auto-login are not case-swapped on
+  ANSI boards
+- Shift+Backspace = INST, "\;" = literal ; in a login step
+
+Display (gfx.c, ui.c)
+---------------------
+- ANSI glyphs fill the cell at every zoom, ANSI gets an
+  underline cursor, zoom is capped at 7 in 40 columns
+- Scrollback moves half a screen and stops at the oldest
+  stored line; typing returns to the live screen
+- Timed cursor blink, lower idle CPU use
+
+Build (Makefile, scripts/, .github/)
+------------------------------------
+- Version single-sourced in src/version.h
+- Windows package built with stack protector/ASLR/DEP,
+  downloads checksum-verified
+- make test-asan, make dist-src, make checksums; more CI
+
+
 TODO:
-- Add support for connection status
-- Add support for larger bookmarks
+- Larger bookmark list (more than 40, scroll, search)
 - Migrate from SDL 1.2 to SDL 2.0
+- ZMODEM download resume
 
 
 

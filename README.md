@@ -61,8 +61,8 @@ CGTerm 3.0 is a major overhaul: the codebase is cleaned, the foundation is lifte
 
 | Platform | Status |
 |----------|--------|
-| macOS (arm64 + x86_64) | Native .app bundle |
-| Linux | `make install`, .deb-friendly paths |
+| macOS (Apple Silicon) | Native .app bundle |
+| Linux | Build from source, `make install` |
 | Windows | Portable zip (unzip and run), native MinGW/MSYS2 build |
 
 Cross-compilation from macOS to Windows via MinGW.
@@ -73,7 +73,7 @@ Grab the latest build from [Releases](https://github.com/unbreached/CGTerm-3.0/r
 
 ### macOS
 
-Open the `.app` bundle. First launch may require right-click → Open, or on macOS 15 System Settings → Privacy & Security → Open Anyway (the build is signed but not notarized).
+Open the `.app` bundle. First launch may require right-click → Open, or on macOS 15 System Settings → Privacy & Security → Open Anyway (the build is ad-hoc signed, not notarized).
 
 ### Linux
 

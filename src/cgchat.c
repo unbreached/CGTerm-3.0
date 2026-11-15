@@ -265,7 +265,7 @@ int main(int argc, char *argv[]) {
 
     } else {
 
-      timer_delay(1);
+      timer_delay(4);   /* idle: 250 wakeups/s is plenty, 1000 kept laptops awake */
 
     }
 

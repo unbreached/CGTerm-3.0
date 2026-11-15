@@ -3,6 +3,56 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── 3.0.5 · NOVEMBER 2026 (not yet released) ───
+
+Transfers
+[!]Rainbow uploads recover from a retry. The block sender consumed its own length and data pointer, so any resend (a NAK, a timeout, one stray byte from the board) went out with a bogus length and no data and the upload could never finish. Only an upload where every block was accepted first time worked. The reply after each block is now scanned for, so a status byte in front of the board's ACK no longer forces a resend
+[!]Rainbow downloads throw away the rest of a block they reject. The leftover payload used to be read as control bytes, and a payload byte equal to EOT ended the download as a "success" with a truncated file
+[!]Punter downloads no longer lose sync on a stray byte. The download handshake still read fixed 3-byte groups (3.0.4 fixed only the upload side); it now scans the stream like the upload side does
+[!]A raw PETSCII board is no longer mistaken for a Telnet server. PETSCII art containing pi (0xFF) followed by a graphics byte looked like Telnet negotiation, which switched on Telnet escaping for the rest of the session and corrupted every later Punter/XMODEM/Rainbow transfer. In PETSCII mode Telnet negotiation is now only believed at the start of a connection
+[!]XMODEM upload: queued start requests are purged before the first block, a block is retried at most 20 times, a single stray CAN no longer aborts, and the upload is only reported complete when the receiver acknowledged the end of file
+[!]ZMODEM: a file the receiver skipped is no longer counted as sent; a sender streaming empty packets can no longer hold the transfer open forever
+[!]Multi Punter: waiting for the board's file announcement now times out instead of waiting until ESC; the pause between files reacts to ESC
+
+Security
+[!]Text still queued for a board (a paste, or the password step of an auto-login) is dropped when the connection ends or a new one starts. It used to be sent to whatever answered next, including an automatic redial
+[!]Automatic ZMODEM download asks once per connection before it accepts, and only reacts to a complete, valid ZMODEM start header. Any user who could post the old 6-byte trigger in a message base could start a download on every reader
+[!]The notes file (which holds auto-login passwords), capture logs, the connection history and the debug trace are now readable by your user only
+[!]Downloads: a name starting with a dot is saved with an underscore instead, "CON .txt"-style reserved names are rejected, and the file is created exclusively so nothing existing can be written through
+[!]Windows package: built with stack protection, ASLR and DEP like the other platforms; build downloads are checksum-verified; the unused MPEG and FLAC decoder DLLs are no longer shipped
+[!]Telnet option replies are answered once and capped, so a server cannot make the client flood replies
+
+Stability
+[!]A bad line in the config file no longer stops CGTerm from starting. The line is skipped and a notice is shown on screen. A long macro or a long download path could previously make the saved config unloadable, and uncommenting "reconnect = 0" was rejected
+[!]Hostname lookup runs in the background: the window no longer freezes on a slow DNS server, and ESC cancels it
+[!]Bookmarks with "_" or ":" in the host (some hostnames, IPv6 addresses) survive a restart
+[!]The history list keeps showing new connections after 4096 entries
+[!]A failed fullscreen switch keeps the session instead of exiting; closing the window exits with status 0; Quit asks first while connected
+[!]Windows: connection errors show a real reason instead of "No error"
+
+Keyboard and input
+[!]AltGr works on non-US layouts: AltGr+2 types "@" and AltGr+8 types "[" on Swedish and German keyboards instead of sending colour codes (left Alt is still the Commodore key)
+[!]Caps Lock only affects letters. It used to turn RETURN into shift-RETURN, HOME into CLR (clearing the screen) and F1 into F2
+[!]Paste, macros and auto-login text are no longer case-swapped on ANSI boards ("Secret" was sent as "sECRET")
+[+]Shift+Backspace sends INST
+[+]A ";" inside an auto-login step can be written as "\;"
+
+Display
+[!]ANSI text fills the whole character cell at every zoom (at zoom 4 it was drawn at half height and box drawing did not join)
+[!]ANSI mode has a proper underline cursor instead of blinking a wrong character
+[!]Zoom 8 in 40 columns no longer gives a blank window (the limit is 7)
+[!]Cursor blink is timed, so it no longer speeds up during transfers
+[!]Scrollback: PageUp/PageDown move half a screen, stop at the oldest stored line, and typing returns to the live screen
+[!]A screenshot taken from the menu no longer contains the menu; "copy screen" keeps ANSI line drawing as ASCII instead of turning it into letters
+[!]Lower idle CPU use
+
+Build and release
+[+]The version lives in one place (src/version.h); the modem screen showed "3.1"
+[+]make test-asan runs the tests under AddressSanitizer/UBSan; CI also builds the real 32-bit Windows package and runs the sanitizer and fuzz jobs
+[+]New tests: Rainbow upload and download, Punter download with a noisy board, XMODEM upload start
+[+]make dist-src / make checksums build the source tarball and a SHA256SUMS file; internal files are left out of the tarball
+[!]The macOS package now declares the macOS version it really needs instead of claiming 11.0
+
 ─── 3.0.4 · NOVEMBER 2026 ───
 
 [!]Punter and Multi Punter uploads work on real boards again. The handshake that waits for the board's GOO/ACK/SYN read the stream in rigid 3-byte groups, so the moment a board printed any status byte around the transfer the groups misaligned and the whole upload failed. It now scans the byte stream for the handshake word and skips stray bytes, the way the download path, the Rainbow block start and the block S/B wait already do (XMODEM waits on single bytes, which is why XMODEM upload and all downloads were never affected). Added a regression test with a noisy scripted C*Base receiver that reproduced the failure

@@ -104,6 +104,7 @@ static int rainbow_recv_data_with_progress(unsigned char *buf, int len, int time
 
 static int rainbow_send_block(unsigned char blockno, const unsigned char *data, int len) {
   int retries;
+  int i;
   signed int c;
   unsigned char sum;
 
@@ -138,31 +139,41 @@ static int rainbow_send_block(unsigned char blockno, const unsigned char *data, 
     xfer_send_byte(0xff ^ blockno);
     xfer_send_byte((unsigned char)len);
     xfer_send_byte(0xff ^ (unsigned char)len);
-    while (len-- > 0) {
-      xfer_send_byte(*data++);
+    /* Index, don't consume: a retry has to send the same payload again. */
+    for (i = 0; i < len; ++i) {
+      xfer_send_byte(data[i]);
     }
     xfer_send_byte(RB_EOD);
     xfer_send_byte(sum);
     xfer_send_byte(0xff ^ sum);
 
-    c = xfer_recv_byte(RB_START_TIMEOUT);
-    if (c < 0) {
-      rainbow_send_status("Rainbow: block timeout, retrying");
-      continue;
-    }
-    switch ((unsigned char)c) {
-    case RB_ACK:
-      return 1;
-    case RB_GOO:
-    case RB_NAK:
-      rainbow_send_status("Rainbow: block retry requested");
-      break;
-    case RB_CAN:
-      rainbow_fail("Rainbow: cancelled by remote");
-      return 0;
-    default:
-      rainbow_send_status("Rainbow: unexpected reply, retrying");
-      break;
+    /* Scan for the verdict and skip anything else: a board may print a
+     * status byte before its ACK, and treating that as a failed block
+     * makes us resend a block the receiver already took. */
+    {
+      int scan_count = 64;
+      int verdict = 0;
+      while (scan_count-- > 0) {
+        c = xfer_recv_byte(RB_START_TIMEOUT);
+        if (c < 0) break;
+        if ((unsigned char)c == RB_ACK || (unsigned char)c == RB_NAK ||
+            (unsigned char)c == RB_GOO || (unsigned char)c == RB_CAN) {
+          verdict = (unsigned char)c;
+          break;
+        }
+      }
+      if (verdict == RB_ACK) {
+        return 1;
+      }
+      if (verdict == RB_CAN) {
+        rainbow_fail("Rainbow: cancelled by remote");
+        return 0;
+      }
+      if (verdict) {
+        rainbow_send_status("Rainbow: block retry requested");
+      } else {
+        rainbow_send_status("Rainbow: block timeout, retrying");
+      }
     }
   }
 
@@ -204,6 +215,16 @@ static int rainbow_send_eot(void) {
   return 0;
 }
 
+/* Throw away the rest of a block we are about to reject. Without this the
+ * unread payload is parsed as control bytes by the caller, and a payload
+ * byte that happens to equal EOT ends the download as a "success". */
+static void rainbow_drain(void) {
+  int drained = 0;
+  int c;
+  while ((c = xfer_recv_byte(300)) >= 0 && ++drained < 4096) {
+  }
+}
+
 static int rainbow_recv_block(unsigned char *blockno, unsigned char *data, int *len_out) {
   unsigned char hdr[4];
   unsigned char csum[2];
@@ -217,11 +238,13 @@ static int rainbow_recv_block(unsigned char *blockno, unsigned char *data, int *
   }
 
   if ((unsigned char)(hdr[0] ^ hdr[1]) != 0xff) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: block number mismatch");
     return 0;
   }
   if ((unsigned char)(hdr[2] ^ hdr[3]) != 0xff) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: block length mismatch");
     return 0;
@@ -230,24 +253,28 @@ static int rainbow_recv_block(unsigned char *blockno, unsigned char *data, int *
   *blockno = hdr[0];
   len = hdr[2];
   if (len > 0 && rainbow_recv_data_with_progress(data, len, RB_BYTE_TIMEOUT, *blockno) < 0) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: data timeout");
     return 0;
   }
 
   if (rainbow_recv_exact(&eod, 1, RB_BYTE_TIMEOUT) < 0 || eod != RB_EOD) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: missing EOD");
     return 0;
   }
 
   if (rainbow_recv_exact(csum, 2, RB_BYTE_TIMEOUT) < 0) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: checksum timeout");
     return 0;
   }
 
   if ((unsigned char)(csum[0] ^ csum[1]) != 0xff) {
+    rainbow_drain();
     xfer_send_byte(RB_NAK);
     rainbow_status("Rainbow: checksum complement mismatch");
     return 0;
@@ -255,6 +282,7 @@ static int rainbow_recv_block(unsigned char *blockno, unsigned char *data, int *
 
   sum = rainbow_checksum(data, len);
   if (sum != csum[0]) {
+    rainbow_drain();
     xfer_send_byte(RB_GOO);
     rainbow_status("Rainbow: checksum failed");
     return 0;

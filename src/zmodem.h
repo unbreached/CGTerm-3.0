@@ -9,7 +9,8 @@ int zmodem_recv(void);
  *   zmodem_send_begin()   ZRQINIT handshake, learns the receiver's options
  *   zmodem_send_file(n)   one file (the already opened xfer_sendfile)
  *   zmodem_send_end()     ZFIN handshake and "OO"
- * Each returns 1 on success, 0 on failure / cancel. */
+ * Each returns 1 on success, 0 on failure / cancel; zmodem_send_file()
+ * returns 2 when the receiver skipped the file. */
 int zmodem_send_begin(void);
 int zmodem_send_file(const char *displayname);
 int zmodem_send_end(void);

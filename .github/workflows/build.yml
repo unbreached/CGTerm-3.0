@@ -2,7 +2,11 @@ name: build
 
 on:
   push:
+    branches: ['**']     # not tags: a release push used to run everything twice
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   linux:
@@ -17,6 +21,33 @@ jobs:
         run: make
       - name: Regression tests
         run: make test
+
+  # The same suites under AddressSanitizer + UBSan, plus the disk-image fuzzer.
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl1.2-dev libopenmpt-dev lrzsz
+      - name: Tests under ASan/UBSan
+        run: make test-asan
+      - name: Disk image fuzzer
+        run: make fuzz
+
+  # The 32-bit package that is actually released (scripts/cross-compile-win.sh),
+  # not just the 64-bit MSYS2 build below.
+  windows-release-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-i686 zip rsync
+      - name: Cross-compile the release package
+        run: bash scripts/cross-compile-win.sh
 
   macos:
     runs-on: macos-latest

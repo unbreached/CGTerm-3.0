@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdarg.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -28,7 +30,9 @@ static int validate_hostname(const char *hostname) {
   if (len == 0 || len > 253) return 0;  /* RFC limits */
 
   for (p = hostname; *p; p++) {
-    if (!isalnum((unsigned char)*p) && *p != '.' && *p != '-') {
+    /* '_' occurs in real hostnames, ':' in IPv6 literals; the connect
+     * dialog and net.c accept both, so a bookmark must survive a restart */
+    if (!isalnum((unsigned char)*p) && *p != '.' && *p != '-' && *p != '_' && *p != ':') {
       return 0;  /* Invalid character */
     }
   }
@@ -89,7 +93,37 @@ char cfg_screendir[256];
 int cfg_termmode = 0;
 char cfg_connect_name[128] = "";
 int cfg_charset = 0;
-int cfg_case = 1;   /* 1 = lower/upper (CGTerm default, what PETSCII boards expect), 0 = upper/graphics */
+int cfg_case = 1;
+
+/* First problem found while reading a config file. A bad line is skipped
+ * with a warning instead of aborting startup; cgterm shows this on screen
+ * because stdout is invisible when launched from Finder or Explorer. */
+char cfg_warning[160] = "";
+int cfg_warnings = 0;
+
+/* Restrict a file we just opened for writing to its owner. The notes file
+ * holds auto-login passwords in plaintext, and captures and the debug trace
+ * contain whatever was typed; with a default umask they were world-readable. */
+void cfg_make_private(FILE *f) {
+#if !defined(WINDOWS) && !defined(__WIN32__)
+  if (f) fchmod(fileno(f), S_IRUSR | S_IWUSR);
+#else
+  (void)f;
+#endif
+}
+
+static void cfg_warn(const char *fmt, ...) {
+  char msg[160];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+  va_end(ap);
+  printf("%s\n", msg);
+  if (cfg_warnings++ == 0) {
+    snprintf(cfg_warning, sizeof(cfg_warning), "%s", msg);
+  }
+}
+   /* 1 = lower/upper (CGTerm default, what PETSCII boards expect), 0 = upper/graphics */
 int cfg_bookmark_termmode[40];
 char cfg_macros[10][256];   /* text macros, sent on Meta+0..9 (issue #8) */
 int cfg_smoothscale = 0;    /* 0 = crisp integer zoom, 1 = stretch to fill window (issue #1) */
@@ -317,8 +351,8 @@ void real_cfg_change_dir(char *dirbuffer, const char *newdir) {
   {
     size_t used = strlen(dirbuffer);
     if (used + 1 < 256) {
-      size_t remaining = 256 - used;
-      strncat(dirbuffer, newdir, remaining - 1);
+      /* bounded append; truncation of an over-long path is intended */
+      snprintf(dirbuffer + used, 256 - used, "%s", newdir);
     }
   }
 }
@@ -400,11 +434,11 @@ int addbookmark(char *line) {
   port = 23;
 
   // scanf is a piece of poop!
-  if (sscanf(line, "bookmark = %255[^,] , %255[a-zA-Z0-9.-] , %d \n", alias, hostname, &port) == 3) {
-  } else if (sscanf(line, "bookmark = %255[a-zA-Z0-9.-] , %d \n", hostname, &port) == 2) {
+  if (sscanf(line, "bookmark = %255[^,] , %255[a-zA-Z0-9._:-] , %d \n", alias, hostname, &port) == 3) {
+  } else if (sscanf(line, "bookmark = %255[a-zA-Z0-9._:-] , %d \n", hostname, &port) == 2) {
     snprintf(alias, sizeof(alias), "%s", hostname);
-  } else if (sscanf(line, "bookmark = %255[^,] , %255[a-zA-Z0-9.-] \n", alias, hostname) == 2) {
-  } else if (sscanf(line, "bookmark = %255[a-zA-Z0-9.-] \n", hostname) == 1) {
+  } else if (sscanf(line, "bookmark = %255[^,] , %255[a-zA-Z0-9._:-] \n", alias, hostname) == 2) {
+  } else if (sscanf(line, "bookmark = %255[a-zA-Z0-9._:-] \n", hostname) == 1) {
     snprintf(alias, sizeof(alias), "%s", hostname);
   } else {
     return(0);
@@ -498,7 +532,7 @@ static int cfg_parse_line(const char *linebuf, char *key, size_t keysz, char *va
 
 signed int cfg_readconfig(char *configfile) {
   FILE *cfg;
-  char linebuf[256], key[16], value[256];
+  char linebuf[1024], key[16], value[256];   /* line: room for "macroN = " + a 255-char value */
   int line = 0;
 
   if ((cfg = fopen(configfile, "r")) == NULL) {
@@ -510,9 +544,17 @@ signed int cfg_readconfig(char *configfile) {
   while (fgets(linebuf, sizeof(linebuf), cfg) != NULL) {
 
     if (strlen(linebuf) >= sizeof(linebuf) - 1) {
-      printf("Line %d in %s is too long\n", line, configfile);
-      fclose(cfg);
-      return(-1);
+      /* Too long to be a valid setting. Skip the rest of the physical line
+       * and carry on: refusing to start over one bad line locked users out
+       * (a long macro or directory path was enough). */
+      int ch;
+      cfg_warn("Line %d in %s is too long, ignored", line + 1, configfile);
+      if (linebuf[strlen(linebuf) - 1] != '\n') {
+        while ((ch = fgetc(cfg)) != EOF && ch != '\n') {
+        }
+      }
+      ++line;
+      continue;
     }
 
     if (linebuf[0] == '#') {
@@ -524,25 +566,31 @@ signed int cfg_readconfig(char *configfile) {
 	  /* let the resolver decide: "localhost" and tunnel aliases have no dot */
 	  cfg_sethost(value);
 	} else if (strcmp(key, "port") == 0) {
-	  cfg_port = strtol(value, (char **)NULL, 10);
-	  if (cfg_port <= 0 || cfg_port > 65535) {
-	    printf("Invalid port number in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_port;
+	    cfg_port = strtol(value, (char **)NULL, 10);
+	    if (cfg_port <= 0 || cfg_port > 65535) {
+	      cfg_warn("Invalid port number in %s: %s", configfile, value);
+	      cfg_port = old;
+	    }
 	  }
 	} else if (strcmp(key, "senddelay") == 0) {
-	  cfg_senddelay = strtol(value, (char **)NULL, 10);
-	  if (cfg_senddelay < 0 || cfg_senddelay > 10000) {
-	    printf("Invalid send delay in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_senddelay;
+	    cfg_senddelay = strtol(value, (char **)NULL, 10);
+	    if (cfg_senddelay < 0 || cfg_senddelay > 10000) {
+	      cfg_warn("Invalid send delay in %s: %s", configfile, value);
+	      cfg_senddelay = old;
+	    }
 	  }
 	} else if (strcmp(key, "receivedelay") == 0) {
-	  cfg_recvdelay = strtol(value, (char **)NULL, 10);
-	  if (cfg_recvdelay < 0 || cfg_recvdelay > 10000) {
-	    printf("Invalid receive delay in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_recvdelay;
+	    cfg_recvdelay = strtol(value, (char **)NULL, 10);
+	    if (cfg_recvdelay < 0 || cfg_recvdelay > 10000) {
+	      cfg_warn("Invalid receive delay in %s: %s", configfile, value);
+	      cfg_recvdelay = old;
+	    }
 	  }
 	} else if (strcmp(key, "keyboard") == 0) {
           if (path_is_absolute(value)) {
@@ -569,9 +617,7 @@ signed int cfg_readconfig(char *configfile) {
 	  } else if (strcmp("no", value) == 0) {
 	    cfg_localecho = 0;
 	  } else {
-	    printf("Invalid localecho value in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Invalid localecho value in %s: %s", configfile, value);
 	  }
 	} else if (strcmp(key, "fullscreen") == 0) {
 	  if (strcmp("yes", value) == 0) {
@@ -579,9 +625,7 @@ signed int cfg_readconfig(char *configfile) {
 	  } else if (strcmp("no", value) == 0) {
 	    cfg_fullscreen = 0;
 	  } else {
-	    printf("Invalid fullscreen value in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Invalid fullscreen value in %s: %s", configfile, value);
 	  }
 	} else if (strcmp(key, "sound") == 0) {
 	  if (strcmp("yes", value) == 0) {
@@ -589,9 +633,7 @@ signed int cfg_readconfig(char *configfile) {
 	  } else if (strcmp("no", value) == 0) {
 	    cfg_sound = 0;
 	  } else {
-	    printf("Invalid sound value in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Invalid sound value in %s: %s", configfile, value);
 	  }
         
     } else if (strcmp(key, "debug") == 0) {
@@ -600,9 +642,7 @@ signed int cfg_readconfig(char *configfile) {
         } else if (strcmp("no", value) == 0) {
             cfg_debugmode = 0;
         } else {
-            printf("Invalid debug mode value in %s: %s\n", configfile, value);
-            fclose(cfg);
-            return(-1);
+            cfg_warn("Invalid debug mode value in %s: %s", configfile, value);
         }
 
     } else if (strcmp(key, "splash") == 0) {
@@ -611,9 +651,7 @@ signed int cfg_readconfig(char *configfile) {
         } else if (strcmp("no", value) == 0) {
             cfg_splash = 0;
         } else {
-            printf("Invalid splash value in %s: %s\n", configfile, value);
-            fclose(cfg);
-            return(-1);
+            cfg_warn("Invalid splash value in %s: %s", configfile, value);
         }
 
     } else if (strcmp(key, "splashfont") == 0) {
@@ -649,25 +687,31 @@ signed int cfg_readconfig(char *configfile) {
         snprintf(cfg_macros[slot], sizeof(cfg_macros[slot]), "%s", value);
 
 	} else if (strcmp(key, "zoom") == 0) {
-	  cfg_zoom = strtol(value, (char **)NULL, 10);
-	  if (cfg_zoom <= 0 || cfg_zoom > 8) {
-	    printf("Invalid zoom value in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_zoom;
+	    cfg_zoom = strtol(value, (char **)NULL, 10);
+	    if (cfg_zoom <= 0 || cfg_zoom > 8) {
+	      cfg_warn("Invalid zoom value in %s: %s", configfile, value);
+	      cfg_zoom = old;
+	    }
 	  }
 	} else if (strcmp(key, "reconnect") == 0) {
-	  cfg_reconnect = strtol(value, (char **)NULL, 10);
-	  if (cfg_reconnect <= 0 || cfg_reconnect > 10000) {
-	    printf("Invalid reconnect delay in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_reconnect;
+	    cfg_reconnect = strtol(value, (char **)NULL, 10);
+	    if (cfg_reconnect < 0 || cfg_reconnect > 10000) {
+	      cfg_warn("Invalid reconnect delay in %s: %s", configfile, value);
+	      cfg_reconnect = old;
+	    }
 	  }
 	} else if (strcmp(key, "columns") == 0) {
-	  cfg_columns = strtol(value, (char **)NULL, 10);
-	  if (cfg_columns != 40 && cfg_columns != 80) {
-	    printf("Invalid number of columns in %s: %s\n", configfile, value);
-	    fclose(cfg);
-	    return(-1);
+	  {
+	    int old = cfg_columns;
+	    cfg_columns = strtol(value, (char **)NULL, 10);
+	    if (cfg_columns != 40 && cfg_columns != 80) {
+	      cfg_warn("Invalid number of columns in %s: %s", configfile, value);
+	      cfg_columns = old;
+	    }
 	  }
 	} else if (strcmp(key, "bookmarkfile") == 0) {
 	  snprintf(cfg_bookmarkfile, sizeof(cfg_bookmarkfile), "%s", value);
@@ -675,9 +719,7 @@ signed int cfg_readconfig(char *configfile) {
 	  if (cfg_skip_cfg_bookmarks) {
 	    /* system config seeds only a first run; the user's own file rules */
 	  } else if (addbookmark(linebuf) == 0) {
-	    printf("Syntax error in %s line %d\n", configfile, line + 1);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Syntax error in %s line %d", configfile, line + 1);
 	  } else {
 	    cfg_bookmarks_from_cfg++;
 	  }
@@ -689,9 +731,7 @@ signed int cfg_readconfig(char *configfile) {
 	    cfg_case = 1;
 	    gfx_setfont(1);
 	  } else {
-	    printf("Invalid case value in %s line %d: %s\n", configfile, line + 1, value);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Invalid case value in %s line %d: %s", configfile, line + 1, value);
 	  }
 	} else if (strcmp(key, "statusline") == 0) {
 	  cfg_statusline = (strcmp("yes", value) == 0);
@@ -715,20 +755,14 @@ signed int cfg_readconfig(char *configfile) {
 	  } else if (strcmp(value, "petscii") == 0) {
 	    cfg_termmode = 0;
 	  } else {
-	    printf("Invalid termmode value in %s line %d: %s\n", configfile, line + 1, value);
-	    fclose(cfg);
-	    return(-1);
+	    cfg_warn("Invalid termmode value in %s line %d: %s", configfile, line + 1, value);
 	  }
 	} else {
-	  printf("Unknown config key in %s line %d\n", configfile, line + 1);
-	  fclose(cfg);
-	  return(-1);
+	  cfg_warn("Unknown config key in %s line %d", configfile, line + 1);
 	}
 
       } else {
-	printf("Error in %s line %d\n", configfile, line + 1);
-	fclose(cfg);
-	return(-1);
+	cfg_warn("Error in %s line %d", configfile, line + 1);
       }
 
     } else {
@@ -737,9 +771,7 @@ signed int cfg_readconfig(char *configfile) {
        * destination (linebuf into linebuf) is undefined behaviour */
       char tok[256];
       if (sscanf(linebuf, "%255s", tok) == 0) {
-	printf("Syntax error in %s line %d\n", configfile, line + 1);
-	fclose(cfg);
-	return(-1);
+	cfg_warn("Syntax error in %s line %d", configfile, line + 1);
       }
 
     }
@@ -1076,6 +1108,7 @@ const char *cfg_get_bookmark_note(const char *host, int port) {
   snprintf(key, sizeof(key), "[%s:%d]", host, port);
 
   if ((f = fopen(notes_path, "r")) == NULL) return note_buf;
+  cfg_make_private(f);   /* tighten a notes file written by an older version */
 
   while (fgets(line, sizeof(line), f)) {
     /* Strip trailing newline */
@@ -1162,6 +1195,7 @@ void cfg_set_bookmark_note(const char *host, int port, const char *note) {
   snprintf(tmppath, sizeof(tmppath), "%s.tmp", notes_path);
 
   tmp = fopen(tmppath, "w");
+  cfg_make_private(tmp);   /* login= lines are credentials */
   if (!tmp) return;
 
   /* Copy existing notes, skipping the one we're replacing */
@@ -1234,6 +1268,7 @@ void cfg_log_connection(const char *host, int port) {
   tm_info = localtime(&now);
 
   if (tm_info && (hf = fopen(fname, "a")) != NULL) {
+    cfg_make_private(hf);
     fprintf(hf, "%04d-%02d-%02d %02d:%02d:%02d  %s:%d\n",
             tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
             tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec,
@@ -1250,7 +1285,7 @@ int cfg_read_history(CfgHistoryEntry *entries, int max) {
   char fname[512];
   char line[512];
   CfgHistoryEntry *all;
-  int n = 0, i, j, out = 0;
+  int n = 0, i, j, k, out = 0;
   const int cap = 4096;
 
 #ifdef WINDOWS
@@ -1265,8 +1300,12 @@ int cfg_read_history(CfgHistoryEntry *entries, int max) {
     fclose(hf);
     return 0;
   }
-  while (n < cap && fgets(line, sizeof(line), hf)) {
+  /* The file is never trimmed, so keep the newest `cap` lines in a ring:
+   * stopping at the first `cap` meant new connections vanished from the
+   * history list once the file grew past that. */
+  while (fgets(line, sizeof(line), hf)) {
     char *sep, *colon;
+    CfgHistoryEntry *e = &all[n % cap];
     size_t len = strlen(line);
     while (len && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = 0;
     if (len < 22) continue;
@@ -1274,21 +1313,22 @@ int cfg_read_history(CfgHistoryEntry *entries, int max) {
     while (*sep == ' ') sep++;
     colon = strrchr(sep, ':');
     if (!colon || colon == sep) continue;
-    memcpy(all[n].when, line, 19);
-    all[n].when[19] = 0;
+    memcpy(e->when, line, 19);
+    e->when[19] = 0;
     {
       size_t hl = (size_t)(colon - sep);
-      if (hl >= sizeof(all[n].host)) hl = sizeof(all[n].host) - 1;
-      memcpy(all[n].host, sep, hl);
-      all[n].host[hl] = 0;
+      if (hl >= sizeof(e->host)) hl = sizeof(e->host) - 1;
+      memcpy(e->host, sep, hl);
+      e->host[hl] = 0;
     }
-    all[n].port = (int)strtol(colon + 1, NULL, 10);
+    e->port = (int)strtol(colon + 1, NULL, 10);
     n++;
   }
   fclose(hf);
   /* walk backwards (newest last in the file), skipping repeats */
-  for (i = n - 1; i >= 0 && out < max; i--) {
+  for (k = 0; k < n && k < cap && out < max; k++) {
     int dup = 0;
+    i = (n - 1 - k) % cap;
     for (j = 0; j < out; j++) {
       if (entries[j].port == all[i].port && strcmp(entries[j].host, all[i].host) == 0) {
         dup = 1;

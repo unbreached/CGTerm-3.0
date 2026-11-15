@@ -428,6 +428,16 @@ int xmodem_send(int send1k) {
   }
 
   usecrc = (c == XM_C) ? 1 : 0;
+  /* A receiver repeats its NAK / 'C' every few seconds while the user is
+   * still picking a file. Purge the queued copies: each one used to be
+   * taken as a NAK for block 1, the block went out several times, and the
+   * duplicate ACKs that came back then advanced us past blocks the
+   * receiver had never acknowledged. */
+  {
+    int purged = 0;
+    while (xm_recv_byte_dbg(100) >= 0 && ++purged < 256) {
+    }
+  }
   XMDBG("[XMODEM] send negotiated mode=%s via %s\n", usecrc ? "CRC" : "CHECKSUM", xm_name(c));
 
   bytesleft = xfer_file_size;
@@ -448,6 +458,7 @@ int xmodem_send(int send1k) {
 
   {
   int timeouts = 0;
+  int naks = 0;          /* consecutive NAKs for the outstanding block */
   while (bytesleft > 0) {
     if (xfer_cancel) {
       xmodem_fail("Cancelling...");
@@ -470,10 +481,21 @@ int xmodem_send(int send1k) {
       xmodem_send_block(blocknum, blocksize, usecrc);
       break;
     case XM_CAN:
-      xfer_progress_status("Canceled by remote!", sentbytes, xfer_file_size);
-      return 0;
+      /* One stray 0x18 in board status output must not kill the upload:
+       * a real cancel is a run of CANs or CAN followed by silence. */
+      c = xm_recv_byte_dbg(1000);
+      if (c == -2) {
+        xmodem_fail("Disconnected!");
+        return 0;
+      }
+      if (c == XM_CAN || c == -1) {
+        xfer_progress_status("Canceled by remote!", sentbytes, xfer_file_size);
+        return 0;
+      }
+      break;
     case XM_ACK:
       timeouts = 0;
+      naks = 0;
       if (blocknum != 0) {
         sentbytes += xmodem_last_payload_len;
         bytesleft -= xmodem_last_payload_len;
@@ -497,6 +519,10 @@ int xmodem_send(int send1k) {
       }
       break;
     case XM_NAK:
+      if (++naks >= 20) {
+        xmodem_fail("Too many retries!");
+        return 0;
+      }
       XMDBG("[XMODEM] send NAK resend block=%u size=%d\n", blocknum, blocksize);
       xfer_progress_status("Resending...", sentbytes, xfer_file_size);
       xmodem_send_block(blocknum, blocksize, usecrc);
@@ -509,13 +535,24 @@ int xmodem_send(int send1k) {
   }
 
   xfer_progress_status("Finishing...", sentbytes, xfer_file_size);
-  xm_send_byte_dbg(XM_EOT);
-  c = xm_recv_byte_dbg(10000);
-  if (c != XM_ACK) {
-    xm_send_byte_dbg(XM_EOT);
-    c = xm_recv_byte_dbg(10000);
+  /* EOT is repeated until it is acknowledged (some receivers NAK the first
+   * one on purpose). Without an ACK we do not know the receiver closed the
+   * file, so don't report success. */
+  {
+    int tries;
+    for (tries = 0; tries < 5 && !xfer_cancel; tries++) {
+      xm_send_byte_dbg(XM_EOT);
+      c = xm_recv_byte_dbg(10000);
+      if (c == XM_ACK) {
+        xfer_progress_status("Transfer complete", xfer_file_size, xfer_file_size);
+        return 1;
+      }
+      if (c == -2) {
+        xmodem_fail("Disconnected!");
+        return 0;
+      }
+    }
   }
-
-  xfer_progress_status("Transfer complete", xfer_file_size, xfer_file_size);
-  return 1;
+  xmodem_fail("Receiver did not confirm the end of file");
+  return 0;
 }

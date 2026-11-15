@@ -247,7 +247,7 @@ void ui_menukey(SDL_keysym *keysym) {
     /* Re-show background if not connected */
     if (!net_connected()) {
       char bgpath[1024];
-      path_build_asset(bgpath, sizeof(bgpath), "background_40.bmp");
+      path_build_asset(bgpath, sizeof(bgpath), cfg_termmode == 1 ? "background_80.bmp" : "background_40.bmp");
       if (cfg_file_exists(bgpath)) {
         gfx_vbl();
         gfx_show_background(bgpath);
@@ -265,6 +265,8 @@ void ui_menukey(SDL_keysym *keysym) {
   case SDLK_LALT: case SDLK_RALT:
     menu_hide();
     kbd_focus = FOCUS_TERM;
+    gfx_vbl();   /* repaint without the menu first: a screenshot taken from
+                  * the menu used to include the menu overlay */
     ui_metakey(keysym);
     break;
 
@@ -644,16 +646,26 @@ void ui_bookmarkkey(SDL_keysym *keysym) {
 }
 
 
+/* Scrollback moves half a screen per key press (it used to move a single
+ * line) and stops at the oldest row that was actually written. */
+#define SCROLLBACK_STEP 12
+
 void ui_pageup(void) {
-  if (gfx_offset > cfg_columns) {
-    gfx_set_offset(gfx_offset - cfg_columns);
+  int oldest = gfx_maxoffset - gfx_history_rows * cfg_columns;
+  int target = gfx_offset - SCROLLBACK_STEP * cfg_columns;
+  if (oldest < 0) oldest = 0;
+  if (target < oldest) target = oldest;
+  if (target != gfx_offset) {
+    gfx_set_offset(target);
   }
 }
 
 
 void ui_pagedown(void) {
-  if (gfx_offset < gfx_maxoffset) {
-    gfx_set_offset(gfx_offset + cfg_columns);
+  int target = gfx_offset + SCROLLBACK_STEP * cfg_columns;
+  if (target > gfx_maxoffset) target = gfx_maxoffset;
+  if (target != gfx_offset) {
+    gfx_set_offset(target);
   }
 }
 

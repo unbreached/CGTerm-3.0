@@ -38,76 +38,45 @@ void punter_send_string(char *s) {
 }
 
 
-int punter_recv_string(char *sendstring, char *recvstring) {
-  int c, bytecnt;
-  int errorcnt;
+/* Send sendstring and scan the incoming stream for waitstring.
+ *
+ * This used to read fixed 3-byte groups and compare each group, so a single
+ * stray byte from the board (status text around the transfer) misaligned
+ * every following group: "xSY" "NSY" "NSY"... and the download died with
+ * "Handshake timeout". Scanning byte by byte resyncs on its own, the same
+ * way punter_wait_handshake() does for uploads. sendstring is repeated
+ * whenever the line goes quiet for 3 s. */
+int punter_handshake(char *sendstring, char *waitstring) {
+  signed int c;
+  int errorcnt = 20;
+  int pos = 0;
+  int scanned = 0;
 
-  //printf("punter_recv_string: sending \"%s\"\n", sendstring);
-  memset(recvstring, 0, 4);
-  if (sendstring[0]) {
-    punter_send_string(sendstring);
-  }
-  bytecnt = 0;
-  errorcnt = 20;
-  while (bytecnt < 3) {  /* Changed from != to < to prevent overflow */
+  punter_send_string(sendstring);
+  while (!xfer_cancel) {
     c = xfer_recv_byte(3000);
+    if (c == -2) {
+      return(0);                      /* disconnected */
+    }
     if (c < 0) {
-      if (--errorcnt <= 0 || xfer_cancel) {
+      if (--errorcnt <= 0) {
         return(0);
       }
-      //printf("punter_recv_string: timeout %d\n", errorcnt);
-      if (sendstring[0]) {
-        punter_send_string(sendstring);
-      }
-      //printf("punter_recv_string: sending \"%s\"\n", sendstring);
-      bytecnt = 0;
+      punter_send_string(sendstring);
+      pos = 0;
       continue;
     }
-    /* Bounds check before writing */
-    if (bytecnt < 3) {
-      recvstring[bytecnt++] = c;
-    } else {
-      /* Prevent buffer overflow - discard extra bytes */
-      break;
-    }
-  }
-  recvstring[3] = 0;
-  //printf("punter_recv_string: received \"%s\"\n", recvstring);
-
-  return(3);
-}
-
-
-int punter_handshake(char *sendstring, char *waitstring) {
-  char p[4];
-  int l = 0;
-  int errorcnt = 20;
-
-  while (errorcnt-- && !xfer_cancel) {
-    l = punter_recv_string(sendstring, p);
-    if (l == 3) {
-      if (strcmp(waitstring, p) == 0) {
-	//printf("punter_handshake: got \"%s\", done\n", waitstring);
-	return(1);
-      } else if (strcmp(sendstring, p) == 0) {
-	/* Could be BBS status screen output (e.g. "Good:" matches "GOO").
-	 * Don't fail — just retry. */
-      } else {
-	if (strcmp("ACK", waitstring) == 0) {
-	  if (strcmp("CKA", p) == 0) {
-	    xfer_recv_byte(100);
-	    xfer_recv_byte(100);
-	    return(1);
-	  }
-	  if (strcmp("KAC", p) == 0) {
-	    xfer_recv_byte(100);
-	    return(1);
-	  }
-	}
+    if ((char)c == waitstring[pos]) {
+      if (++pos == 3) {
+        return(1);
       }
+    } else {
+      pos = ((char)c == waitstring[0]) ? 1 : 0;
+    }
+    if (++scanned > 4096) {
+      return(0);                      /* endless junk: give up */
     }
   }
-  //printf("punter_handshake: failed\n");
   return(0);
 }
 
@@ -301,6 +270,7 @@ int punter_recv(void) {
    */
   {
     int got_ack = 0;
+    int ackpos = 0;
     signed int c;
     unsigned int last_goo_time = 0;
     unsigned int now;
@@ -327,15 +297,14 @@ int punter_recv(void) {
         continue;
       }
 
-      if (c == 'A') {
-        c = xfer_recv_byte(500);
-        if (c == 'C') {
-          c = xfer_recv_byte(500);
-          if (c == 'K') {
-            got_ack = 1;
-            break;
-          }
+      /* running match, so "AACK" and "ACACK" are still seen */
+      if (c == "ACK"[ackpos]) {
+        if (++ackpos == 3) {
+          got_ack = 1;
+          break;
         }
+      } else {
+        ackpos = (c == 'A') ? 1 : 0;
       }
     }
     if (!got_ack) {

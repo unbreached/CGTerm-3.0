@@ -6,6 +6,7 @@ extern unsigned char *gfx_0400;
 extern unsigned char *gfx_d800;
 extern signed int gfx_cursx, gfx_cursy;
 extern int gfx_offset, gfx_maxoffset;
+extern int gfx_history_rows;
 extern int gfx_cursdirection;
 
 

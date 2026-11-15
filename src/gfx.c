@@ -17,6 +17,7 @@ unsigned char *gfx_d800 = gfx_d800_buffer;
 unsigned char *gfx_bg = gfx_bg_buffer;
 int gfx_offset;
 int gfx_maxoffset;
+int gfx_history_rows = 0;   /* rows scrolled off the top and still in the buffer */
 signed int gfx_cursx, gfx_cursy;
 int gfx_cursdirection;
 
@@ -29,11 +30,15 @@ static int gfx_menu_lastline;
 
 static SDL_Surface *gfx_screen;
 static int gfx_bpp;
-static int cursorspeed = 22;
+/* Cursor blink: on and off for CURSOR_HALF_MS each. Timed, not counted per
+ * gfx_vbl() call, so it no longer speeds up in loops that redraw more often
+ * (transfers, dialogs). 333 ms matches the C64's 20-jiffy phase. */
+#define CURSOR_HALF_MS 333
+static Uint32 cursor_epoch = 0;   /* blink phase reference */
 static int gfx_height, gfx_width;
 static Uint8 charwidth, charheight;
 static int borderleft, borderright;
-static Uint8 cursorctr, colorundercursor;
+static Uint8 colorundercursor;
 static SDL_bool cursorvis;
 static int cursor_hidden = 0;   /* gfx_cursor_show(0): no blink at all */
 
@@ -164,7 +169,7 @@ SDL_Surface *gfx_createfont_pal(SDL_Surface *srcsurface, int zoom, SDL_Color *pa
 
 /* ANSI font: uses magenta key color as transparent background.
  * Reads 16 rows per char from the source (8x16 CP437 font).
- * Each source row maps to one output row (no vertical zoom needed). */
+ * Rows are scaled to the cell height (8 * zoom). */
 SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *pal) {
   SDL_Surface *tempsurface;
   SDL_Surface *surface;
@@ -200,9 +205,13 @@ SDL_Surface *gfx_createfont_ansi(SDL_Surface *srcsurface, int zoom, SDL_Color *p
   for (col = 0; col < 16; ++col) {
     fg = SDL_MapRGB(surface->format, pal[col].r, pal[col].g, pal[col].b);
     for (c = 0; c < 256; ++c) {
-      /* Read 16 source rows, map to charheight output rows */
-      for (y = 0; y < src_char_h && y < charheight; ++y) {
-	  sp = (Uint8 *)srcsurface->pixels + (c & 0x1f) * 8 + ((c / 32) * src_char_h + y) * srcsurface->pitch;
+      /* Scale the 16 source rows to the full cell height. This used to
+       * copy them 1:1, which is only right at zoom 2 (16 px cells): at
+       * zoom 4 the glyphs filled the top half of each cell and box
+       * drawing no longer joined vertically. */
+      for (y = 0; y < charheight; ++y) {
+	  int sy = y * src_char_h / charheight;
+	  sp = (Uint8 *)srcsurface->pixels + (c & 0x1f) * 8 + ((c / 32) * src_char_h + sy) * srcsurface->pitch;
 	  for (x = 0; x < 8; ++x) {
 	    if (*sp) {
 	      for (z2 = 0; z2 < hzoom; ++z2) {
@@ -249,10 +258,14 @@ SDL_Surface *gfx_loadfont(char *fontname) {
  * size is unknown we don't restrict anything. */
 int gfx_max_zoom(void) {
   int z, avail_w, avail_h;
-  if (gfx_desktop_w <= 0 || gfx_desktop_h <= 0) return 8;
+  /* The font atlas is 256 glyphs wide. In 40 columns at zoom 8 that is
+   * 16384 px, which SDL refuses, leaving NULL fonts and a blank window (and
+   * a saved zoom that failed at the next start). 7 is the 40-column limit. */
+  int top = (cfg_columns == 40) ? 7 : 8;
+  if (gfx_desktop_w <= 0 || gfx_desktop_h <= 0) return top;
   avail_w = gfx_desktop_w;
   avail_h = gfx_desktop_h - 80;   /* title bar + taskbar/menu-bar headroom */
-  for (z = 8; z > 1; --z) {
+  for (z = top; z > 1; --z) {
     if (GFX_WIDTH * z <= avail_w && (GFX_HEIGHT + 8) * z <= avail_h) return z;
   }
   return 1;
@@ -289,6 +302,7 @@ int gfx_init(int fullscreen, char *appname) {
   borderright = 0;
 
   gfx_offset = gfx_maxoffset = sizeof(gfx_0400_buffer) - cfg_columns * 25;
+  gfx_history_rows = 0;   /* old rows are wrapped for the previous width */
   gfx_0400 = gfx_0400_buffer + gfx_maxoffset;
   gfx_d800 = gfx_d800_buffer + gfx_maxoffset;
   gfx_bg = gfx_bg_buffer + gfx_maxoffset;
@@ -322,6 +336,13 @@ int gfx_init(int fullscreen, char *appname) {
   /* A stale or hand-edited config can carry a zoom too large for this display,
    * which opens as an unusable black window (issue #12). Clamp it, and persist
    * the corrected value so the config stops fighting us. */
+  if (cfg_columns == 40 && cfg_zoom > 7) {
+    cfg_zoom = 7;                 /* atlas limit, fullscreen included */
+    charwidth = 8 * cfg_zoom;
+    charheight = 8 * cfg_zoom;
+    gfx_width = cfg_zoom * GFX_WIDTH;
+    gfx_height = cfg_zoom * GFX_HEIGHT;
+  }
   if (!fullscreen) {
     int clamped = gfx_clamp_zoom(cfg_zoom);
     if (clamped != cfg_zoom) {
@@ -392,7 +413,7 @@ int gfx_init(int fullscreen, char *appname) {
   gfx_menu_firstline = 0;
   gfx_menu_lastline = (gfx_height - 1) / charheight;
 
-  cursorctr = 0;
+  cursor_epoch = SDL_GetTicks();
   cursorvis = SDL_FALSE;
 
   gfx_cursdirection = 1;
@@ -401,8 +422,19 @@ int gfx_init(int fullscreen, char *appname) {
 }
 
 
+/* Set while the blink phase is "on" in ANSI mode, where the cursor is
+ * drawn as a block over the cell at blit time (see gfx_vbl). */
+static SDL_bool ansi_cursor_on = SDL_FALSE;
+
 void invertcursor(void) {
-  gfx_0400[gfx_cursy * cfg_columns + gfx_cursx] ^= 0x80;
+  if (cfg_termmode == 1) {
+    /* XOR 0x80 means reverse video only in PETSCII screen codes. The ANSI
+     * font is indexed by CP437 byte, so flipping bit 7 showed a different
+     * character (a space blinked as an accented letter). */
+    ansi_cursor_on = cursorvis ? SDL_FALSE : SDL_TRUE;   /* called just before cursorvis flips */
+  } else {
+    gfx_0400[gfx_cursy * cfg_columns + gfx_cursx] ^= 0x80;
+  }
   dirty[gfx_cursy] = SDL_TRUE;
 }
 
@@ -413,7 +445,7 @@ void resetcursor(void) {
     cursorvis = SDL_FALSE;
     gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = colorundercursor;
   }
-  cursorctr = cursorspeed/2 - 1;
+  cursor_epoch = SDL_GetTicks() - CURSOR_HALF_MS;   /* show again on the next frame */
 }
 
 
@@ -545,6 +577,7 @@ void gfx_cls(void) {
 
 void gfx_scrollup(void) {
   resetcursor();   /* don't scroll an inverted cursor glyph up into the text */
+  if (gfx_history_rows < gfx_maxoffset / cfg_columns) ++gfx_history_rows;
   memmove(gfx_0400_buffer, gfx_0400_buffer + cfg_columns, sizeof(gfx_0400_buffer) - (26 - cfg_rows) * cfg_columns);
   memmove(gfx_d800_buffer, gfx_d800_buffer + cfg_columns, sizeof(gfx_d800_buffer) - (26 - cfg_rows) * cfg_columns);
   memmove(gfx_bg_buffer, gfx_bg_buffer + cfg_columns, sizeof(gfx_bg_buffer) - (26 - cfg_rows) * cfg_columns);
@@ -657,6 +690,18 @@ void gfx_draw_line(int ypos) {
     }
     SDL_BlitSurface(fontlist[font], &src, gfx_screen, &dest);
   }
+  if (ansi_cursor_on && font == 2 && ypos == gfx_cursy && gfx_offset == gfx_maxoffset) {
+    /* ANSI cursor: an underline bar, like a DOS text cursor (drawn before
+     * the menu overlay so a menu always covers it) */
+    SDL_Rect cr;
+    int ch = charheight / 8;
+    if (ch < 2) ch = 2;
+    cr.x = gfx_cursx * charwidth;
+    cr.y = gfx_cursy * charheight + charheight - ch;
+    cr.w = charwidth;
+    cr.h = ch;
+    SDL_FillRect(gfx_screen, &cr, SDL_MapRGB(gfx_screen->format, 0xAA, 0xAA, 0xAA));
+  }
   if (menu_visible && ypos >= gfx_menu_firstline && ypos <= gfx_menu_lastline) {
     src.w = gfx_menu_width;
     src.h = charheight;
@@ -688,8 +733,16 @@ static unsigned char ascii_to_screencode(unsigned char c, int fnt) {
 
 /* Screen code -> ASCII (inverse of the above, for copy-to-clipboard). */
 static char screencode_to_ascii(unsigned char sc, int fnt) {
+  if (fnt == 2) {
+    /* CP437 is byte-ordered and bit 7 is part of the character: masking it
+     * first turned box drawing into letters (0xC4 came out as 'D'). */
+    if (sc >= 0x20 && sc < 0x7F) return (char)sc;
+    if (sc == 0xB3 || sc == 0xBA) return '|';
+    if (sc == 0xC4 || sc == 0xCD) return '-';
+    if (sc >= 0xB0 && sc <= 0xDF) return (sc >= 0xB0 && sc <= 0xB2) || sc >= 0xDB ? '#' : '+';
+    return ' ';
+  }
   sc &= 0x7F;
-  if (fnt == 2) return (sc >= 0x20 && sc < 0x7F) ? (char)sc : '?';
   if (sc == 0) return '@';
   if (sc >= 1 && sc <= 26) return (char)(fnt == 1 ? 'a' + sc - 1 : 'A' + sc - 1);
   if (sc == 27) return '[';
@@ -744,7 +797,7 @@ static void gfx_draw_status_row(void) {
     }
     SDL_BlitSurface(fontlist[font], &src, gfx_screen, &dest);
   }
-  SDL_UpdateRect(gfx_screen, 0, 25 * charheight, gfx_width - 1, charheight);
+  SDL_UpdateRect(gfx_screen, 0, 25 * charheight, gfx_width, charheight);
 }
 
 /* Visible screen as text lines (trailing blanks trimmed), for the
@@ -771,15 +824,16 @@ int gfx_screen_to_text(char *out, size_t outsz) {
 void gfx_vbl(void) {
   int first, last, l;
 
-  cursorctr = (cursorctr + 1) % cursorspeed;
+  int blink_on = (((SDL_GetTicks() - cursor_epoch) / CURSOR_HALF_MS) & 1) != 0;
+
   if (cursor_hidden) {
     /* ESC[?25l, splash, background image: no blink at all */
-  } else if (cursorctr == cursorspeed/2) {
+  } else if (blink_on && !cursorvis) {
     invertcursor();
     cursorvis = SDL_TRUE;
     colorundercursor = gfx_d800[gfx_cursy * cfg_columns + gfx_cursx];
     gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = fgcolor;
-  } else if (cursorctr == 0 && cursorvis) {
+  } else if (!blink_on && cursorvis) {
     invertcursor();
     cursorvis = SDL_FALSE;
     gfx_d800[gfx_cursy * cfg_columns + gfx_cursx] = colorundercursor;
@@ -806,7 +860,7 @@ void gfx_vbl(void) {
     }
   }
   if (first != 25) {
-    SDL_UpdateRect(gfx_screen, 0, first * charheight, gfx_width - 1, (last - first) * charheight + charheight);
+    SDL_UpdateRect(gfx_screen, 0, first * charheight, gfx_width, (last - first) * charheight + charheight);
   }
   if (gfx_status_rows && (status_dirty || first != 25)) {
     gfx_draw_status_row();
@@ -957,18 +1011,23 @@ void gfx_set_title(const char *title) {
 void gfx_toggle_fullscreen(void) {
   //SDL_WM_ToggleFullScreen(gfx_screen);
   if (cfg_fullscreen) {
-    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_RESIZABLE|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
+    SDL_Surface *ns = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_RESIZABLE|SDL_ANYFORMAT|SDL_SWSURFACE);
+    if (ns == NULL) {
+      /* keep the current mode: exiting here dropped the connection */
       printf("Unable to open window: %s\n", SDL_GetError());
-      exit(1);
+      return;
     }
+    gfx_screen = ns;
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     SDL_ShowCursor(SDL_DISABLE);  /* stay hidden in windowed mode too */
     cfg_fullscreen = 0;
   } else {
-    if ((gfx_screen = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE)) == NULL) {
-      printf("Unable to open window: %s\n", SDL_GetError());
-      exit(1);
+    SDL_Surface *ns = SDL_SetVideoMode(gfx_width, gfx_height + gfx_status_rows * charheight, gfx_bpp, SDL_FULLSCREEN|SDL_ANYFORMAT|SDL_SWSURFACE);
+    if (ns == NULL) {
+      printf("Unable to go fullscreen: %s\n", SDL_GetError());
+      return;
     }
+    gfx_screen = ns;
     cfg_fullscreen = 1;
   }
   /* Regenerate fonts — SDL_SetVideoMode may invalidate surfaces on some platforms */
@@ -1036,6 +1095,7 @@ void gfx_set_columns(int cols) {
       cfg_zoom = saved_zoom;
       saved_zoom = 0;
     }
+    if (cfg_zoom > 7) cfg_zoom = 7;   /* 40-column font atlas limit */
     charwidth = 8 * cfg_zoom;
     charheight = 8 * cfg_zoom;   /* must track cfg_zoom, or the regenerated
                                   * font surface and dirty[] overflow */
@@ -1090,6 +1150,7 @@ void gfx_set_columns(int cols) {
 
   /* Reset buffer pointers */
   gfx_offset = gfx_maxoffset = sizeof(gfx_0400_buffer) - cfg_columns * 25;
+  gfx_history_rows = 0;   /* old rows are wrapped for the previous width */
   gfx_0400 = gfx_0400_buffer + gfx_maxoffset;
   gfx_d800 = gfx_d800_buffer + gfx_maxoffset;
   gfx_bg = gfx_bg_buffer + gfx_maxoffset;

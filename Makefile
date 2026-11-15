@@ -44,17 +44,11 @@ ifeq ($(shell sdl-config --version 2>/dev/null),)
   $(error sdl-config not found: install SDL 1.2 / sdl12-compat development files)
 endif
 
-# Disable SDL_mixer for now - will implement custom music solution
-HAVE_SDL_MIXER := 0
-ifeq ($(HAVE_SDL_MIXER),1)
-  SDL_MIXER_CFLAGS := -DHAVE_SDL_MIXER -I/opt/homebrew/Cellar/sdl12-compat/1.2.76/include -I/opt/homebrew/include
-  SDL_MIXER_LDFLAGS := -L/opt/homebrew/lib -lSDL_mixer
-  $(info [+] SDL_mixer found — music support enabled)
-else
-  SDL_MIXER_CFLAGS :=
-  SDL_MIXER_LDFLAGS :=
-  $(info [*] SDL_mixer not found — music support disabled (optional))
-endif
+# Music is played through libopenmpt (see OPENMPT_* above). The old
+# SDL_mixer switch is gone: it was hard-wired off and printed "music support
+# disabled" on every build, which was not true.
+SDL_MIXER_CFLAGS :=
+SDL_MIXER_LDFLAGS :=
 
 # User-overridable optimization/warning flags.
 CFLAGS ?= -O2 -Wall
@@ -66,6 +60,9 @@ HARDEN_CFLAGS ?= -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
 # macOS links PIE by default and warns on an explicit -pie; only pass it on Linux.
 ifeq ($(UNAME_S),Darwin)
 HARDEN_LDFLAGS ?=
+else ifeq ($(UNAME_S),Linux)
+# full RELRO (GOT read-only after startup) and a non-executable stack
+HARDEN_LDFLAGS ?= -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack
 else
 HARDEN_LDFLAGS ?= -pie
 endif
@@ -139,7 +136,7 @@ TARGETS := \
 	$(BIN_LOCAL_DIR)/cgedit$(EXESUFFIX) \
 	$(BIN_LOCAL_DIR)/testkbd$(EXESUFFIX)
 
-.PHONY: all clean distclean uninstall install installdirs assets info test fuzz
+.PHONY: all clean distclean uninstall install installdirs assets info test test-asan check fuzz dist-src checksums
 
 all: $(TARGETS)
 
@@ -215,7 +212,18 @@ distclean: clean
 # Regression harnesses (no window, no network): disk-image geometry/BAM/
 # directory logic, and the XMODEM/Punter state machines against a scripted
 # peer with a virtual clock. They write scratch files under /tmp.
-TEST_CFLAGS := -O1 -g -Wall $(REQUIRED_CFLAGS)
+# SAN is empty for the normal run; `make test-asan` fills it in.
+SAN ?=
+TEST_CFLAGS := -O1 -g -Wall $(SAN) $(REQUIRED_CFLAGS)
+
+# The same suites under AddressSanitizer + UndefinedBehaviorSanitizer.
+# Meant for Linux and CI: on recent macOS a sanitized binary that links the
+# SDL/Cocoa libraries can hang in the dynamic loader before main() runs.
+test-asan:
+	$(MAKE) test SAN="-fsanitize=address,undefined -fno-omit-frame-pointer"
+
+check: test
+
 test: | $(OBJDIR)
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_diskimage tests/test_diskimage.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c $(ALL_LDFLAGS)
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_xfer tests/test_xfer.c $(SRCDIR)/xfer.c $(SRCDIR)/xmodem.c $(SRCDIR)/punter.c $(SRCDIR)/rainbow.c $(SRCDIR)/zmodem.c $(SRCDIR)/crc.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c $(ALL_LDFLAGS)
@@ -235,6 +243,17 @@ FUZZ_TYPE ?= d64
 fuzz: | $(OBJDIR)
 	$(CC) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer $(REQUIRED_CFLAGS) -o $(OBJDIR)/fuzz_diskimage tests/fuzz_diskimage.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c -lm
 	$(OBJDIR)/fuzz_diskimage $(FUZZ_ITER) $(FUZZ_TYPE)
+
+# Source tarball exactly as released: tracked files only, minus the paths
+# marked export-ignore in .gitattributes, plus a SHA256SUMS for everything
+# currently in dist/.
+dist-src:
+	mkdir -p dist
+	git archive --format=tar.gz --prefix=CGTerm-3.0/ -o dist/CGTerm-3.0-source.tar.gz HEAD
+	@echo "[+] dist/CGTerm-3.0-source.tar.gz"
+
+checksums:
+	cd dist && shasum -a 256 CGTerm-3.0-*.zip CGTerm-3.0-*.tar.gz > SHA256SUMS && cat SHA256SUMS
 
 uninstall:
 	$(RM) $(DESTDIR)$(BINDIR)/cgterm$(EXESUFFIX) $(DESTDIR)$(BINDIR)/cgchat$(EXESUFFIX) $(DESTDIR)$(BINDIR)/cgedit$(EXESUFFIX)

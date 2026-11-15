@@ -399,14 +399,14 @@ int kbd_getkey() {
     int c, f;
     unsigned char key = 0;
     
-    unsigned char shift, ctrl, cbm;
+    unsigned char shift, ctrl, cbm, sshift;
  
     
     if (SDL_PollEvent(&event)) {
         switch (event.type) {
                 
             case SDL_QUIT:
-                exit(1);
+                exit(0);   /* closing the window is a normal exit */
                 break;
 
             case SDL_VIDEORESIZE:
@@ -473,6 +473,14 @@ int kbd_getkey() {
                          * Synchronet, Enigma and WWIV decode. */
                         int kshift = (event.key.keysym.mod & KMOD_SHIFT) ? 1 : 0;
                         int kalt = (event.key.keysym.mod & KMOD_ALT) ? 1 : 0;
+                        /* Right Alt is AltGr on most non-US layouts. When it
+                         * produced a character of its own (German AltGr+Q = '@'),
+                         * type that instead of sending ESC+letter. */
+                        if ((event.key.keysym.mod & (KMOD_RALT | KMOD_MODE)) && !(event.key.keysym.mod & KMOD_LALT) &&
+                            event.key.keysym.unicode >= 32 && event.key.keysym.unicode != 127 &&
+                            event.key.keysym.unicode != (Uint16)event.key.keysym.sym) {
+                            kalt = 0;
+                        }
                         int kctrl = (event.key.keysym.mod & KMOD_CTRL) ? 1 : 0;
                         switch (event.key.keysym.sym) {
                         case SDLK_UP:    net_send_string((const unsigned char *)"\033[A"); return 0;
@@ -569,18 +577,31 @@ int kbd_getkey() {
                         shift = (event.key.keysym.mod & (KMOD_SHIFT | KMOD_CAPS)) ? 1 : 0;
                         ctrl = (event.key.keysym.mod & KMOD_CTRL) ? 1 : 0;
                         cbm = (event.key.keysym.mod & KMOD_ALT) ? 1 : 0;
+                        /* Caps Lock is for letters only. Counted as Shift it
+                         * turned RETURN into shift-RETURN, HOME into CLR (wiping
+                         * the screen) and F1 into F2. */
+                        sshift = (event.key.keysym.mod & KMOD_SHIFT) ? 1 : 0;
+                        /* Right Alt is AltGr on Swedish, German and most other
+                         * non-US layouts: AltGr+2 is '@', AltGr+8 is '['. Treated
+                         * as the Commodore key it sent colour codes instead. If
+                         * AltGr produced an ASCII character of its own, type it. */
+                        if (cbm && (event.key.keysym.mod & (KMOD_RALT | KMOD_MODE)) && !(event.key.keysym.mod & KMOD_LALT) &&
+                            event.key.keysym.unicode >= 32 && event.key.keysym.unicode < 127 &&
+                            event.key.keysym.unicode != (Uint16)event.key.keysym.sym) {
+                            cbm = 0;
+                        }
 
                         /* Special keys: fixed PETSCII codes. They go through petscii_done so
                          * macro recording captures RETURN, cursor keys, DEL, F-keys and space. */
                         switch (event.key.keysym.sym) {
                         case SDLK_RETURN: case SDLK_KP_ENTER:
-                            key = shift ? 0x8D : 0x0D; goto petscii_done;
+                            key = sshift ? 0x8D : 0x0D; goto petscii_done;
                         case SDLK_BACKSPACE:
-                            key = 0x14; goto petscii_done;  /* C64 DEL */
+                            key = sshift ? 0x94 : 0x14; goto petscii_done;  /* C64 DEL, shifted = INST */
                         case SDLK_DELETE:
                             key = 0x94; goto petscii_done;  /* C64 INSERT */
                         case SDLK_HOME:
-                            key = shift ? 0x93 : 0x13; goto petscii_done;
+                            key = sshift ? 0x93 : 0x13; goto petscii_done;
                         case SDLK_UP:
                             key = 0x91; goto petscii_done;  /* cursor up */
                         case SDLK_DOWN:
@@ -596,13 +617,13 @@ int kbd_getkey() {
                              * nothing, so there was no way to stop a scroll
                              * (GitHub issue #4). */
                             key = 0x03; goto petscii_done;
-                        case SDLK_F1:  key = shift ? 0x89 : 0x85; goto petscii_done;
+                        case SDLK_F1:  key = sshift ? 0x89 : 0x85; goto petscii_done;
                         case SDLK_F2:  key = 0x89; goto petscii_done;
-                        case SDLK_F3:  key = shift ? 0x8A : 0x86; goto petscii_done;
+                        case SDLK_F3:  key = sshift ? 0x8A : 0x86; goto petscii_done;
                         case SDLK_F4:  key = 0x8A; goto petscii_done;
-                        case SDLK_F5:  key = shift ? 0x8B : 0x87; goto petscii_done;
+                        case SDLK_F5:  key = sshift ? 0x8B : 0x87; goto petscii_done;
                         case SDLK_F6:  key = 0x8B; goto petscii_done;
-                        case SDLK_F7:  key = shift ? 0x8C : 0x88; goto petscii_done;
+                        case SDLK_F7:  key = sshift ? 0x8C : 0x88; goto petscii_done;
                         case SDLK_F8:  key = 0x8C; goto petscii_done;
                         case SDLK_SPACE:
                             key = 0x20; goto petscii_done;

@@ -85,12 +85,17 @@ static void run_next_step(void) {
       printf("Login script finished\n");
       return;
     }
-    end = strchr(step, ';');
-    len = end ? (size_t)(end - step) : strlen(step);
-    if (len >= sizeof(tok)) len = sizeof(tok) - 1;
-    memcpy(tok, step, len);
+    /* Steps are separated by ';'. "\;" is a literal semicolon, so a
+     * password containing one is no longer cut in two. */
+    len = 0;
+    end = step;
+    while (*end && *end != ';') {
+      if (end[0] == '\\' && end[1] == ';') end++;
+      if (len < sizeof(tok) - 1) tok[len++] = *end;
+      end++;
+    }
     tok[len] = 0;
-    step = end ? end + 1 : step + len;
+    step = *end ? end + 1 : end;
 
     if (strncmp(tok, "w:", 2) == 0) {
       const char *t = tok + 2;
