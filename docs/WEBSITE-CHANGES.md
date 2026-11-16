@@ -78,7 +78,7 @@ GitHub release notes.
   start screen from 3.0.7.
 - **Look and feel / intro box**: add "Animated ANSI start screen, logo
   by nail / fire. Drop in your own startup.ans to replace it."
-- The 3.0.5 wording (ZMODEM asks before accepting, AltGr, `\\;`, the
+- The 3.0.5 wording (ZMODEM asks before accepting, AltGr, `\;`, the
   macOS line "Apple Silicon, macOS 26 or later", Linux source only) is
   already on the page and stays.
 
