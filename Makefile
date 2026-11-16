@@ -70,8 +70,24 @@ endif
 # Mandatory flags — always applied even when CFLAGS/LDFLAGS are overridden in the
 # environment, otherwise the include path, -DPREFIX and the SDL/openmpt libs
 # would be silently dropped and the build would break.
-REQUIRED_CFLAGS := $(shell sdl-config --cflags) -DPREFIX=\"$(PREFIX)\" -DCGTERM_DATADIR=\"$(DATADIR)\" -I$(SRCDIR) $(PLATFORM_CFLAGS) $(SDL_MIXER_CFLAGS) $(OPENMPT_CFLAGS) -I/opt/homebrew/include
-REQUIRED_LDFLAGS := $(shell sdl-config --libs) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib $(OPENMPT_LIBS) -lm
+SDL_CFLAGS := $(shell sdl-config --cflags)
+SDL_LIBS := $(shell sdl-config --libs)
+ifeq ($(WINDOWS_BUILD),1)
+  # MSYS2: sdl-config (sdl12-compat) prints POSIX paths such as
+  # -I/mingw64/include/SDL. mingw32-make starts the native compiler
+  # directly, with no MSYS path translation, and the compiler then cannot
+  # find SDL.h. Rewrite every -I/... and -L/... to its Windows form
+  # (-ID:/msys64/mingw64/include/SDL) with cygpath; other words pass through.
+  # The case patterns carry an opening bracket so the brackets balance:
+  # make would otherwise end $(shell ...) at the first lone closing one.
+  winpath = $(shell for f in $(1); do case "$$f" in (-I/*|-L/*) printf '%s%s ' "$$(printf '%s' "$$f" | cut -c1-2)" "$$(cygpath -m "$$(printf '%s' "$$f" | cut -c3-)")";; (*) printf '%s ' "$$f";; esac; done)
+  ifneq ($(shell cygpath -m / 2>/dev/null),)
+    SDL_CFLAGS := $(call winpath,$(SDL_CFLAGS))
+    SDL_LIBS := $(call winpath,$(SDL_LIBS))
+  endif
+endif
+REQUIRED_CFLAGS := $(SDL_CFLAGS) -DPREFIX=\"$(PREFIX)\" -DCGTERM_DATADIR=\"$(DATADIR)\" -I$(SRCDIR) $(PLATFORM_CFLAGS) $(SDL_MIXER_CFLAGS) $(OPENMPT_CFLAGS) -I/opt/homebrew/include
+REQUIRED_LDFLAGS := $(SDL_LIBS) $(SOCKETLIBS) $(SDL_MIXER_LDFLAGS) -L/opt/homebrew/lib $(OPENMPT_LIBS) -lm
 
 # -MMD -MP emit per-object .d header-dependency files (see -include below) so a
 # changed .h triggers a rebuild of the objects that use it.
