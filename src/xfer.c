@@ -161,6 +161,7 @@ void xfer_progress(const char *message) {
 
 
 int xfer_save_file(char *filename);
+void xfer_save_file_cb(char *filename);
 void xfer_check_kbd(void);
 static void xfer_fix_filename(char *filename);
 
@@ -1435,7 +1436,7 @@ int xfer_save_file_in_dir(char *filename) {
     /* Interactive: ask again instead of silently losing the download. */
     xfer_filename[0] = 0;
     ui_inputcall(30, "Bad name (no / \\ ..). File name:", xfer_filename,
-                 (void (*)(char *))&xfer_save_file, FOCUS_REQUESTER);
+                 &xfer_save_file_cb, FOCUS_REQUESTER);
     ui_inputcall_on_cancel(&xfer_discard_download);
     return -1;
   }
@@ -1572,6 +1573,13 @@ static void xfer_fix_filename(char *filename) {
       }
     }
   }
+}
+
+/* Input-dialog callback form of xfer_save_file(): the dialog wants a
+ * void function, and calling an int function through a cast pointer is
+ * not valid C. */
+void xfer_save_file_cb(char *filename) {
+  (void)xfer_save_file(filename);
 }
 
 int xfer_save_file(char *filename) {

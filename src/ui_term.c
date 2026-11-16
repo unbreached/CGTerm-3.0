@@ -1928,7 +1928,7 @@ void ui_xferkey(SDL_keysym *keysym) {
 	  if (xfer_protocol == PROT_MULTIPUNTER || xfer_protocol == PROT_ZMODEM) {
 	    kbd_focus = FOCUS_REQUESTER;
 	  } else {
-	    ui_inputcall(30, "Enter file name:", xfer_filename, (void (*)(char *))&xfer_save_file, FOCUS_REQUESTER);
+	    ui_inputcall(30, "Enter file name:", xfer_filename, &xfer_save_file_cb, FOCUS_REQUESTER);
 	    ui_inputcall_on_cancel(&xfer_discard_download);
 	  }
 	}

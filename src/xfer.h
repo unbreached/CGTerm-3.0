@@ -46,6 +46,7 @@ void xfer_send_multipunter(struct fileselector *fs);
 void xfer_send_zmodem(struct fileselector *fs);
 /* Returns 1 saved, 0 failed, -1 re-prompting the user for another name. */
 int xfer_save_file(char *filename);
+void xfer_save_file_cb(char *filename);
 /* Drop the completed-but-unsaved download (user abandoned the name prompt). */
 void xfer_discard_download(void);
 
