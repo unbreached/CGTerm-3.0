@@ -28,6 +28,17 @@ static int has_bookmark(const char *host, int port) {
   return 0;
 }
 
+/* Empty the bookmark list the way a fresh start would find it (the program
+ * itself only ever loads it once, so config.c has no call for this). */
+static void clear_bookmarks(void) {
+  int i;
+  for (i = 0; i < cfg_numbookmarks; i++) {
+    free(cfg_bookmark_host[i]); cfg_bookmark_host[i] = NULL;
+    free(cfg_bookmark_alias[i]); cfg_bookmark_alias[i] = NULL;
+  }
+  cfg_numbookmarks = 0;
+}
+
 int main(void) {
   char longline[2100];
   char text[4096];
@@ -87,7 +98,7 @@ int main(void) {
             "bookmark = V6, 2001:db8::1, 6400\n"
             "bookmark = Bad, host with spaces, 23\n"
             "bookmark = bad;host, 23\n");
-  cfg_numbookmarks = 0;
+  clear_bookmarks();
   cfg_warnings = 0;
   rc = cfg_readconfig(cfgpath);
   CHECK(rc == 0, "bookmark file loads");
@@ -99,7 +110,7 @@ int main(void) {
     snprintf(text, sizeof text, "bookmark = b%d.example.org, %d\n", i, 1000 + i);
     f = fopen(cfgpath, i ? "a" : "w"); fputs(text, f); fclose(f);
   }
-  cfg_numbookmarks = 0;
+  clear_bookmarks();
   rc = cfg_readconfig(cfgpath);
   CHECK(rc == 0 && cfg_numbookmarks > 0 && cfg_numbookmarks <= 60, "more bookmarks than the list holds does not break loading");
 
@@ -119,6 +130,7 @@ int main(void) {
     CHECK(n == 1 && strcmp(h[0].host, "bbs.example.org") == 0 && h[0].port == 6400, "connection history round trip");
   }
 
+  clear_bookmarks();
   snprintf(text, sizeof text, "rm -rf '%s'", dir);
   if (strncmp(dir, "/tmp/cgt-config-test-", 21) == 0 && system(text) != 0) { /* leave it */ }
   printf("\n%s (%d failures)\n", fails ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED", fails);
