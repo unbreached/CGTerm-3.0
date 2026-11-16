@@ -144,9 +144,9 @@ Oldschool terminal. Modern systems.
   FONT SYSTEM
   - 10 header fonts and 9 menu body fonts included
   - Font selector in settings (Z = Font settings)
-  - Fonts: Maesto, Blackentina 4F, Sportifity, Playful Boxes,
-    Youre Gone, PXFX Disco, Edit Undo, Ed Undot, Nano Pix,
-    Nihonium 113, Homespun, Welbut, Blrrpixs, Racquetball, PX10
+  - Fonts: C64 Pro Mono, Youre Gone, PXFX Disco, Edit Undo,
+    Ed Undot, Nihonium 113, Homespun, Welbut, Blrrpixs,
+    Racquetball, PX10 (licences: assets/fonts/LICENSES.txt)
   - Custom fonts: convert any TTF/OTF with tools/make_font.py
   - Colored text rendering for menus and file selector
 

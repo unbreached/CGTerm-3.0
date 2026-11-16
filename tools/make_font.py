@@ -8,7 +8,7 @@ Usage:
 Output: 8-bit indexed BMP, 16x16 grid (256 chars), color 0=black, color 1=white.
 
 Example:
-  python3 tools/make_font.py assets/Maesto-Regular_demo.otf assets/maesto_large.bmp --size 30 --cell 24x32
+  python3 tools/make_font.py assets/fonts/C64_Pro_Mono-STYLE.ttf assets/fonts/c64pro_large.bmp --size 30 --cell 24x32
 """
 
 import sys

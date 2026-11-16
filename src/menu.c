@@ -58,32 +58,38 @@ static Uint32 cursorcolor;
 static Uint32 selectcolor;
 static Font *menu_font[6];  /* [0]=body, [1]=body(same), [2]=splash/header, [3]=rotozoom, [4]=c64pro, [5]=petscii */
 
-/* Available splash fonts (24x32, 16x16 grid) */
+/* Available splash fonts (24x32, 16x16 grid).
+ * The index is what "splashfont = N" in the config file stores, so slots
+ * are never renumbered. A NULL slot is a font that was removed in 3.0.8
+ * because its licence does not allow redistribution (Maesto demo,
+ * Blackentina 4F, Sportifity, Playful Boxes, Nano Pix demo); a config that
+ * still names one gets SPLASH_FONT_DEFAULT. */
 #define NUM_SPLASH_FONTS 11
+#define SPLASH_FONT_DEFAULT 6
 static const char *splash_font_files[NUM_SPLASH_FONTS] = {
-  "fonts/Maesto_grid.bmp",
-  "fonts/Blackentina_grid.bmp",
-  "fonts/sportifity_grid.bmp",
-  "fonts/playfulboxes_grid.bmp",
+  NULL,
+  NULL,
+  NULL,
+  NULL,
   "fonts/youregone_grid.bmp",
   "fonts/PXFXDisco_grid.bmp",
   "fonts/c64pro_large.bmp",
   "fonts/editundo_grid.bmp",
   "fonts/edundot_grid.bmp",
-  "fonts/NanoPix_grid.bmp",
+  NULL,
   "fonts/Nihonium113_grid.bmp",
 };
 static const char *splash_font_names[NUM_SPLASH_FONTS] = {
-  "Maesto",
-  "Blackentina 4F",
-  "Sportifity",
-  "Playful Boxes",
+  NULL,
+  NULL,
+  NULL,
+  NULL,
   "Youre Gone",
   "PXFX Disco",
   "C64 Pro Mono",
   "Edit Undo",
   "Ed Undot",
-  "Nano Pix",
+  NULL,
   "Nihonium 113",
 };
 
@@ -268,7 +274,10 @@ int menu_init(int width, int height) {
   /* Splash/logo font — selected by cfg_splashfont (0..5) */
   {
     int fi = cfg_splashfont;
-    if (fi < 0 || fi >= NUM_SPLASH_FONTS) fi = 0;
+    if (fi < 0 || fi >= NUM_SPLASH_FONTS || splash_font_files[fi] == NULL) {
+      fi = SPLASH_FONT_DEFAULT;
+      cfg_splashfont = fi;
+    }
     path_build_asset(fname, sizeof(fname), splash_font_files[fi]);
     if ((menu_font[2] = font_load_font(fname, 24, 32, 16, 16)) == NULL) {
       printf("Couldn't load %s (splash font, non-fatal)\n", fname);
@@ -1768,7 +1777,8 @@ int menu_select_disk_format(void) {
 
 
 const char *menu_get_splash_font_name(int idx) {
-  if (idx < 0 || idx >= NUM_SPLASH_FONTS) return "Unknown";
+  if (idx < 0 || idx >= NUM_SPLASH_FONTS || splash_font_names[idx] == NULL)
+    idx = SPLASH_FONT_DEFAULT;
   return splash_font_names[idx];
 }
 
@@ -1890,9 +1900,19 @@ static int font_selector(const char *title,
 
 
 int menu_select_splash_font(void) {
-  int sel = font_selector("Select header font:",
-    splash_font_files, splash_font_names, NUM_SPLASH_FONTS,
-    cfg_splashfont, 24, 32, 16, 16);
+  /* the selector gets only the slots that still hold a font */
+  const char *files[NUM_SPLASH_FONTS], *names[NUM_SPLASH_FONTS];
+  int slot[NUM_SPLASH_FONTS];
+  int n = 0, cur = 0, i2, sel;
+  for (i2 = 0; i2 < NUM_SPLASH_FONTS; i2++) {
+    if (splash_font_files[i2] == NULL) continue;
+    if (i2 == cfg_splashfont) cur = n;
+    files[n] = splash_font_files[i2];
+    names[n] = splash_font_names[i2];
+    slot[n++] = i2;
+  }
+  sel = font_selector("Select header font:", files, names, n, cur, 24, 32, 16, 16);
+  if (sel >= 0) sel = slot[sel];
   if (sel >= 0) {
     Font *newf;
     char fname[1024];

@@ -216,6 +216,7 @@ install: all installdirs
 	@if ls $(ASSETDIR)/*.txt >/dev/null 2>&1; then $(INSTALL) -m 0644 $(ASSETDIR)/*.txt $(DESTDIR)$(DATADIR)/; fi
 	$(MKDIR_P) $(DESTDIR)$(DATADIR)/fonts
 	$(INSTALL) -m 0644 $(ASSETDIR)/fonts/*.bmp $(DESTDIR)$(DATADIR)/fonts/
+	$(INSTALL) -m 0644 $(ASSETDIR)/fonts/LICENSES.txt $(DESTDIR)$(DATADIR)/fonts/
 
 # 'clean' keeps ./dist: that is where package-macos.sh and cross-compile-win.sh
 # leave the release zips. Use 'distclean' to remove those too.

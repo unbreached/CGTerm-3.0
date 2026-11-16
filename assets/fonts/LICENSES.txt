@@ -1,0 +1,63 @@
+Fonts used by CGTerm's menus and intro
+======================================
+
+CGTerm does not load font files at run time. It uses the .bmp glyph
+sheets in this folder, which were rendered from the fonts below with
+tools/make_font.py. The licence notes are taken from each font's own
+embedded copyright and licence fields, or from the licence file that came
+with it.
+
+Licence allows this use
+-----------------------
+
+  C64 Pro Mono (c64pro_*.bmp)
+      (c) 2010-2019 Style, http://style64.org/c64-truetype
+      Licence: C64_TrueType_v1.2.1-STYLE/license.txt. Allows use in
+      images and inclusion, unmodified, in freely provided software.
+
+  You're Gone (youregone_*.bmp)
+      Ray Larabie, released 2024 under CC0 (no rights reserved).
+
+  snoot.org pixel10 (px10_*.bmp)
+      (c) 2001 Tom Murphy 7, http://fonts.tom7.com/
+      "Use and distribute freely, but don't sell."
+
+  Wellbutrin (welbut_grid.bmp)
+      (c) 2000 Karen Clemens & Apostrophe. "Distribute freely."
+
+  Edit Undo BRK, Edit Undo Dot BRK, Homespun TT BRK
+      (editundo_*.bmp, edundot*.bmp, homespun_grid.bmp)
+      AEnigma Fonts (Brian Kent), freeware.
+
+Licence not stated in the font file
+-----------------------------------
+
+These carry a copyright line but no licence text. They are kept because
+nothing found forbids the use, but the terms have not been confirmed with
+the authors. If you are the author and object, open an issue and the font
+will be removed.
+
+  PXFX Disco (PXFXDisco*.bmp)             Tusoud
+  Blrrpix Strict (blrrpixs_grid.bmp)      (c) Vit Condak 2005-2014,
+                                          http://fonty.condak.cz
+  Racquetball (racquetball_grid.bmp)      zorbiusXmaximus
+  Nihonium113 (Nihonium113*.bmp)          (c) 2016 Haley Wakamatsu
+                                          (UkiyoMoji Fonts), "FontStruct
+                                          License"
+  Perfect DOS VGA 437                     zeh, http://www.fatorcaos.com.br
+
+Removed in 3.0.8
+----------------
+
+These were shipped up to 3.0.7 and are gone, because their licences do
+not allow redistribution or derived glyph sheets:
+
+  Maesto Demo          Craft Supply Co., demo, all rights reserved
+  Nano Pix DEMO        Dharmas Studio, free for personal use only, no
+                       modification
+  Blackentina 4F       Sergiy Tkachenko / 4th february, no copying or
+                       modification
+  Playful Boxes        Eko Bimantara, all rights reserved
+  Sportifity           JVMIYO, all rights reserved
+
+A config file that still selects one of them gets C64 Pro Mono.

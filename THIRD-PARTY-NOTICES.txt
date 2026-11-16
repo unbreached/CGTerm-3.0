@@ -1,0 +1,70 @@
+CGTerm - third-party components
+===============================
+
+CGTerm itself is under the BSD 2-Clause licence (see LICENSE). The
+binary packages also contain the libraries, fonts and media listed here.
+Each stays under its own licence. Where a package bundles a library, the
+library's own licence text is in the "licenses" folder of that package.
+
+Libraries in the Windows package (CGTerm-3.0-win32.zip)
+-------------------------------------------------------
+
+  SDL 1.2.15 (SDL.dll)
+      GNU Lesser General Public License 2.1
+      https://www.libsdl.org/download-1.2.php
+      Unmodified build from libsdl.org. Source: the link above.
+
+  SDL_mixer 1.2.12 (SDL_mixer.dll)
+      zlib licence
+      https://www.libsdl.org/projects/SDL_mixer/release-1.2.html
+
+  libmikmod (libmikmod-2.dll), shipped with SDL_mixer
+      GNU Lesser General Public License 2.1
+      https://mikmod.sourceforge.net/
+
+  libogg, libvorbis, libvorbisfile (shipped with SDL_mixer)
+      BSD 3-Clause, Xiph.Org Foundation
+      https://xiph.org/
+
+The LGPL libraries are separate DLL files. You may replace them with your
+own builds; CGTerm loads whatever DLL of that name sits next to it.
+
+Libraries in the macOS package (CGTerm-3.0-macos.zip)
+-----------------------------------------------------
+
+  sdl12-compat (libSDL-1.2), sdl2-compat (libSDL2), SDL 3 (libSDL3)
+      zlib licence
+      https://github.com/libsdl-org
+
+  libopenmpt
+      BSD 3-Clause
+      https://lib.openmpt.org/
+
+  mpg123 (libmpg123), pulled in by libopenmpt
+      GNU Lesser General Public License 2.1
+      https://www.mpg123.de/
+
+  libogg, libvorbis, libvorbisfile
+      BSD 3-Clause, Xiph.Org Foundation
+      https://xiph.org/
+
+These are the unmodified Homebrew builds, bundled as separate .dylib
+files inside CGTerm.app/Contents/libs.
+
+Linux / source builds
+---------------------
+
+Nothing is bundled. CGTerm links against the SDL 1.2 (or sdl12-compat)
+and libopenmpt packages of your distribution.
+
+Fonts and media
+---------------
+
+See assets/fonts/LICENSES.txt for the fonts.
+
+  assets/startup.ans      CGTerm ANSI logo by nail / fire
+  assets/cgterm.xm        music by Mr.Death
+  src/cp437font.c         IBM VGA 8x8 ROM font, public domain
+  C64 character ROM fonts (upper/lower .bmp, c64*.bin)
+                          Commodore 64 character set, as used by
+                          emulators and the original CGTerm

@@ -123,6 +123,19 @@ if [ "$REAL_MIN" != "0" ]; then
   esac
 fi
 
+echo "[*] Collecting licence texts..."
+LIC="$RES/licenses"
+mkdir -p "$LIC"
+cp "$ROOT_DIR/LICENSE" "$LIC/CGTerm-LICENSE.txt"
+cp "$ROOT_DIR/THIRD-PARTY-NOTICES.txt" "$LIC/"
+for formula in sdl12-compat sdl2-compat sdl3 libopenmpt mpg123 libogg libvorbis; do
+  fdir="$(brew --prefix "$formula" 2>/dev/null || true)"
+  [ -n "$fdir" ] && [ -d "$fdir" ] || continue
+  for lf in "$fdir"/LICENSE* "$fdir"/COPYING*; do
+    [ -f "$lf" ] && cp "$lf" "$LIC/$formula-$(basename "$lf")"
+  done
+done
+
 echo "[*] Ad-hoc code signing (inside-out)..."
 # Sign each bundled dylib explicitly. They live in Contents/libs (non-standard),
 # which `codesign --deep` does NOT descend into — and install_name_tool above

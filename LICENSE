@@ -38,5 +38,6 @@ components, each governed by its own license:
   * SDL 1.2 (Simple DirectMedia Layer)  -  GNU LGPL 2.1   (https://libsdl.org)
   * libopenmpt                          -  BSD 3-Clause   (https://lib.openmpt.org)
 
-Fonts, music modules and other media under assets/ may carry their own
-licenses; see the individual files or their accompanying notices for terms.
+Fonts, music modules and other media under assets/ carry their own
+licenses. THIRD-PARTY-NOTICES.txt lists every bundled library and media
+file, and assets/fonts/LICENSES.txt lists the fonts.

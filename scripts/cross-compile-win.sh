@@ -181,6 +181,16 @@ fi
 rsync -a --exclude='._*' --exclude='.DS_Store' --exclude='*.ttf' --exclude='*.otf' --exclude='*.zip' "$ROOT_DIR/assets/" "$DIST_DIR/assets/"
 cp "$ROOT_DIR/README" "$DIST_DIR/"
 cp "$ROOT_DIR/INSTALL" "$DIST_DIR/"
+
+# Licence texts: ours, the notices file, and the ones that came with the
+# bundled DLLs (SDL is LGPL and must travel with its licence).
+mkdir -p "$DIST_DIR/licenses"
+cp "$ROOT_DIR/LICENSE" "$DIST_DIR/licenses/CGTerm-LICENSE.txt"
+cp "$ROOT_DIR/THIRD-PARTY-NOTICES.txt" "$DIST_DIR/licenses/"
+cp "$SDL_DIR/COPYING" "$DIST_DIR/licenses/SDL-COPYING.txt"
+if [ "$HAVE_SDL_MIXER" = "1" ] && [ -f "$SDL_MIXER_DIR/COPYING.txt" ]; then
+    cp "$SDL_MIXER_DIR/COPYING.txt" "$DIST_DIR/licenses/SDL_mixer-COPYING.txt"
+fi
 cp "$ROOT_DIR/scripts/cgterm-default.cfg" "$DIST_DIR/cgterm.cfg"
 
 # Strip binaries
