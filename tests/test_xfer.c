@@ -67,8 +67,14 @@ static void xs_send_block(int blk) {
   if (xs_corrupt_block == blk) { b[10] ^= 0x55; xs_corrupt_block = 0; }   /* corrupt AFTER the check bytes */
   feed(b, xs_crc ? 133 : 132);
 }
+static int xs_stray_can;   /* one 0x18 right in front of the first block */
+static int xc_count, xc_sent;   /* cancel peer: answer the first 'C' with xc_count CANs */
+static void xc_peer(unsigned char c) {
+  int i;
+  if (c == 'C' && !xc_sent) { xc_sent = 1; for (i = 0; i < xc_count; i++) feedb(0x18); }
+}
 static void xs_peer(unsigned char c) {
-  if (c == 'C' && xs_block == 0) { if (xs_ignore_C) { feedb('C'); return; } xs_crc = 1; xs_block = 1; xs_send_block(1); }
+  if (c == 'C' && xs_block == 0) { if (xs_ignore_C) { feedb('C'); return; } xs_crc = 1; xs_block = 1; if (xs_stray_can) feedb(0x18); xs_send_block(1); }
   else if (c == 0x15 && xs_block == 0) { xs_crc = 0; xs_block = 1; xs_send_block(1); }
   else if (c == 0x15 && xs_block > 0) { xs_send_block(xs_block); }
   else if (c == 0x06 && xs_block > 0 && !xs_eot_sent) {
@@ -87,7 +93,8 @@ static void run_xmodem_recv(const char *label, int usecrc, int ignoreC, int corr
   xfile_len = 300; for (i = 0; i < xfile_len; i++) xfile[i] = (unsigned char)(i * 7 + 3);
   xfile[150] = 0x1a; xfile[299] = 0x1a;   /* real 0x1a bytes inside the data and at the end */
   xs_block = 0; xs_corrupt_block = corrupt; xs_dup_block = dup; xs_ignore_C = ignoreC; xs_eot_sent = 0; xs_crc = 0;
-  if (lead_garbage) feed((const unsigned char *)"\r\nStart your download now\r\n", 27);
+  if (lead_garbage == 1) feed((const unsigned char *)"\r\nStart your download now\r\n", 27);
+  xs_stray_can = (lead_garbage == 2);   /* one stray CAN, then the real data */
   peer_on_byte = xs_peer;
   xfer_protocol = usecrc ? PROT_XMODEMCRC : PROT_XMODEM; xfer_direction = DIR_RECV;
   rc = xfer_recv();
@@ -405,6 +412,13 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   run_xmodem_recv("CRC, duplicate block 2 (lost ACK)", 1, 0, 0, 2, 0);
   run_xmodem_recv("checksum-only sender: falls back from C to NAK", 1, 1, 0, 0, 0);
   run_xmodem_recv("checksum mode", 0, 0, 0, 0, 0);
+  run_xmodem_recv("a single stray CAN before the data is ignored", 1, 0, 0, 0, 2);
+  peer_reset(); xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_RECV;
+  xc_count = 5; xc_sent = 0; peer_on_byte = xc_peer;
+  rc = xfer_recv(); CHECK(rc == 0 && vclock < 5000, "a run of CANs (C*Base sends five) cancels at once");
+  peer_reset(); xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_RECV;
+  xc_count = 1; xc_sent = 0; peer_on_byte = xc_peer;
+  rc = xfer_recv(); CHECK(rc == 0 && vclock < 5000, "one CAN followed by silence cancels");
 
   puts("[XMODEM receive: disconnect / junk]");
   peer_reset(); xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_RECV; disconnected = 1;
@@ -428,6 +442,15 @@ int main(int argc, char **argv) { (void)argc; (void)argv;
   xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
   rc = xfer_send("cgt-up.bin", NULL);
   CHECK(rc == 1 && xr_got_eot && xr_datalen == 384 && memcmp(xr_data, xfile, 300) == 0, "queued start bytes do not desync the send");
+  /* A file that ends in 0x1A is padded with 0x00, so a receiver that
+     strips the trailing pad run (C*Base does) keeps the real 0x1A. */
+  peer_reset(); xfile[299] = 0x1a;
+  { FILE *f = fopen("/tmp/cgt-up.bin", "wb"); fwrite(xfile, 1, 300, f); fclose(f); }
+  xr_state = 0; xr_expect = 1; xr_got_eot = 0; xr_datalen = 0; peer_on_byte = xr_peer; feedb('C');
+  xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
+  rc = xfer_send("cgt-up.bin", NULL);
+  CHECK(rc == 1 && xr_datalen == 384 && xr_data[299] == 0x1a && xr_data[300] == 0x00 && xr_data[383] == 0x00,
+        "file ending in 0x1A is padded with 0x00");
   peer_reset(); disconnected = 1; xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;
   rc = xfer_send("cgt-up.bin", NULL); CHECK(rc == 0 && vclock < 20000, "send to a dead socket fails fast");
   peer_reset(); xfer_protocol = PROT_XMODEMCRC; xfer_direction = DIR_SEND;

@@ -389,6 +389,14 @@ int punter_recv(void) {
     //punter_fail("Block timeout");
     return(0);
   }
+  if (punter_next_blocknum() < 0xff00) {
+    /* The loop ended on an announced size below a block header (7) without
+     * the end marker (block number $FFxx). A board never sends that; treat
+     * it as a broken transfer instead of reporting a truncated file as
+     * complete. */
+    punter_fail("Bad block size from remote");
+    return(0);
+  }
 
   menu_update_xfer_progress("Finishing...", xfer_saved_bytes, 0);
   gfx_vbl();

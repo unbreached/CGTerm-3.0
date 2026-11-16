@@ -232,6 +232,7 @@ int xmodem_recv(int usecrc) {
      * NAK (= "resend the last block"), which the duplicate path below
      * absorbs; sending ACK there would let the sender run a block ahead. */
 
+have_byte:
     switch (c) {
     case -2:
       xmodem_fail("Disconnected!");
@@ -240,8 +241,23 @@ int xmodem_recv(int usecrc) {
       xmodem_fail("Timeout!");
       return 0;
     case XM_CAN:
-      xmodem_fail("Remote cancel!");
-      return 0;
+      /* A real cancel is a run of CANs (C*Base sends five) or one CAN
+       * followed by silence. A single 0x18 with data right behind it is
+       * a stray byte and is ignored like other inter-block noise. */
+      c = xm_recv_byte_dbg(1000);
+      if (c == -2) {
+        xmodem_fail("Disconnected!");
+        return 0;
+      }
+      if (c == XM_CAN || c == -1) {
+        xmodem_fail("Remote cancel!");
+        return 0;
+      }
+      if (++garbage > 2048) {
+        xmodem_fail("No XMODEM data from remote");
+        return 0;
+      }
+      goto have_byte;   /* the byte behind the stray CAN may be a block start */
     case XM_STX:
       blocksize = 1026;
       XMDBG("[XMODEM] recv block header STX expected_block=%d\n", blocknum & 0xff);
@@ -361,7 +377,12 @@ int xmodem_load_block(int blocksize) {
   }
   xmodem_last_payload_len = l;
   if (l < blocksize) {
-    memset(xfer_buffer + l, XM_PAD, blocksize - l);
+    /* Pad with 0x1A, except when the data itself ends in 0x1A: the receiver
+     * strips the trailing run of the pad byte, so padding with the same
+     * value would also eat the file's own last bytes. C*Base's X-Modem
+     * pads with 0x00 in that case and strips either; do the same. */
+    unsigned char pad = (xfer_buffer[l - 1] == XM_PAD) ? 0x00 : XM_PAD;
+    memset(xfer_buffer + l, pad, blocksize - l);
   }
   return blocksize;
 }
