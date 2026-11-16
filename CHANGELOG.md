@@ -3,6 +3,31 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
+─── 3.0.8 · NOVEMBER 2026 (not yet released) ───
+
+Licences
+[!]Five fonts whose licences do not allow redistribution are gone: Maesto demo, Nano Pix demo, Blackentina 4F, Playful Boxes and Sportifity (font files and the glyph sheets made from them). A config that still selects one gets C64 Pro Mono. assets/fonts/LICENSES.txt lists the licence of every font that remains
+[+]THIRD-PARTY-NOTICES.txt lists the bundled libraries and media, and the Windows and macOS packages now carry the libraries' licence texts in a "licenses" folder
+
+Transfers (checked against a disassembly of C*Base 3.1's Punter and X-Modem code)
+[!]XMODEM download: one stray CAN byte with data right behind it no longer aborts. A run of CANs (C*Base sends five) or a CAN followed by silence still cancels at once
+[!]XMODEM upload: a file that ends in 0x1A is padded with 0x00 instead of 0x1A, the way C*Base does it, so the board no longer strips the file's own last bytes together with the padding
+[!]Punter download: a block size smaller than a block header without the end-of-file marker is reported as a failed transfer instead of a completed, truncated file
+[+]The transfer window shows the percentage and the time left when the size is known
+
+Keyboard and input
+[+]Your own keyboard profiles: *.kbd files in ~/.cgterm-kbd (Windows: %APPDATA%\CGTerm\cgterm-kbd) appear in the keyboard menu, marked "(mine)". The shipped ones sit inside the program folder, which is no place to edit them
+[+]Ctrl+V / Cmd+V pastes into the one-line dialogs (Connect, bookmark host, file names): the first line of the clipboard, printable characters only
+
+Display
+[+]Screenshots are saved as PNG instead of BMP
+
+Build and tests
+[+]New test suites: the Telnet layer (negotiation, 0xFF handling, PETSCII art that looks like Telnet, reply cap), the auto-login engine, and the config parser (bad lines, round trip of saved settings, bookmark host forms, private notes file)
+[+]make fuzz also fuzzes the Telnet layer and the ANSI parser
+[!]Native MSYS2 builds work again with the current MSYS2 packages
+[!]Removed from the repository: old keyboard-profile backups, duplicate font archives, an obsolete music note
+
 ─── 3.0.7 · NOVEMBER 2026 ───
 
 [+]New start screen: the CGTerm ANSI logo by nail / fire, drawn from assets/startup.ans with a pulsing glow and a sweep of light. It replaces the still picture while you are offline and stops as soon as the terminal or a menu draws. Remove or replace startup.ans to get the old picture back or to use your own 80-column ANSI

@@ -883,7 +883,13 @@ void menu_update_xfer_progress(const char *message, int bytes, int total) {
   font_draw_string_color(lx + 80, 88, line, 0x00, 0xff, 0x66);
 
   /* Bytes + speed — cyan label, values in different colors */
-  if (speed_bps > 0) {
+  if (speed_bps > 0 && total > 0) {
+    /* known size (uploads, ZMODEM, Rainbow): percentage and time left */
+    int pct = (int)((long long)bytes * 100 / total);
+    int eta = (total - bytes) / speed_bps;
+    snprintf(line, sizeof(line), "%d bytes  (%d B/s)  %d%%  %d:%02d left",
+             bytes, speed_bps, pct, eta / 60, eta % 60);
+  } else if (speed_bps > 0) {
     snprintf(line, sizeof(line), "%d bytes  (%d B/s)", bytes, speed_bps);
   } else {
     snprintf(line, sizeof(line), "%d bytes", bytes);
