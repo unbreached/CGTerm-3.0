@@ -23,6 +23,16 @@ Select the profile explicitly instead of relying on a generic default. Example:
 ./cgterm -k assets/win-us-c64.kbd
 ```
 
+## Your own profiles
+
+The shipped profiles live inside the program folder (the .app bundle on
+macOS, the install folder on Windows), which is not a good place to edit.
+Copy a profile to your own folder, change it there, and it shows up in the
+keyboard menu with "(mine)" after its name:
+
+- macOS / Linux: `~/.cgterm-kbd/`
+- Windows: `%APPDATA%\CGTerm\cgterm-kbd\`
+
 ## Notes
 
 - The Linux and Windows profiles are based on the existing `us.kbd`, `swedish.kbd` and `windows.kbd`.

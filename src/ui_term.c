@@ -1742,7 +1742,7 @@ void ui_metakey(SDL_keysym *keysym) {
 
       now = time(NULL);
       tm_info = localtime(&now);
-      strftime(bmpname, sizeof(bmpname), "cgterm_%Y%m%d_%H%M%S.bmp", tm_info);
+      strftime(bmpname, sizeof(bmpname), "cgterm_%Y%m%d_%H%M%S.png", tm_info);
 #ifdef WINDOWS
       snprintf(bmppath, sizeof(bmppath), "%s\\%s", cfg_screendir, bmpname);
 #else

@@ -13,6 +13,7 @@
 #include "modem.h"
 #include "xfer.h"
 #include "macro.h"
+#include "clipboard.h"
 #include "ui.h"
 #include "ansi.h"
 #include "paths.h"
@@ -72,9 +73,40 @@ void ui_inputcall(int width, char *title, char *text, void (*donecall)(char *), 
 }
 
 
+/* Insert one character at the cursor of the input dialog. */
+static void input_insert(char c) {
+  if (input_len < input_maxlen - 1) {
+    ++input_len;
+    memmove(input_buffer + input_pos + input_offset + 1,
+	    input_buffer + input_pos + input_offset,
+	    strlen(input_buffer + input_pos + input_offset) + 1);
+    input_buffer[input_pos + input_offset] = c;
+    input_buffer[input_len] = 0;
+
+    if (input_pos + input_offset < input_len) {
+      if (input_pos < input_width - 1) {
+	++input_pos;
+      } else if (input_len > input_offset + input_pos) {
+	++input_offset;
+      }
+    }
+  }
+}
+
+
 void ui_inputkey(SDL_keysym *keysym) {
   int i;
   char c;
+
+  /* Ctrl+V / Cmd+V: paste the first line of the clipboard, so a host name
+   * or address can be pasted into Connect and the bookmark dialogs. */
+  if ((keysym->mod & (KMOD_CTRL | KMOD_META)) && keysym->sym == SDLK_v) {
+    char line[256];
+    int n = clipboard_get_line(line, sizeof(line));
+    for (i = 0; i < n; i++) input_insert(line[i]);
+    inputupdate();
+    return;
+  }
 
   switch (keysym->sym) {
 
@@ -86,25 +118,9 @@ void ui_inputkey(SDL_keysym *keysym) {
     } else {
       break;
     }
-    {
-      if (input_len < input_maxlen - 1) {
-	++input_len;
-	memmove(input_buffer + input_pos + input_offset + 1,
-		input_buffer + input_pos + input_offset,
-		strlen(input_buffer + input_pos + input_offset) + 1);
-	input_buffer[input_pos + input_offset] = c;
-	input_buffer[input_len] = 0;
-
-	if (input_pos + input_offset < input_len) {
-	  if (input_pos < input_width - 1) {
-	    ++input_pos;
-	  } else if (input_len > input_offset + input_pos) {
-	    ++input_offset;
-	  }
-	}
-
-	inputupdate();
-      }
+    if (input_len < input_maxlen - 1) {
+      input_insert(c);
+      inputupdate();
     }
     break;
 

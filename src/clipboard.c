@@ -126,12 +126,8 @@ void clipboard_queue_text(const char *text) {
   paste_push(text, (int)strlen(text));
 }
 
-void clipboard_paste(void) {
-  /* (re)fill the queue — replaces any partially-drained previous paste */
-  paste_len = 0;
-  paste_pos = 0;
-  paste_reset_state();
-
+/* Read the system clipboard as text and hand it to sink in chunks. */
+static void clipboard_fetch(void (*sink)(const char *text, int n)) {
 #ifdef WINDOWS
   if (!OpenClipboard(NULL)) return;
   {
@@ -139,7 +135,7 @@ void clipboard_paste(void) {
     if (h) {
       char *text = (char *)GlobalLock(h);
       if (text) {
-        paste_push(text, (int)strlen(text));
+        sink(text, (int)strlen(text));
         GlobalUnlock(h);
       }
     }
@@ -159,11 +155,51 @@ void clipboard_paste(void) {
     if (!fp) return;
 
     while ((len = (int)fread(buf, 1, sizeof(buf), fp)) > 0) {
-      paste_push(buf, len);
+      sink(buf, len);
     }
     pclose(fp);
   }
 #endif
+}
+
+void clipboard_paste(void) {
+  /* (re)fill the queue — replaces any partially-drained previous paste */
+  paste_len = 0;
+  paste_pos = 0;
+  paste_reset_state();
+  clipboard_fetch(paste_push);
+}
+
+/* First line of the clipboard as plain printable ASCII, for the one-line
+ * input dialogs (host name, port, file name). Leading blanks are dropped,
+ * anything outside 0x20-0x7E is skipped, and it stops at the first line
+ * break. Returns the length. */
+static char *line_out;
+static int line_max, line_len, line_done;
+static void line_sink(const char *text, int n) {
+  int i;
+  for (i = 0; i < n && !line_done; i++) {
+    unsigned char c = (unsigned char)text[i];
+    if (c == '\r' || c == '\n') {
+      if (line_len > 0) line_done = 1;
+      continue;
+    }
+    if (c < 0x20 || c > 0x7e) continue;
+    if (c == ' ' && line_len == 0) continue;
+    if (line_len < line_max - 1) line_out[line_len++] = (char)c;
+  }
+}
+
+int clipboard_get_line(char *out, int max) {
+  if (!out || max <= 0) return 0;
+  line_out = out;
+  line_max = max;
+  line_len = 0;
+  line_done = 0;
+  clipboard_fetch(line_sink);
+  while (line_len > 0 && out[line_len - 1] == ' ') line_len--;   /* trailing blanks */
+  out[line_len] = 0;
+  return line_len;
 }
 
 int clipboard_copy_text(const char *text) {

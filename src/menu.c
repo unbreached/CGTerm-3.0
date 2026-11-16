@@ -2214,27 +2214,38 @@ void menu_keyboard_test(void) {
   char fname[1024];
 
   /* Find .kbd files */
-  #define MAX_KBD_FILES 20
+  #define MAX_KBD_FILES 40
   char kbd_files[MAX_KBD_FILES][64];
   char kbd_names[MAX_KBD_FILES][64];
+  int kbd_user[MAX_KBD_FILES];   /* 1 = from the per-user folder */
+  char kbd_userdir[512];
   int num_kbd = 0;
 
-  /* Every *.kbd in the asset directory is a selectable layout; the display
-   * name is the file name without extension (default.kbd first). */
+  /* Selectable layouts: every *.kbd shipped in the asset directory, then
+   * every *.kbd in the per-user folder (~/.cgterm-kbd, or
+   * %APPDATA%\CGTerm\cgterm-kbd on Windows). The asset directory sits
+   * inside the .app bundle or Program Files, where users cannot add their
+   * own; the per-user folder is where a copied and edited profile goes.
+   * The display name is the file name without extension. */
+  cfg_user_file(kbd_userdir, sizeof(kbd_userdir), "cgterm-kbd");
   {
-    DIR *d = opendir(path_asset_root());
-    struct dirent *de;
+    int pass;
     strncpy(kbd_files[0], "default.kbd", 63);
     strncpy(kbd_names[0], "Default (Unicode)", 63);
+    kbd_user[0] = 0;
     num_kbd = 1;
-    if (d) {
+    for (pass = 0; pass < 2; pass++) {
+      DIR *d = opendir(pass == 0 ? path_asset_root() : kbd_userdir);
+      struct dirent *de;
+      if (!d) continue;
       while ((de = readdir(d)) != NULL && num_kbd < MAX_KBD_FILES) {
         size_t l = strlen(de->d_name);
-        if (l > 4 && l < 60 && strcmp(de->d_name + l - 4, ".kbd") == 0 &&
-            strcmp(de->d_name, "default.kbd") != 0) {
+        if (l > 4 && l < 56 && strcmp(de->d_name + l - 4, ".kbd") == 0 &&
+            (pass == 1 || strcmp(de->d_name, "default.kbd") != 0)) {
           strncpy(kbd_files[num_kbd], de->d_name, 63);
           kbd_files[num_kbd][63] = 0;
-          snprintf(kbd_names[num_kbd], 64, "%.*s", (int)(l - 4), de->d_name);
+          snprintf(kbd_names[num_kbd], 64, "%.*s%s", (int)(l - 4), de->d_name, pass ? " (mine)" : "");
+          kbd_user[num_kbd] = pass;
           num_kbd++;
         }
       }
@@ -2398,14 +2409,24 @@ void menu_keyboard_test(void) {
           case SDLK_RETURN:
           case SDLK_KP_ENTER:
             /* Load selected layout */
-            path_build_asset(fname, sizeof(fname), kbd_files[selection]);
+            if (kbd_user[selection]) {
+#ifdef WINDOWS
+              snprintf(fname, sizeof(fname), "%s\\%s", kbd_userdir, kbd_files[selection]);
+#else
+              snprintf(fname, sizeof(fname), "%s/%s", kbd_userdir, kbd_files[selection]);
+#endif
+            } else {
+              path_build_asset(fname, sizeof(fname), kbd_files[selection]);
+            }
             if (kbd_reload(fname) == 0) {
               /* kbd_files[] is a stack array of this function: keep the
                * name in config.c's persistent buffer instead of dangling */
               extern char keyboard[256];
               snprintf(keyboard, sizeof(keyboard), "%s", fname);
               cfg_keyboard = keyboard;
-              cfg_save_setting("keyboard", kbd_files[selection]);
+              /* a shipped profile is saved by name (the asset folder moves
+               * with the install); one of the user's own by its full path */
+              cfg_save_setting("keyboard", kbd_user[selection] ? fname : kbd_files[selection]);
               menu_draw_message_timed("Keyboard layout loaded!", 2000);
             } else {
               menu_draw_message_timed("Failed to load layout!", 2000);

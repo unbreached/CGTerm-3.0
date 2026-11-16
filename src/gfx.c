@@ -1286,7 +1286,129 @@ void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned cha
 }
 
 
+/* ---- PNG writer for screenshots -------------------------------------
+ * 24-bit RGB, one IDAT, "stored" deflate blocks (no compression). That
+ * keeps it to a page of code with no zlib dependency; a 640x400 shot is
+ * about 770 KB, the same as the BMP it replaces, and every viewer, web
+ * site and chat program takes it. */
+static Uint32 png_crc_table[256];
+static int png_crc_ready = 0;
+
+static Uint32 png_crc(Uint32 crc, const unsigned char *p, size_t n) {
+  size_t i;
+  if (!png_crc_ready) {
+    Uint32 c;
+    int k, j;
+    for (k = 0; k < 256; k++) {
+      c = (Uint32)k;
+      for (j = 0; j < 8; j++) c = (c & 1) ? 0xedb88320u ^ (c >> 1) : c >> 1;
+      png_crc_table[k] = c;
+    }
+    png_crc_ready = 1;
+  }
+  for (i = 0; i < n; i++) crc = png_crc_table[(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+  return crc;
+}
+
+static void png_be32(unsigned char *p, Uint32 v) {
+  p[0] = (unsigned char)(v >> 24); p[1] = (unsigned char)(v >> 16);
+  p[2] = (unsigned char)(v >> 8);  p[3] = (unsigned char)v;
+}
+
+static int png_chunk(FILE *f, const char *type, const unsigned char *data, Uint32 len) {
+  unsigned char hdr[8], tail[4];
+  Uint32 crc;
+  png_be32(hdr, len);
+  memcpy(hdr + 4, type, 4);
+  crc = png_crc(0xffffffffu, hdr + 4, 4);
+  if (len) crc = png_crc(crc, data, len);
+  png_be32(tail, crc ^ 0xffffffffu);
+  if (fwrite(hdr, 1, 8, f) != 8) return -1;
+  if (len && fwrite(data, 1, len, f) != len) return -1;
+  if (fwrite(tail, 1, 4, f) != 4) return -1;
+  return 0;
+}
+
+static int gfx_save_png(SDL_Surface *surf, const char *filename) {
+  static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
+  int w = surf->w, h = surf->h, x, y, bpp = surf->format->BytesPerPixel;
+  size_t rawlen = (size_t)h * ((size_t)w * 3 + 1);   /* filter byte + RGB per row */
+  size_t nblocks = (rawlen + 65534) / 65535;
+  size_t zlen = 2 + rawlen + nblocks * 5 + 4;
+  unsigned char *raw, *z, ihdr[13];
+  Uint32 a = 1, b = 0;
+  size_t i, pos, left;
+  FILE *f;
+  int rc = -1;
+
+  if (w <= 0 || h <= 0 || bpp < 1 || bpp > 4) return -1;
+  raw = malloc(rawlen);
+  z = malloc(zlen);
+  if (!raw || !z) { free(raw); free(z); return -1; }
+
+  if (SDL_MUSTLOCK(surf)) SDL_LockSurface(surf);
+  for (y = 0, i = 0; y < h; y++) {
+    const Uint8 *row = (const Uint8 *)surf->pixels + (size_t)y * surf->pitch;
+    raw[i++] = 0;                                     /* filter type: none */
+    for (x = 0; x < w; x++) {
+      Uint32 px = 0;
+      Uint8 r, g, bl;
+      memcpy(&px, row + (size_t)x * bpp, (size_t)bpp);
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+      px >>= (4 - bpp) * 8;
+#endif
+      SDL_GetRGB(px, surf->format, &r, &g, &bl);
+      raw[i++] = r; raw[i++] = g; raw[i++] = bl;
+    }
+  }
+  if (SDL_MUSTLOCK(surf)) SDL_UnlockSurface(surf);
+
+  /* zlib stream: header, stored blocks, Adler-32 */
+  pos = 0;
+  z[pos++] = 0x78; z[pos++] = 0x01;
+  for (i = 0, left = rawlen; left > 0; ) {
+    size_t n = left > 65535 ? 65535 : left;
+    z[pos++] = (left == n) ? 1 : 0;                   /* last block flag */
+    z[pos++] = (unsigned char)(n & 0xff); z[pos++] = (unsigned char)(n >> 8);
+    z[pos++] = (unsigned char)(~n & 0xff); z[pos++] = (unsigned char)((~n >> 8) & 0xff);
+    memcpy(z + pos, raw + i, n);
+    pos += n; i += n; left -= n;
+  }
+  for (i = 0; i < rawlen; i++) {
+    a = (a + raw[i]) % 65521u;
+    b = (b + a) % 65521u;
+  }
+  png_be32(z + pos, (b << 16) | a);
+  pos += 4;
+
+  png_be32(ihdr, (Uint32)w);
+  png_be32(ihdr + 4, (Uint32)h);
+  ihdr[8] = 8;    /* bit depth */
+  ihdr[9] = 2;    /* colour type: RGB */
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+
+  if ((f = fopen(filename, "wb")) != NULL) {
+    if (fwrite(sig, 1, 8, f) == 8 &&
+        png_chunk(f, "IHDR", ihdr, 13) == 0 &&
+        png_chunk(f, "IDAT", z, (Uint32)pos) == 0 &&
+        png_chunk(f, "IEND", NULL, 0) == 0) {
+      rc = 0;
+    }
+    if (fclose(f) != 0) rc = -1;
+    if (rc != 0) remove(filename);
+  }
+  free(raw);
+  free(z);
+  return rc;
+}
+
+/* Save what is on screen. A name ending in ".png" gives a PNG, anything
+ * else a BMP. */
 int gfx_save_screenshot(const char *filename) {
+  size_t l = strlen(filename);
+  if (l > 4 && (strcmp(filename + l - 4, ".png") == 0 || strcmp(filename + l - 4, ".PNG") == 0)) {
+    return gfx_save_png(gfx_screen, filename);
+  }
   if (SDL_SaveBMP(gfx_screen, filename) == 0) {
     return 0;
   }

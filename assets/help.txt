@@ -18,7 +18,7 @@
   T  Transfer file        J  Set paths
   U  Unjoin disk image    N  New disk image
   L  Load SEQ file        P  Post SEQ to BBS
-  S  Save screen          I  Screenshot (BMP)
+  S  Save screen          I  Screenshot (PNG)
   X  Copy screen text     Z  Font settings
   W  Upper/Lowercase      G  PETSCII/ANSI
   E  Local echo           F  Fullscreen

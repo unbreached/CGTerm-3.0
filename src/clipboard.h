@@ -6,3 +6,5 @@ void clipboard_paste_clear(void);
 void clipboard_queue_text(const char *text);
 /* Put text on the system clipboard. Returns 1 on success. */
 int clipboard_copy_text(const char *text);
+/* First line of the system clipboard as printable ASCII; returns its length. */
+int clipboard_get_line(char *out, int max);
