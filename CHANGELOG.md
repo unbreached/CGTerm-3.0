@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── 3.0.7 · NOVEMBER 2026 (not yet released) ───
+─── 3.0.7 · NOVEMBER 2026 ───
 
 [+]New start screen: the CGTerm ANSI logo by nail / fire, drawn from assets/startup.ans with a pulsing glow and a sweep of light. It replaces the still picture while you are offline and stops as soon as the terminal or a menu draws. Remove or replace startup.ans to get the old picture back or to use your own 80-column ANSI
 [+]nail / fire is credited for the ANSI logo in the intro, the READMEs and on the website
