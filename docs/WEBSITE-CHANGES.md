@@ -1,13 +1,15 @@
-# Website changes for the 3.0.6 release (www.cgterm.se)
+# Website changes for the 3.0.7 release (www.cgterm.se)
 
 The live page's source is not in this repository, so the text below is
 written to be pasted into the live page. Package file names stay
 `CGTerm-3.0-*` (matching the repo, the branding and the graphics); only
-the program version moves to 3.0.6.
+the program version moves to 3.0.7.
 
-Status: the site is updated for 3.0.5 (GitHub issue #13). 3.0.6 is
-published as GitHub release `v3.0.6`, so only the 3.0.6 items below are
-outstanding: the version strings and the 3.0.6 changelog block.
+Status: the site is updated for 3.0.5 (GitHub issue #13). 3.0.6 and
+3.0.7 are both published on GitHub, and the download buttons already
+serve 3.0.7. Outstanding on the page: the version strings, the nail
+credit (issue #14), the two changelog blocks below and a new screenshot
+of the start screen if the page shows the old one.
 
 How the site gets its files (since 2026-11-08, per issue #13): the
 download buttons point at
@@ -20,27 +22,31 @@ asset names, and the release being marked "latest".
 
 ## 1. Version and credits (everywhere on the page)
 
-- Bump every version string to **3.0.6**: header badge "3.0.6", title
-  "CGTerm 3.0.6: Scene Edition", changelog heading
-  "CGTERM 3.0.6 / SCENE EDITION", footer
-  "CGTerm 3.0.6 · Genesis*Project · 2026".
+- Bump every version string to **3.0.7**: header badge "3.0.7", title
+  "CGTerm 3.0.7: Scene Edition", changelog heading
+  "CGTERM 3.0.7 / SCENE EDITION", footer
+  "CGTerm 3.0.7 · Genesis*Project · 2026".
 - Credits: Code **David "m00p" Jacoby (Genesis*Project)**,
   music Mr.Death, QA **Larry, Jucke, SkyHawk, hedning**.
-- **New credit, add it now (it does not have to wait for 3.0.7): ANSI
-  logo by nail / fire.** nail drew the CGTerm ANSI logo that becomes the
-  animated start screen in 3.0.7. Put it in the credits list next to
-  the music credit, written exactly "ANSI logo: nail / fire".
+- **New credit (issue #14): ANSI logo by nail / fire.** nail drew the
+  CGTerm ANSI logo that is the animated start screen from 3.0.7. Put it
+  in the credits list next to the music credit, written exactly
+  "ANSI logo: nail / fire".
 - Thank-you for the reports stays: **mrdudz** and **THE-MrMicro**
   (GitHub issues), and **Larry** (transfer testing).
 
-## 1b. Coming in 3.0.7 (not released yet, nothing to paste)
+## 2. Changelog: add the 3.0.7 block, then the 3.0.6 block, above the 3.0.5 block
 
-3.0.7 replaces the still start picture with nail's ANSI logo, animated
-with a glow and a sweep of light. If the page shows a
-screenshot of the old "CGTERM 3.0" start picture, it will need a new
-one when 3.0.7 is published; a changelog block will follow then.
+```
+─── 3.0.7 · november 2026 ───
 
-## 2. Changelog: add this 3.0.6 block above the 3.0.5 block
+[+] New start screen: the CGTerm ANSI logo by nail / fire, with a
+    pulsing glow and a sweep of light. It shows while you are offline
+    and gives way as soon as the terminal or a menu draws.
+[+] Your own start screen: put any 80-column ANSI in the assets
+    folder as startup.ans and it gets the same treatment. Remove the
+    file to get the old picture back.
+```
 
 ```
 ─── 3.0.6 · november 2026 ───
@@ -67,9 +73,14 @@ GitHub release notes.
 
 ## 3. Feature boxes and page text
 
-Nothing new for 3.0.6. The 3.0.5 wording (ZMODEM asks before accepting,
-AltGr, `\;`, the macOS line "Apple Silicon, macOS 26 or later", Linux
-source only) is already on the page and stays.
+- **Screenshot**: if the page shows the old "CGTERM 3.0" start picture
+  (green computer and modem), replace it with a screenshot of the new
+  start screen from 3.0.7.
+- **Look and feel / intro box**: add "Animated ANSI start screen, logo
+  by nail / fire. Drop in your own startup.ans to replace it."
+- The 3.0.5 wording (ZMODEM asks before accepting, AltGr, `\\;`, the
+  macOS line "Apple Silicon, macOS 26 or later", Linux source only) is
+  already on the page and stays.
 
 ## 4. Still true (leave as is)
 
@@ -82,8 +93,11 @@ source only) is already on the page and stays.
 
 ## 5. Checklist for the web team
 
-1. Bump the version strings to 3.0.6 (section 1), including the dev
+1. Bump the version strings to 3.0.7 (section 1), including the dev
    log, llms.txt and JSON-LD.
-2. Paste the 3.0.6 changelog block (section 2) above the 3.0.5 block.
-3. Reload the page without cache and check that the tag shown under
-   Download reads v3.0.6.
+2. Add the credit "ANSI logo: nail / fire" (section 1, issue #14).
+3. Paste the 3.0.7 and 3.0.6 changelog blocks (section 2) above the
+   3.0.5 block.
+4. Replace the start-screen screenshot if the page has one (section 3).
+5. Reload the page without cache and check that the tag shown under
+   Download reads v3.0.7.
