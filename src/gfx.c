@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <SDL.h>
 #include "gfx.h"
 #include "menu.h"
@@ -53,6 +54,7 @@ static unsigned char status_color = 1;
 static unsigned char status_bg = 0;
 static int status_dirty = 0;
 static void gfx_draw_status_row(void);
+static void art_tick(int had_output);
 static SDL_bool dirty[25];
 static Uint8 fgcolor = 1, bgcolor = 0;
 static int font;
@@ -866,6 +868,7 @@ void gfx_vbl(void) {
     gfx_draw_status_row();
     status_dirty = 0;
   }
+  art_tick(first != 25);
 
 }
 
@@ -1291,9 +1294,320 @@ int gfx_save_screenshot(const char *filename) {
 }
 
 
+/* ------------------------------------------------------------------
+ * Animated startup art (assets/startup.ans).
+ *
+ * An 80-column ANSI picture is rendered once into a 640x400 RGB image
+ * (8x16 cells). While it is on screen gfx_vbl() redraws it about 25
+ * times a second with two effects on top: a pulsing glow (a blurred
+ * copy of the picture added back) and a band of light that sweeps
+ * across the lit parts every few seconds.
+ * The animation stops the moment anything else draws: terminal output,
+ * a menu, a zoom or mode change. What is on screen then simply stays.
+ * ------------------------------------------------------------------ */
+#define ART_W 640
+#define ART_H 400
+#define ART_COLS 80
+#define ART_ROWS 25
+#define ART_FRAME_MS 40
+
+static unsigned char *art_base;      /* ART_W*ART_H*3, the picture */
+static unsigned char *art_glow;      /* ART_W*ART_H*3, blurred picture */
+static SDL_Surface *art_frame;       /* 32 bpp, screen channel order */
+static int art_active;
+static Uint32 art_epoch, art_last;
+
+static void art_free(void) {
+  free(art_base); art_base = NULL;
+  free(art_glow); art_glow = NULL;
+}
+
+/* One horizontal + one vertical box blur pass, radius r, in place. */
+static void art_blur(unsigned char *img, unsigned char *tmp, int r) {
+  int x, y, ch, k;
+  for (y = 0; y < ART_H; y++) {
+    for (ch = 0; ch < 3; ch++) {
+      int sum = 0;
+      for (k = -r; k <= r; k++) {
+        int xx = k < 0 ? 0 : k;
+        sum += img[(y * ART_W + xx) * 3 + ch];
+      }
+      for (x = 0; x < ART_W; x++) {
+        int add = x + r + 1, sub = x - r;
+        tmp[(y * ART_W + x) * 3 + ch] = (unsigned char)(sum / (2 * r + 1));
+        if (add >= ART_W) add = ART_W - 1;
+        if (sub < 0) sub = 0;
+        sum += img[(y * ART_W + add) * 3 + ch] - img[(y * ART_W + sub) * 3 + ch];
+      }
+    }
+  }
+  for (x = 0; x < ART_W; x++) {
+    for (ch = 0; ch < 3; ch++) {
+      int sum = 0;
+      for (k = -r; k <= r; k++) {
+        int yy = k < 0 ? 0 : k;
+        sum += tmp[(yy * ART_W + x) * 3 + ch];
+      }
+      for (y = 0; y < ART_H; y++) {
+        int add = y + r + 1, sub = y - r;
+        img[(y * ART_W + x) * 3 + ch] = (unsigned char)(sum / (2 * r + 1));
+        if (add >= ART_H) add = ART_H - 1;
+        if (sub < 0) sub = 0;
+        sum += tmp[(add * ART_W + x) * 3 + ch] - tmp[(sub * ART_W + x) * 3 + ch];
+      }
+    }
+  }
+}
+
+/* Parse the ANSI file and render it. Understands what ANSI art uses:
+ * SGR colours (0, 1, 30-37, 40-47), cursor right/left/up/down, cursor
+ * position, CR, LF, and stops at the SAUCE marker (0x1A). */
+static int art_load(const char *path) {
+  static const unsigned char pal[16][3] = {
+    {0x00,0x00,0x00},{0xaa,0x00,0x00},{0x00,0xaa,0x00},{0xaa,0x55,0x00},
+    {0x00,0x00,0xaa},{0xaa,0x00,0xaa},{0x00,0xaa,0xaa},{0xaa,0xaa,0xaa},
+    {0x55,0x55,0x55},{0xff,0x55,0x55},{0x55,0xff,0x55},{0xff,0xff,0x55},
+    {0x55,0x55,0xff},{0xff,0x55,0xff},{0x55,0xff,0xff},{0xff,0xff,0xff}
+  };
+  static unsigned char cell_ch[ART_ROWS][ART_COLS];
+  static unsigned char cell_fg[ART_ROWS][ART_COLS];
+  static unsigned char cell_bg[ART_ROWS][ART_COLS];
+  unsigned char *tmp;
+  FILE *f;
+  int c, cx = 0, cy = 0, fg = 7, bg = 0, bold = 0;
+  int state = 0, np = 0, par[8];
+  int row, col, used_rows = 0, yoff, i;
+  long nread = 0;
+
+  f = fopen(path, "rb");
+  if (!f) return 0;
+  memset(cell_ch, ' ', sizeof(cell_ch));
+  memset(cell_fg, 7, sizeof(cell_fg));
+  memset(cell_bg, 0, sizeof(cell_bg));
+  memset(par, 0, sizeof(par));
+
+  while ((c = fgetc(f)) != EOF && c != 0x1a && ++nread < 200000) {
+    if (state == 0) {
+      if (c == 0x1b) { state = 1; }
+      else if (c == '\r') { cx = 0; }
+      else if (c == '\n') { if (cy < ART_ROWS) cy++; }
+      else {
+        if (cx >= ART_COLS) { cx = 0; if (cy < ART_ROWS) cy++; }
+        if (cy < ART_ROWS) {
+          cell_ch[cy][cx] = (unsigned char)c;
+          cell_fg[cy][cx] = (unsigned char)(fg + (bold ? 8 : 0));
+          cell_bg[cy][cx] = (unsigned char)bg;
+          if (cy + 1 > used_rows && c != ' ') used_rows = cy + 1;
+        }
+        cx++;
+      }
+    } else if (state == 1) {
+      if (c == '[') { state = 2; np = 0; memset(par, 0, sizeof(par)); }
+      else state = 0;
+    } else {
+      if (c >= '0' && c <= '9') {
+        if (np < 8 && par[np] < 10000) par[np] = par[np] * 10 + (c - '0');
+      } else if (c == ';') {
+        if (np < 8) np++;
+      } else if (c == '?') {
+        /* private marker, ignored */
+      } else {
+        int n = par[0] ? par[0] : 1;
+        if (c == 'm') {
+          for (i = 0; i <= np && i < 8; i++) {
+            int v = par[i];
+            if (v == 0) { fg = 7; bg = 0; bold = 0; }
+            else if (v == 1) bold = 1;
+            else if (v == 22) bold = 0;
+            else if (v >= 30 && v <= 37) fg = v - 30;
+            else if (v >= 40 && v <= 47) bg = v - 40;
+          }
+        } else if (c == 'C') { cx += n; }
+        else if (c == 'D') { cx -= n; }
+        else if (c == 'A') { cy -= n; }
+        else if (c == 'B') { cy += n; }
+        else if (c == 'H' || c == 'f') {
+          cy = par[0] ? par[0] - 1 : 0;
+          cx = (np >= 1 && par[1]) ? par[1] - 1 : 0;
+        }
+        if (cx < 0) cx = 0;
+        if (cy < 0) cy = 0;
+        if (cx > ART_COLS) cx = ART_COLS;
+        if (cy > ART_ROWS) cy = ART_ROWS;
+        state = 0;
+      }
+    }
+  }
+  fclose(f);
+  if (used_rows == 0) return 0;
+
+  art_free();
+  art_base = calloc(ART_W * ART_H, 3);
+  art_glow = malloc(ART_W * ART_H * 3);
+  tmp = malloc(ART_W * ART_H * 3);
+  if (!art_base || !art_glow || !tmp) {
+    free(tmp);
+    art_free();
+    return 0;
+  }
+
+  /* centre the used rows vertically, above the bottom text row that
+   * carries the "press ESC" hint (a full 25-row picture shares it) */
+  yoff = (ART_H - 16 - used_rows * 16) / 2;
+  if (yoff < 0) yoff = 0;
+  for (row = 0; row < used_rows && row < ART_ROWS; row++) {
+    for (col = 0; col < ART_COLS; col++) {
+      const unsigned char *g = cp437_glyph(cell_ch[row][col]);
+      const unsigned char *f3 = pal[cell_fg[row][col] & 15];
+      const unsigned char *b3 = pal[cell_bg[row][col] & 7];
+      int gy, gx;
+      for (gy = 0; gy < 16; gy++) {
+        int y = yoff + row * 16 + gy;
+        unsigned char bits = g[gy / 2];
+        if (y >= ART_H) break;
+        for (gx = 0; gx < 8; gx++) {
+          const unsigned char *src = (bits & (0x80 >> gx)) ? f3 : b3;
+          unsigned char *d = art_base + (y * ART_W + col * 8 + gx) * 3;
+          d[0] = src[0]; d[1] = src[1]; d[2] = src[2];
+        }
+      }
+    }
+  }
+
+  /* glow source: the picture itself, blurred twice (close to a gaussian) */
+  memcpy(art_glow, art_base, ART_W * ART_H * 3);
+  art_blur(art_glow, tmp, 5);
+  art_blur(art_glow, tmp, 4);
+  free(tmp);
+  return 1;
+}
+
+/* Compose one frame at time t (ms since the picture appeared) and put it
+ * on the screen. */
+static void art_draw(Uint32 t) {
+  const SDL_PixelFormat *fm = art_frame->format;
+  int rs = fm->Rshift, gs = fm->Gshift, bs = fm->Bshift;
+  Uint32 *px;
+  int stride, x, y, i;
+  /* glow strength on a 0..256 scale: a slow pulse */
+  int glow = (int)(170.0f + 80.0f * sinf((float)t * 0.0021f));
+  /* shine: one pass of 1.5 s every 6 s, moving along x + y/2 */
+  Uint32 cyc = t % 6000;
+  int shine_on = cyc < 1500;
+  int shine_pos = shine_on ? (int)((float)cyc / 1500.0f * (ART_W + ART_H / 2 + 240)) - 120 : 0;
+  SDL_Rect dst;
+
+  if (SDL_MUSTLOCK(art_frame)) SDL_LockSurface(art_frame);
+  px = (Uint32 *)art_frame->pixels;
+  stride = art_frame->pitch / 4;
+  for (y = 0; y < ART_H; y++) {
+    const unsigned char *b = art_base + y * ART_W * 3;
+    const unsigned char *g = art_glow + y * ART_W * 3;
+    Uint32 *row = px + y * stride;
+    for (x = 0; x < ART_W; x++, b += 3, g += 3) {
+      /* the halo belongs on the dark around the shapes; on a pixel that
+       * is already lit only a little is added, or colours wash out */
+      int mx = b[0] > b[1] ? b[0] : b[1];
+      int k, r, gg, bb;
+      if (b[2] > mx) mx = b[2];
+      k = (glow * (56 + ((255 - mx) * 200) / 255)) >> 8;
+      r = b[0] + ((g[0] * k) >> 8);
+      gg = b[1] + ((g[1] * k) >> 8);
+      bb = b[2] + ((g[2] * k) >> 8);
+      if (shine_on && (b[0] | b[1] | b[2])) {
+        int d = x + y / 2 - shine_pos;
+        if (d < 0) d = -d;
+        if (d < 60) {
+          int w = 60 - d;                       /* 0..60 */
+          int lum = (b[0] + b[1] + b[2]) / 3;   /* only lit pixels shine */
+          int add = (w * w * (60 + lum)) / 3600;
+          r += add; gg += add; bb += add;
+        }
+      }
+      if (r > 255) r = 255;
+      if (gg > 255) gg = 255;
+      if (bb > 255) bb = 255;
+      row[x] = ((Uint32)r << rs) | ((Uint32)gg << gs) | ((Uint32)bb << bs);
+    }
+  }
+
+
+  /* the hint on the bottom row, gently breathing */
+  {
+    static const char hint[] = "\x10 PRESS ESC FOR MENU \x11";
+    int len = (int)sizeof(hint) - 1;
+    int x0 = (ART_W - len * 8) / 2, y0 = ART_H - 16;
+    int lvl = (int)(190.0f + 65.0f * sinf((float)t * 0.004f));   /* 125..255 */
+    Uint32 col = ((Uint32)(0x55 * lvl / 255) << rs) | ((Uint32)lvl << gs) | ((Uint32)lvl << bs);
+    for (i = 0; i < len; i++) {
+      const unsigned char *g = cp437_glyph((unsigned char)hint[i]);
+      for (y = 0; y < 16; y++) {
+        unsigned char bits = g[y / 2];
+        for (x = 0; x < 8; x++) {
+          if (bits & (0x80 >> x)) px[(y0 + y) * stride + x0 + i * 8 + x] = col;
+        }
+      }
+    }
+  }
+  if (SDL_MUSTLOCK(art_frame)) SDL_UnlockSurface(art_frame);
+
+  dst.x = 0; dst.y = 0; dst.w = gfx_width; dst.h = gfx_height;
+  if (gfx_width == ART_W && gfx_height == ART_H) {
+    SDL_BlitSurface(art_frame, NULL, gfx_screen, &dst);
+  } else if (SDL_SoftStretch(art_frame, NULL, gfx_screen, &dst) != 0) {
+    art_active = 0;
+    return;
+  }
+  SDL_UpdateRect(gfx_screen, 0, 0, gfx_width, gfx_height);
+}
+
+/* Show assets/startup.ans with its animation. Returns 1 when it is on
+ * screen, 0 when the file is missing or the display cannot do it (the
+ * caller then falls back to the still picture). */
+int gfx_show_startup_art(void) {
+  char path[1024];
+  const SDL_PixelFormat *sf = gfx_screen->format;
+
+  art_active = 0;
+  /* The frame shares the screen's pixel layout so it can be stretched
+   * straight onto it; that needs a true-colour screen. */
+  if (sf->BitsPerPixel != 32 || sf->Rloss || sf->Gloss || sf->Bloss) return 0;
+  if (!art_base) {
+    path_build_asset(path, sizeof(path), "startup.ans");
+    if (!art_load(path)) return 0;
+  }
+  if (art_frame) { SDL_FreeSurface(art_frame); art_frame = NULL; }
+  art_frame = SDL_CreateRGBSurface(SDL_SWSURFACE, ART_W, ART_H, 32,
+                                   sf->Rmask, sf->Gmask, sf->Bmask, 0);
+  if (!art_frame) return 0;
+
+  gfx_cursor_show(0);
+  gfx_vbl();                                /* flush pending text first */
+  memset(dirty, SDL_FALSE, sizeof(dirty));
+  art_epoch = SDL_GetTicks();
+  art_last = art_epoch;
+  art_active = 1;
+  art_draw(0);
+  return art_active;
+}
+
+/* Called from gfx_vbl(). had_output: something else was drawn this frame. */
+static void art_tick(int had_output) {
+  Uint32 now;
+  if (!art_active) return;
+  if (had_output || menu_visible) { art_active = 0; return; }
+  now = SDL_GetTicks();
+  if (now - art_last < ART_FRAME_MS) return;
+  art_last = now;
+  art_draw(now - art_epoch);
+}
+
 void gfx_show_startup_bg(void) {
   char path[1024];
   FILE *f;
+
+  /* the animated ANSI logo, when it is there, in either mode */
+  if (gfx_show_startup_art()) return;
 
   if (cfg_termmode == 1) {
     /* ANSI mode: try background.ans first */

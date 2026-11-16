@@ -194,6 +194,7 @@ install: all installdirs
 	$(INSTALL) -m 0644 $(ASSETDIR)/*.bmp $(DESTDIR)$(DATADIR)/
 	$(INSTALL) -m 0644 $(ASSETDIR)/*.kbd $(DESTDIR)$(DATADIR)/
 	$(INSTALL) -m 0644 $(ASSETDIR)/*.wav $(DESTDIR)$(DATADIR)/
+	@if ls $(ASSETDIR)/*.ans >/dev/null 2>&1; then $(INSTALL) -m 0644 $(ASSETDIR)/*.ans $(DESTDIR)$(DATADIR)/; fi
 	@if ls $(ASSETDIR)/*.xm >/dev/null 2>&1; then $(INSTALL) -m 0644 $(ASSETDIR)/*.xm $(DESTDIR)$(DATADIR)/; fi
 	@if ls $(ASSETDIR)/*.mod >/dev/null 2>&1; then $(INSTALL) -m 0644 $(ASSETDIR)/*.mod $(DESTDIR)$(DATADIR)/; fi
 	@if ls $(ASSETDIR)/*.txt >/dev/null 2>&1; then $(INSTALL) -m 0644 $(ASSETDIR)/*.txt $(DESTDIR)$(DATADIR)/; fi

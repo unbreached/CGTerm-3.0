@@ -245,7 +245,9 @@ void ui_menukey(SDL_keysym *keysym) {
     menu_hide();
     kbd_focus = FOCUS_TERM;
     /* Re-show background if not connected */
-    if (!net_connected()) {
+    if (!net_connected() && gfx_show_startup_art()) {
+      /* the animated logo is back */
+    } else if (!net_connected()) {
       char bgpath[1024];
       path_build_asset(bgpath, sizeof(bgpath), cfg_termmode == 1 ? "background_80.bmp" : "background_40.bmp");
       if (cfg_file_exists(bgpath)) {

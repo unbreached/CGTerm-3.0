@@ -24,10 +24,21 @@ asset names, and the release being marked "latest".
   "CGTerm 3.0.6: Scene Edition", changelog heading
   "CGTERM 3.0.6 / SCENE EDITION", footer
   "CGTerm 3.0.6 · Genesis*Project · 2026".
-- Credits unchanged: Code **David "m00p" Jacoby (Genesis*Project)**,
+- Credits: Code **David "m00p" Jacoby (Genesis*Project)**,
   music Mr.Death, QA **Larry, Jucke, SkyHawk, hedning**.
+- **New credit, add it now (it does not have to wait for 3.0.7): ANSI
+  logo by nail / fire.** nail drew the CGTerm ANSI logo that becomes the
+  animated start screen in 3.0.7. Put it in the credits list next to
+  the music credit, written exactly "ANSI logo: nail / fire".
 - Thank-you for the reports stays: **mrdudz** and **THE-MrMicro**
   (GitHub issues), and **Larry** (transfer testing).
+
+## 1b. Coming in 3.0.7 (not released yet, nothing to paste)
+
+3.0.7 replaces the still start picture with nail's ANSI logo, animated
+with a glow and a sweep of light. If the page shows a
+screenshot of the old "CGTERM 3.0" start picture, it will need a new
+one when 3.0.7 is published; a changelog block will follow then.
 
 ## 2. Changelog: add this 3.0.6 block above the 3.0.5 block
 

@@ -127,6 +127,7 @@ Frozen Floppy BBS   telnet://bbs.retrohack.se:64128
 ```
 scene code........ David "m00p" Jacoby
 music............. Mr.Death
+ansi logo......... nail / fire
 support........... mermaid
 ideas............. Larry
 tested by......... hedning, Jucke, SkyHawk, Larry

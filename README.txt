@@ -47,6 +47,7 @@
             ▄▄             
 
     CGTERM 3.0 ::: C64 SCENE EDiTiON //scene code by...... David "m00p" Jacoby
+                                     //ansi logo by....... nail / fire
                                      //support by......... mermaid
                                      //ideas by........... Larry
                                      //tested by.......... hedning, Jucke,

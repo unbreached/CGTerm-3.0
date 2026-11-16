@@ -59,6 +59,7 @@ void gfx_paste_rect(int rect_x, int rect_y, int rect_w, int rect_h, unsigned cha
 int gfx_save_screenshot(const char *filename);
 void gfx_crt_shutdown(void);
 void gfx_show_startup_bg(void);
+int gfx_show_startup_art(void);
 void gfx_show_background(const char *bmpfile);
 
 /* ---- ANSI terminal helpers (appended; used by ansi.c) ---- */

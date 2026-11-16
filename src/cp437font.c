@@ -278,6 +278,11 @@ static const unsigned char cp437_data[2048] = {
 /* Create an SDL surface from the embedded CP437 font data.
  * Returns a 256x128 surface (32 columns x 8 rows of 8x16 chars)
  * Each 8x8 source row is doubled to create 8x16 glyphs. */
+/* The 8 rows of one glyph, MSB = leftmost pixel. */
+const unsigned char *cp437_glyph(int c) {
+  return cp437_data + (c & 0xff) * 8;
+}
+
 SDL_Surface *cp437_create_raw_font(void) {
   SDL_Surface *surface;
   Uint8 *pixels;

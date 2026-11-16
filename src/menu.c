@@ -1203,7 +1203,7 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
   {
     /* Effect area: below title, above scroller */
     int ey_top = 55;
-    int ey_bot = h - 90;
+    int ey_bot = h - 102;
     int eh = ey_bot - ey_top;
     int ecx = w / 2;
     int ecy = ey_top + eh / 2;
@@ -1652,21 +1652,21 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
       int ci = (ioffset / 10 + i) % slen;
       int spx = i * 10 - (ioffset % 10);
       float wave = sinf(t * 3.0f + (float)spx * 0.02f);
-      int spy = h - 80 + (int)(wave * 10.0f);
+      int spy = h - 92 + (int)(wave * 10.0f);
       char ch[2];
       ch[0] = scroll[ci];
       ch[1] = 0;
-      if (spx >= 0 && spx < w && spy >= 40 && spy < h - 52)
+      if (spx >= 0 && spx < w && spy >= 40 && spy < h - 64)
         font_draw_string(spx, spy, ch);
     }
   }
 
-  /* Bottom black bar — 50px tall for 3 lines */
-  r.x = 0; r.y = h - 50; r.w = w; r.h = 50;
+  /* Bottom black bar — 62px tall for 4 lines */
+  r.x = 0; r.y = h - 62; r.w = w; r.h = 62;
   SDL_FillRect(menu_surface, &r, black);
 
   /* Yellow separator line */
-  menu_draw_line(0, h - 50, w - 1, h - 50,
+  menu_draw_line(0, h - 62, w - 1, h - 62,
     SDL_MapRGBA(menu_surface->format, 0x00, 0xcc, 0xff, 0xff));
 
   /* Credits — colorful */
@@ -1676,11 +1676,14 @@ void menu_draw_splash_frame(int frame, const char *dlpath, const char *ulpath) {
     /* All three credit lines left-aligned to same position */
     int clx = cx2 - 130;
     /* "Modification by" in light blue, "m00p" in neon green */
-    font_draw_string_color(clx, h - 48, "Modification by ", 0x60, 0x80, 0xff);
-    font_draw_string_color(clx + 170, h - 48, "m00p", 0x00, 0xff, 0x66);
+    font_draw_string_color(clx, h - 60, "Modification by ", 0x60, 0x80, 0xff);
+    font_draw_string_color(clx + 170, h - 60, "m00p", 0x00, 0xff, 0x66);
     /* "Music by" in light blue, "Mr.Death" in hot pink */
-    font_draw_string_color(clx, h - 36, "Music by ", 0x60, 0x80, 0xff);
-    font_draw_string_color(clx + 170, h - 36, "Mr.Death", 0xff, 0x40, 0x80);
+    font_draw_string_color(clx, h - 48, "Music by ", 0x60, 0x80, 0xff);
+    font_draw_string_color(clx + 170, h - 48, "Mr.Death", 0xff, 0x40, 0x80);
+    /* "ANSI logo by" in light blue, "nail / fire" in orange */
+    font_draw_string_color(clx, h - 36, "ANSI logo by ", 0x60, 0x80, 0xff);
+    font_draw_string_color(clx + 170, h - 36, "nail / fire", 0xff, 0x90, 0x30);
     /* "Original code by" in light blue, "MagerValp" in cyan */
     font_draw_string_color(clx, h - 24, "Original code by ", 0x60, 0x80, 0xff);
     font_draw_string_color(clx + 170, h - 24, "MagerValp", 0x00, 0xee, 0xff);
