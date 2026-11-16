@@ -744,3 +744,17 @@ void net_disconnect(void) {
 int net_connected(void) {
   return(ISCONNECTED());
 }
+
+
+#ifdef CGTERM_TEST
+/* Test seam (tests/test_net.c, tests/fuzz_net.c): run the Telnet layer
+ * over an already-connected descriptor such as one end of a socketpair,
+ * as if net_connect() had just succeeded. Not compiled into the program. */
+void net_test_attach(int fd) {
+  conn = fd;
+  buflen = 0;
+  net_reset_telnet();
+  tn_offered_ttype = tn_offered_naws = tn_offered_sga = 0;
+  tn_naws_agreed = 0;
+}
+#endif

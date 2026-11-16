@@ -246,8 +246,14 @@ test: | $(OBJDIR)
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_diskimage tests/test_diskimage.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c $(ALL_LDFLAGS)
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_xfer tests/test_xfer.c $(SRCDIR)/xfer.c $(SRCDIR)/xmodem.c $(SRCDIR)/punter.c $(SRCDIR)/rainbow.c $(SRCDIR)/zmodem.c $(SRCDIR)/crc.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c $(ALL_LDFLAGS)
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_ansi tests/test_ansi.c $(SRCDIR)/ansi.c $(SRCDIR)/gfx.c $(SRCDIR)/font.c $(SRCDIR)/cp437font.c $(SRCDIR)/config.c $(SRCDIR)/paths.c $(SRCDIR)/menu.c $(SRCDIR)/kernal.c $(ALL_LDFLAGS)
+	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_login tests/test_login.c $(SRCDIR)/login.c $(ALL_LDFLAGS)
+	$(CC) $(TEST_CFLAGS) -DCGTERM_TEST -o $(OBJDIR)/test_net tests/test_net.c $(SRCDIR)/net.c $(ALL_LDFLAGS)
 	$(OBJDIR)/test_diskimage
 	$(OBJDIR)/test_xfer
+	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_config tests/test_config.c $(SRCDIR)/config.c $(SRCDIR)/paths.c $(ALL_LDFLAGS)
+	$(OBJDIR)/test_login
+	$(OBJDIR)/test_net
+	$(OBJDIR)/test_config
 	CGTERM_ASSET_DIR=assets SDL_VIDEODRIVER=dummy $(OBJDIR)/test_ansi
 	$(CC) $(TEST_CFLAGS) -o $(OBJDIR)/test_zmodem tests/test_zmodem.c $(SRCDIR)/zmodem.c $(SRCDIR)/crc.c $(ALL_LDFLAGS)
 	@if command -v sz >/dev/null 2>&1 || [ -x /opt/homebrew/bin/sz ]; then \
@@ -258,9 +264,18 @@ test: | $(OBJDIR)
 # FUZZ_ITER=20000 make fuzz   for a longer run; FUZZ_TYPE=d81 for D81.
 FUZZ_ITER ?= 2000
 FUZZ_TYPE ?= d64
+# The network-facing parsers are fuzzed too: the Telnet layer (over a
+# socketpair) and the ANSI parser on the real screen model. Those two link
+# SDL; on recent macOS a sanitized binary linking SDL can hang in the
+# dynamic loader, so run them there with `make fuzz FUZZ_SAN=`.
+FUZZ_SAN ?= -fsanitize=address,undefined -fno-omit-frame-pointer
 fuzz: | $(OBJDIR)
-	$(CC) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer $(REQUIRED_CFLAGS) -o $(OBJDIR)/fuzz_diskimage tests/fuzz_diskimage.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c -lm
+	$(CC) -O1 -g $(FUZZ_SAN) $(REQUIRED_CFLAGS) -o $(OBJDIR)/fuzz_diskimage tests/fuzz_diskimage.c $(SRCDIR)/diskimage.c $(SRCDIR)/dir.c -lm
 	$(OBJDIR)/fuzz_diskimage $(FUZZ_ITER) $(FUZZ_TYPE)
+	$(CC) -O1 -g $(FUZZ_SAN) $(REQUIRED_CFLAGS) -DCGTERM_TEST -o $(OBJDIR)/fuzz_net tests/fuzz_net.c $(SRCDIR)/net.c $(ALL_LDFLAGS)
+	$(OBJDIR)/fuzz_net $(FUZZ_ITER)
+	$(CC) -O1 -g $(FUZZ_SAN) $(REQUIRED_CFLAGS) -Itests -o $(OBJDIR)/fuzz_ansi tests/fuzz_ansi.c $(SRCDIR)/ansi.c $(SRCDIR)/gfx.c $(SRCDIR)/font.c $(SRCDIR)/cp437font.c $(SRCDIR)/config.c $(SRCDIR)/paths.c $(SRCDIR)/menu.c $(SRCDIR)/kernal.c $(ALL_LDFLAGS)
+	CGTERM_ASSET_DIR=assets SDL_VIDEODRIVER=dummy $(OBJDIR)/fuzz_ansi $(FUZZ_ITER)
 
 # Source tarball exactly as released: tracked files only, minus the paths
 # marked export-ignore in .gitattributes, plus a SHA256SUMS for everything
