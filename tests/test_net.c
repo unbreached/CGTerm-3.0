@@ -118,7 +118,10 @@ int main(void) {
 
   puts("[Abuse]");
   fresh(1);
-  for (i = 0; i < 2000; i++) put("\xff\xfd\x55", 3);                 /* DO <unknown> x 2000 */
+  /* DO <unknown> x 2000, as one write: thousands of 3-byte writes run a
+   * Linux socketpair out of buffer space long before 6000 bytes */
+  for (i = 0; i < 2000; i++) memcpy(in + i * 3, "\xff\xfd\x55", 3);
+  put(in, 6000);
   n = 0; for (i = 0; i < 20; i++) n += take(in, sizeof in, net_receive);
   m = 0; { int r; while ((r = sent(out + m, (int)sizeof out - m)) > 0) m += r; }
   CHECK(n == 0, "an option flood delivers no data");
