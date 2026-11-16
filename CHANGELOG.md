@@ -3,7 +3,7 @@ CGTERM 3.0 / SCENE EDITION
 FULL CHANGELOG / NFO
 Genesis*Project · 2026
 ══════════════════════════════════════════════════════════════════════
-─── 3.0.8 · NOVEMBER 2026 (not yet released) ───
+─── 3.0.8 · NOVEMBER 2026 ───
 
 Licences
 [!]Five fonts whose licences do not allow redistribution are gone: Maesto demo, Nano Pix demo, Blackentina 4F, Playful Boxes and Sportifity (font files and the glyph sheets made from them). A config that still selects one gets C64 Pro Mono. assets/fonts/LICENSES.txt lists the licence of every font that remains
